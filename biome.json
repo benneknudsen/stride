@@ -1,8 +1,6 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-  "organizeImports": {
-    "enabled": true
-  },
+  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -12,13 +10,9 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
-      "correctness": {
-        "all": true
-      },
-      "suspicious": {
-        "all": true
-      }
+      "preset": "recommended",
+      "correctness": {},
+      "suspicious": {}
     }
   },
   "javascript": {
@@ -29,10 +23,6 @@
     }
   },
   "files": {
-    "ignore": [
-      "node_modules",
-      ".next",
-      "drizzle/migrations"
-    ]
+    "includes": ["**", "!**/node_modules", "!**/.next", "!**/drizzle/migrations"]
   }
 }
