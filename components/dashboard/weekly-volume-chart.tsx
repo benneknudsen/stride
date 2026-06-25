@@ -1,5 +1,7 @@
 "use client";
 
+import { demoActivities, getWeeklyVolume } from "@/lib/demo/activities";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   BarChart,
   Bar,
@@ -8,8 +10,6 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { demoActivities, getWeeklyVolume } from "@/lib/demo/activities";
 
 function getWeekLabel(weeksAgo: number): string {
   if (weeksAgo === 0) return "This Week";

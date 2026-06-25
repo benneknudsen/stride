@@ -20,10 +20,17 @@ export function getDb() {
   return _db;
 }
 
-/** Convenience singleton — lazy, won't connect until first use */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * Convenience singleton — lazy, won't connect until first use.
+ * Justification for `any`: Proxy requires unsafe typing to delegate all properties
+ * to the underlying Drizzle instance. The `as ReturnType<typeof getDb>` cast
+ * provides type safety at the boundary — consumers see the full typed db object.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: Proxy pattern requires unsafe typing, type-safe at boundary
 export const db = new Proxy({} as any, {
+  // biome-ignore lint/suspicious/noExplicitAny: Proxy target type erasure
   get(_target: any, prop: string | symbol) {
+    // biome-ignore lint/suspicious/noExplicitAny: Property access delegation
     return (getDb() as any)[prop];
   },
 }) as ReturnType<typeof getDb>;

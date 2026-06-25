@@ -1,10 +1,10 @@
-import { Card } from "@/components/ui/card";
 import {
   demoActivities,
   formatDistance,
   formatPace,
   getWeeklyVolume,
 } from "@/lib/demo/activities";
+import { Card } from "@/components/ui/card";
 
 interface StatCardProps {
   label: string;

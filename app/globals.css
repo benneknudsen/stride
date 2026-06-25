@@ -182,5 +182,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [aria-label="Loading"] > * { animation: none !important; }
+  [aria-label="Loading"] > * { animation: none; }
 }

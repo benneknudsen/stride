@@ -8,7 +8,12 @@
     "start": "next start",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check": "biome check ."
+    "check": "biome check .",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "test": "echo \"Error: no tests yet\" && exit 1",
+    "test:e2e": "echo \"Error: no e2e tests yet\" && exit 1"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",

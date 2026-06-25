@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
 import { decrypt, encrypt } from "../crypto";
 import { db } from "../db";
-import { stravaTokens } from "../../drizzle/schema";
 import { refreshAccessToken } from "./oauth";
 import type { DetailedActivity, SummaryActivity } from "./types";
+import { stravaTokens } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 const STRAVA_API_BASE = "https://www.strava.com/api/v3";
 

@@ -1,5 +1,5 @@
-import { StrideLogo } from "@/components/ui/StrideLogo";
 import { Button } from "@/components/ui/button";
+import { StrideLogo } from "@/components/ui/StrideLogo";
 
 export function AppHeader() {
   return (

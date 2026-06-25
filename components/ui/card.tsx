@@ -17,23 +17,14 @@ export function Card({ className, hover = true, ...props }: CardProps) {
   );
 }
 
-export function CardHeader({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn("mb-4", className)} {...props} />;
 }
 
-export function CardTitle({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLHeadingElement>) {
+export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn(
-        "font-heading text-lg font-semibold tracking-tight text-fg",
-        className
-      )}
+      className={cn("font-heading text-lg font-semibold tracking-tight text-fg", className)}
       {...props}
     />
   );
@@ -46,9 +37,6 @@ export function CardDescription({
   return <p className={cn("text-sm text-sub", className)} {...props} />;
 }
 
-export function CardContent({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn(className)} {...props} />;
 }

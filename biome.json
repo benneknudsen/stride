@@ -22,7 +22,14 @@
       "trailingCommas": "es5"
     }
   },
+  "css": {
+    "parser": {
+      "cssModules": false,
+      "allowWrongLineComments": false,
+      "tailwindDirectives": true
+    }
+  },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/.next", "!**/drizzle/migrations"]
+    "includes": ["**", "!**/node_modules", "!**/.next", "!**/drizzle/migrations", "!**/public"]
   }
 }

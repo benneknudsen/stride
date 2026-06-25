@@ -1,4 +1,3 @@
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   demoActivities,
   formatDistance,
@@ -6,6 +5,7 @@ import {
   formatPace,
   type Activity,
 } from "@/lib/demo/activities";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 function ActivityRow({ activity }: { activity: Activity }) {
   const date = new Date(activity.date);
