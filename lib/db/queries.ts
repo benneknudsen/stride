@@ -1,7 +1,7 @@
+import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { activities, aiAnalyses, stravaTokens, users } from "../../drizzle/schema";
 import type { AnalysisScope } from "../../types/domain";
 import { db } from "./index";
-import { activities, aiAnalyses, stravaTokens, users } from "../../drizzle/schema";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
 
 /**
  * Typed query functions. Every read that returns user-owned data takes a

@@ -1,8 +1,8 @@
+import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { activities, users } from "@/drizzle/schema";
 import { db } from "@/lib/db";
-import { users, activities } from "@/drizzle/schema";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
 
@@ -24,7 +24,7 @@ export function GET(req: NextRequest) {
 
 // Strava webhook event handler
 export async function POST(req: NextRequest) {
-  const body = await req.json() as {
+  const body = (await req.json()) as {
     object_type: string;
     object_id: number;
     aspect_type: string;
@@ -52,9 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.aspect_type === "delete") {
-    await db
-      .delete(activities)
-      .where(eq(activities.stravaActivityId, stravaActivityId));
+    await db.delete(activities).where(eq(activities.stravaActivityId, stravaActivityId));
     return NextResponse.json({ ok: true });
   }
 

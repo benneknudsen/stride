@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { RefreshTokenResponse, StravaTokensResponse } from "./types";
 
 const STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize";
@@ -13,9 +13,7 @@ function getEnv(key: string): string {
 /** Generate a PKCE code verifier and its S256 challenge. */
 export function generatePkce(): { codeVerifier: string; codeChallenge: string } {
   const codeVerifier = randomBytes(32).toString("base64url");
-  const codeChallenge = createHash("sha256")
-    .update(codeVerifier)
-    .digest("base64url");
+  const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
   return { codeVerifier, codeChallenge };
 }
 

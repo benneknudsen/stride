@@ -1,15 +1,8 @@
 "use client";
 
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { demoActivities, getWeeklyVolume } from "@/lib/demo/activities";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
 
 function getWeekLabel(weeksAgo: number): string {
   if (weeksAgo === 0) return "This Week";
@@ -57,12 +50,7 @@ export function WeeklyVolumeChart() {
                 labelStyle={{ color: "#E9ECF1" }}
                 formatter={(value) => [`${value} km`, "Volume"]}
               />
-              <Bar
-                dataKey="km"
-                fill="#C6F432"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={40}
-              />
+              <Bar dataKey="km" fill="#C6F432" radius={[4, 4, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
         </div>

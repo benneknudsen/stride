@@ -143,10 +143,7 @@ export const activities = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("activities_user_strava_activity_unique").on(
-      table.userId,
-      table.stravaActivityId
-    ),
+    uniqueIndex("activities_user_strava_activity_unique").on(table.userId, table.stravaActivityId),
     index("activities_user_start_date_idx").on(table.userId, table.startDate),
   ]
 );
@@ -199,9 +196,7 @@ export const chatMessages = pgTable(
     content: text("content").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    index("chat_messages_user_conversation_idx").on(table.userId, table.conversationId),
-  ]
+  (table) => [index("chat_messages_user_conversation_idx").on(table.userId, table.conversationId)]
 );
 
 // ---------------------------------------------------------------------------

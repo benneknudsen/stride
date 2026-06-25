@@ -1,10 +1,10 @@
-'use server';
+"use server";
 
-import { desc, eq, and, gte, lte } from "drizzle-orm";
-import { db } from "@/lib/db";
+import type { InferSelectModel } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { activities } from "@/drizzle/schema";
 import { auth } from "@/lib/auth";
-import type { InferSelectModel } from "drizzle-orm";
+import { db } from "@/lib/db";
 
 export type Activity = InferSelectModel<typeof activities>;
 

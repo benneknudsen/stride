@@ -1,11 +1,11 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  type Activity,
   demoActivities,
   formatDistance,
   formatDuration,
   formatPace,
-  type Activity,
 } from "@/lib/demo/activities";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 function ActivityRow({ activity }: { activity: Activity }) {
   const date = new Date(activity.date);
@@ -28,9 +28,7 @@ function ActivityRow({ activity }: { activity: Activity }) {
           <span className="tabular text-sm font-medium text-fg">
             {formatDistance(activity.distance)} km
           </span>
-          <span className="tabular text-xs text-muted">
-            {formatDuration(activity.duration)}
-          </span>
+          <span className="tabular text-xs text-muted">{formatDuration(activity.duration)}</span>
         </div>
         <div className="flex flex-col gap-0.5">
           <span className="tabular text-sm font-medium text-volt">
@@ -39,15 +37,11 @@ function ActivityRow({ activity }: { activity: Activity }) {
           <span className="text-xs text-muted">/km</span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="tabular text-sm font-medium text-signal">
-            {activity.avgHeartRate}
-          </span>
+          <span className="tabular text-sm font-medium text-signal">{activity.avgHeartRate}</span>
           <span className="text-xs text-muted">bpm</span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="tabular text-sm font-medium text-aqua">
-            {activity.avgCadence}
-          </span>
+          <span className="tabular text-sm font-medium text-aqua">{activity.avgCadence}</span>
           <span className="text-xs text-muted">spm</span>
         </div>
       </div>

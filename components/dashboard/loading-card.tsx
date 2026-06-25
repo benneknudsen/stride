@@ -6,10 +6,7 @@ interface LoadingCardProps {
   className?: string;
 }
 
-export function LoadingCard({
-  label = "Analysing your runs…",
-  className,
-}: LoadingCardProps) {
+export function LoadingCard({ label = "Analysing your runs…", className }: LoadingCardProps) {
   return (
     <Card className={className} hover={false}>
       <CardContent className="flex min-h-[200px] items-center justify-center">

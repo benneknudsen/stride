@@ -1,15 +1,8 @@
 "use client";
 
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { demoActivities } from "@/lib/demo/activities";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
 
 export function PaceDistributionChart() {
   const paces = demoActivities.map((a) => a.avgPace).sort((a, b) => a - b);

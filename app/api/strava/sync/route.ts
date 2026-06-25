@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { activities } from "@/drizzle/schema";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { activities } from "@/drizzle/schema";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
 

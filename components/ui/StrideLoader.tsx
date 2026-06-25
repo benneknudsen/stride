@@ -14,10 +14,10 @@ const STAGGER: Record<Motion, [number, number, number]> = {
 };
 
 export function StrideLoader({
-  size = 26,            // unit = width of one bar, in px
+  size = 26, // unit = width of one bar, in px
   motion = "wave",
-  tone = "duo",         // "duo" on dark surfaces, "ink" on Volt surfaces
-  label,                // optional shimmer caption, e.g. "Analysing your runs…"
+  tone = "duo", // "duo" on dark surfaces, "ink" on Volt surfaces
+  label, // optional shimmer caption, e.g. "Analysing your runs…"
 }: {
   size?: number;
   motion?: Motion;

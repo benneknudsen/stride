@@ -1,5 +1,5 @@
 // Stride — font loading with next/font/google
-import { Space_Grotesk, Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 
 export const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
