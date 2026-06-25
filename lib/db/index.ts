@@ -21,10 +21,11 @@ export function getDb() {
 }
 
 /** Convenience singleton — lazy, won't connect until first use */
-export const db = new Proxy({} as ReturnType<typeof drizzle>, {
-  get(_target, prop) {
-    return (getDb() as never)[prop];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const db = new Proxy({} as any, {
+  get(_target: any, prop: string | symbol) {
+    return (getDb() as any)[prop];
   },
-});
+}) as ReturnType<typeof getDb>;
 
 export type Database = typeof db;
