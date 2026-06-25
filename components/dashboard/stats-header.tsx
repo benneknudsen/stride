@@ -39,7 +39,6 @@ export async function StatsHeader() {
   await new Promise((r) => setTimeout(r, 800));
 
   const thisWeekVolume = getWeeklyVolume(demoActivities, 0);
-  const lastWeekVolume = getWeeklyVolume(demoActivities, 1);
 
   const recentRuns = demoActivities.slice(0, 7);
   const avgPace =

@@ -15,7 +15,7 @@ const FILLS: Record<Tone, [string, string, string, number, number]> = {
 export function StrideMark({ size = 28, tone = "duo" }: { size?: number; tone?: Tone }) {
   const [s, m, t, so, mo] = FILLS[tone];
   return (
-    <svg width={size} height={(size * 84) / 96} viewBox="0 0 96 84" fill="none" aria-hidden>
+    <svg width={size} height={(size * 84) / 96} viewBox="0 0 96 84" fill="none" aria-hidden="true">
       <g transform="translate(13,0) skewX(-13)">
         <rect x="8"  y="44" width="16" height="26" rx="7" fill={s} opacity={so} />
         <rect x="33" y="30" width="16" height="40" rx="7" fill={m} opacity={mo} />
