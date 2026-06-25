@@ -51,8 +51,8 @@ Both agents work from `CLAUDE.md` for project context. Every feature originates 
 ## Getting Started
 
 ```bash
-git clone https://github.com/benneknudsen/run-dashboard.git
-cd run-dashboard
+git clone https://github.com/benneknudsen/stride.git
+cd stride
 cp .env.example .env.local
 npm install
 npm run db:migrate

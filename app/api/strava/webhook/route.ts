@@ -5,7 +5,7 @@ import { users, activities } from "@/drizzle/schema";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
 
-const VERIFY_TOKEN = process.env.STRAVA_WEBHOOK_VERIFY_TOKEN ?? "run-dashboard-verify";
+const VERIFY_TOKEN = process.env.STRAVA_WEBHOOK_VERIFY_TOKEN ?? "stride-verify";
 
 // Strava webhook subscription validation
 export function GET(req: NextRequest) {

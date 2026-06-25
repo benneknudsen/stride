@@ -4,12 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Stride Design Tokens (Tailwind v4 @theme) ── */
 @theme inline {
+  /* shadcn/ui CSS variable bridge */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,92 +41,146 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
+
+  /* Stride custom tokens */
+  --color-bg:       #0B0D11;
+  --color-bg-2:     #0F1217;
+  --color-surface:  #14181E;
+  --color-card:     #1A1F26;
+  --color-card-2:   #20262F;
+  --color-border:   #262C35;
+  --color-border-2: #363D49;
+  --color-fg:       #E9ECF1;
+  --color-sub:      #A6ADB9;
+  --color-muted:    #79828F;
+
+  --color-volt:     #C6F432;
+  --color-volt-dim: #9FC718;
+  --color-signal:   #FF5B41;
+  --color-aqua:     #33E0CB;
+
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm:  calc(var(--radius) * 0.6);
+  --radius-md:  calc(var(--radius) * 0.8);
+  --radius-lg:  var(--radius);
+  --radius-xl:  calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-card:    20px;
+  --radius-control: 12px;
+  --radius-pill:    999px;
+
+  --shadow-float: 0 24px 60px -20px rgb(0 0 0 / 0.70);
+  --shadow-volt:  0 24px 60px -22px rgb(198 244 50 / 0.45);
 }
 
+/* ── Stride Dark Theme (default) ── */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  color-scheme: dark;
+
+  --background: #0B0D11;
+  --foreground: #E9ECF1;
+  --card: #1A1F26;
+  --card-foreground: #E9ECF1;
+  --popover: #14181E;
+  --popover-foreground: #E9ECF1;
+  --primary: #C6F432;
+  --primary-foreground: #0B0D11;
+  --secondary: #20262F;
+  --secondary-foreground: #E9ECF1;
+  --muted: #20262F;
+  --muted-foreground: #79828F;
+  --accent: #20262F;
+  --accent-foreground: #E9ECF1;
+  --destructive: #FF5B41;
+  --border: #262C35;
+  --input: #262C35;
+  --ring: #C6F432;
+  --chart-1: #C6F432;
+  --chart-2: #33E0CB;
+  --chart-3: #FF5B41;
+  --chart-4: #A6ADB9;
+  --chart-5: #79828F;
+  --radius: 0.75rem;
+  --sidebar: #0F1217;
+  --sidebar-foreground: #E9ECF1;
+  --sidebar-primary: #C6F432;
+  --sidebar-primary-foreground: #0B0D11;
+  --sidebar-accent: #1A1F26;
+  --sidebar-accent-foreground: #E9ECF1;
+  --sidebar-border: #262C35;
+  --sidebar-ring: #C6F432;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0B0D11;
+  --foreground: #E9ECF1;
+  --card: #1A1F26;
+  --card-foreground: #E9ECF1;
+  --popover: #14181E;
+  --popover-foreground: #E9ECF1;
+  --primary: #C6F432;
+  --primary-foreground: #0B0D11;
+  --secondary: #20262F;
+  --secondary-foreground: #E9ECF1;
+  --muted: #20262F;
+  --muted-foreground: #79828F;
+  --accent: #20262F;
+  --accent-foreground: #E9ECF1;
+  --destructive: #FF5B41;
+  --border: #262C35;
+  --input: #262C35;
+  --ring: #C6F432;
+  --chart-1: #C6F432;
+  --chart-2: #33E0CB;
+  --chart-3: #FF5B41;
+  --chart-4: #A6ADB9;
+  --chart-5: #79828F;
+  --sidebar: #0F1217;
+  --sidebar-foreground: #E9ECF1;
+  --sidebar-primary: #C6F432;
+  --sidebar-primary-foreground: #0B0D11;
+  --sidebar-accent: #1A1F26;
+  --sidebar-accent-foreground: #E9ECF1;
+  --sidebar-border: #262C35;
+  --sidebar-ring: #C6F432;
 }
 
+/* ── Base ── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
-  html {
-    @apply font-sans;
+  ::selection {
+    background: var(--color-volt);
+    color: var(--color-bg);
   }
+}
+
+/* ── Typography utilities ── */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Stride Loader Keyframes ── */
+@keyframes strideWave {
+  0%, 100% { transform: scaleY(0.40); }
+  50%      { transform: scaleY(1); }
+}
+@keyframes strideStep {
+  0%, 55%, 100% { transform: scaleY(0.32); }
+  22%           { transform: scaleY(1); }
+}
+@keyframes strideShimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [aria-label="Loading"] > * { animation: none !important; }
 }

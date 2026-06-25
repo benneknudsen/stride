@@ -15,12 +15,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const existing = await db
             .select()
             .from(users)
-            .where(eq(users.email, "demo@run-dashboard.local"));
+            .where(eq(users.email, "demo@stride.local"));
           if (existing.length > 0)
             return { id: existing[0].id, email: existing[0].email, name: existing[0].name };
           const created = await db
             .insert(users)
-            .values({ email: "demo@run-dashboard.local", name: "Demo User" })
+            .values({ email: "demo@stride.local", name: "Demo User" })
             .returning();
           return { id: created[0].id, email: created[0].email, name: created[0].name };
         }

@@ -1,4 +1,4 @@
-# run-dashboard — AI-Powered Running Training Dashboard
+# stride — AI-Powered Running Training Dashboard
 
 ## Stack
 - Next.js 16 with App Router + TypeScript strict
@@ -49,3 +49,10 @@ Demo data path: `lib/demo/` — 30 realistic running activities.
 ## Phase 1 MVP
 Strava OAuth → dashboard → AI analysis with streaming generative UI → deploy.
 RAG chatbot is Phase 2.
+
+## Brand Identity (from Claude Design)
+- **Logo:** Three forward-leaning rounded bars (motion/acceleration/data). Duotone mark (grey + Volt `#C6F432`)
+- **Typography:** Space Grotesk (display), Geist (UI), Geist Mono (data/metrics)
+- **Color system:** Dark theme — Volt primary, Signal `#FF5B41` (HR), Aqua `#33E0CB` (cadence)
+- **Components:** `StrideLogo.tsx`, `StrideLoader.tsx`, `fonts.ts` in repo
+- See `design-system/` in Obsidian vault for full spec

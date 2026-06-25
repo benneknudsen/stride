@@ -22,7 +22,7 @@ A portfolio project demonstrating 2026 AI-first frontend skills. Next.js 16, Ver
 ## 1. Project Structure
 
 ```
-run-dashboard/
+stride/
 ├── app/
 │   ├── (marketing)/
 │   │   ├── layout.tsx
