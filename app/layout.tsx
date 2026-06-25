@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { spaceGrotesk, geistSans, geistMono } from "@/lib/fonts";
-import { StrideMark } from "@/components/ui/StrideLogo";
+import { AppHeader } from "@/components/dashboard/app-header";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,7 +21,10 @@ export default function RootLayout({
       lang="en"
       className={`${spaceGrotesk.variable} ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-gradient-to-br from-bg to-bg-2">
+        <AppHeader />
+        {children}
+      </body>
     </html>
   );
 }
