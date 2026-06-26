@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# claude code (keep subagents, ignore sessions/cache/settings)
+.claude/*
+!.claude/subagents/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
