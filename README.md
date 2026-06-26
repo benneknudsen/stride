@@ -16,7 +16,9 @@
 
 ## What is this?
 
-A Next.js 16 application that connects to Strava, analyzes your running data with AI, and presents insights through **generative UI** — the AI returns typed React components, not just text.
+A Next.js 16 application that connects to Strava, visualizes your running data with rich charts, and will layer on AI-powered insights through **generative UI** — the AI returns typed React components, not just text.
+
+Currently implemented: Strava OAuth, activity sync, encrypted token storage, and a dark-themed dashboard with charts. The AI analysis layer is the next milestone.
 
 ## Tech Stack
 
@@ -25,10 +27,11 @@ A Next.js 16 application that connects to Strava, analyzes your running data wit
 | Framework | Next.js 16 (App Router, PPR, Turbopack) |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS + shadcn/ui |
-| AI | Vercel AI SDK (streamUI, generative UI, provider routing) |
+| AI | Vercel AI SDK (pending: streamUI, generative UI) |
 | Database | Drizzle ORM + Vercel Postgres |
 | Auth | NextAuth.js v5 |
 | Charts | Recharts |
+| Testing | Vitest |
 | Deployment | Vercel |
 
 ## Architecture
@@ -80,22 +83,22 @@ npm run db:migrate
 npm run dev
 ```
 
-## Phase 1 (MVP)
+## Project Status
 
+### Phase 1 (MVP)
 - [x] Architecture design
-- [ ] Project scaffold
-- [ ] Database schema + Drizzle
-- [ ] Auth foundation
-- [ ] Strava OAuth + token management
-- [ ] Activity sync pipeline
-- [ ] Dashboard with charts
+- [x] Project scaffold
+- [x] Database schema + Drizzle
+- [x] Auth foundation (NextAuth v5)
+- [x] Strava OAuth + encrypted token storage
+- [x] Activity sync pipeline
+- [x] Dashboard with charts (stats, volume, pace distribution)
 - [ ] Activity detail page
 - [ ] AI analysis with generative UI
 - [ ] Demo mode (seeded data)
 - [ ] Deploy to Vercel
 
-## Phase 2 (Roadmap)
-
+### Phase 2 (Roadmap)
 - [ ] RAG chatbot (pgvector embeddings)
 - [ ] Training plan suggestions
 - [ ] Performance benchmarking

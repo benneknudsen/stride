@@ -36,8 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
-# claude code
-.claude/
+# claude code (keep agents, ignore sessions/cache)
+.claude/*
+!.claude/agents/
 
 # typescript
 *.tsbuildinfo
