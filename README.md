@@ -48,11 +48,26 @@ Full architecture document: [`docs/architecture.md`](./docs/architecture.md)
 This project is built with an **orchestrator-agent architecture**:
 
 ```
-Hermes   →  Plans, verifies, reports
-Claude Code (Opus/Sonnet)  →  Implements via GitHub Issues
+Hermes                 →  Plans, verifies, reports, manages issues
+Claude Code (Opus)     →  Implements features via GitHub Issues
+Claude Code (Sonnet)   →  Parallel sub-agents for review & testing
 ```
 
-Both agents work from `CLAUDE.md` for project context. Every feature originates as a GitHub Issue, is implemented by a coding agent, and auto-closes on merge.
+**Orchestration loop:**
+1. Hermes breaks down features into GitHub Issues with clear specs
+2. Claude Code (Opus) implements each issue, opens a PR
+3. On review, three Claude Code sub-agents run in parallel:
+   - `security-reviewer` — audits auth, tokens, API key exposure
+   - `test-runner` — runs test suite, type checking, lint
+   - `query-optimizer` — checks Drizzle queries for N+1, missing indexes
+4. Hermes verifies the result and closes the issue
+
+**Custom slash commands:**
+- `/code-review` — review current diff
+- `/security-review` — security audit of pending changes
+- `/verify` — verify a change works
+- `/run` — launch and test the app
+- `/deep-research` — multi-source research report
 
 ## Getting Started
 
