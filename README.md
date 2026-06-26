@@ -1,16 +1,22 @@
-# 🏃 Run Dashboard
+<p align="center">
+  <img src="public/stride-icon.svg" alt="Stride" width="96" height="84" />
+</p>
 
-AI-powered running training dashboard — a 2026 AI-first frontend portfolio project.
+<h1 align="center">Stride</h1>
 
-**[Live Demo](#)** · **[Architecture](./docs/architecture.md)** · **[Issues](../../issues)**
+<p align="center">AI-powered running training dashboard</p>
+
+<p align="center">
+  <strong><a href="#">Live Demo</a></strong> ·
+  <a href="./docs/architecture.md">Architecture</a> ·
+  <a href="../../issues">Issues</a>
+</p>
 
 ---
 
 ## What is this?
 
 A Next.js 16 application that connects to Strava, analyzes your running data with AI, and presents insights through **generative UI** — the AI returns typed React components, not just text.
-
-Built to demonstrate modern AI-first frontend development for job applications in Denmark (2026).
 
 ## Tech Stack
 
@@ -42,8 +48,8 @@ Full architecture document: [`docs/architecture.md`](./docs/architecture.md)
 This project is built with an **orchestrator-agent architecture**:
 
 ```
-Hermes (DeepSeek V4 Pro)   →  Plans, verifies, reports
-Claude Code (Opus/Sonnet)   →  Implements via GitHub Issues
+Hermes   →  Plans, verifies, reports
+Claude Code (Opus/Sonnet)  →  Implements via GitHub Issues
 ```
 
 Both agents work from `CLAUDE.md` for project context. Every feature originates as a GitHub Issue, is implemented by a coding agent, and auto-closes on merge.
@@ -81,6 +87,6 @@ npm run dev
 
 ## Author
 
-**Benjamin Knudsen** — Frontend Developer · [GitHub](https://github.com/benneknudsen)
+**Benjamin Knudsen** — [GitHub](https://github.com/benneknudsen)
 
-*Built with Hermes (orchestrator) + Claude Code (agent)*
+*Built with Hermes + Claude Code*
