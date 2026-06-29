@@ -17,16 +17,16 @@ export async function AppHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-bg/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        <StrideLogo size={28} tone="duo" />
-        <nav className="flex items-center gap-2">
-          <Button variant="ghost" size="sm">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-6">
+        <StrideLogo size={22} tone="duo" />
+        <nav className="flex items-center gap-1 sm:gap-2">
+          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
             Dashboard
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
             Activities
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
             Coach
           </Button>
           <DemoToggle />

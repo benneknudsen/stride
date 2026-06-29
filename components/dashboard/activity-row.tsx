@@ -37,7 +37,7 @@ export function ActivityRow({ activity, href }: { activity: ActivityRowData; hre
           {dayName}, {dateStr}
         </span>
       </div>
-      <div className="flex items-center gap-6 text-right">
+      <div className="flex items-center gap-3 sm:gap-6 text-right">
         <div className="flex flex-col gap-0.5">
           <span className="tabular text-sm font-medium text-fg">
             {formatDistance(activity.distance)} km

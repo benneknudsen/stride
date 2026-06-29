@@ -22,7 +22,7 @@ function TrendChip({ stat }: { stat: TrendStat }) {
   const Icon = DIRECTION_ICON[stat.direction];
   const color = deltaColor(stat.direction);
   return (
-    <div className="flex flex-col gap-1.5 rounded-[14px] border border-border bg-card px-[18px] py-[15px]">
+    <div className="flex flex-col gap-1.5 rounded-[14px] border border-border bg-card px-3.5 py-3 sm:px-[18px] sm:py-[15px]">
       <span className="text-[11.5px] text-muted">{stat.label}</span>
       <div className="flex items-baseline gap-2">
         <span className="font-mono text-[19px] font-medium text-fg">{stat.value}</span>

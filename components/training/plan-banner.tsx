@@ -9,8 +9,8 @@ export function PlanBanner({ goal }: { goal: Goal }) {
   const Icon = GOAL_ICON[goal.key];
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-5 rounded-card border border-volt/25 bg-gradient-to-br from-volt/[0.11] to-surface px-[26px] py-[22px]">
-      <div className="flex items-center gap-[18px]">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-card border border-volt/25 bg-gradient-to-br from-volt/[0.11] to-surface px-4 py-4 sm:px-[26px] sm:py-[22px]">
+      <div className="flex items-center gap-3 sm:gap-[18px]">
         <span className="flex size-[52px] items-center justify-center rounded-[15px] bg-volt text-[#0B0D11]">
           <Icon className="size-6" />
         </span>

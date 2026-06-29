@@ -88,7 +88,7 @@ export function NextRunSection({ goal, drivers }: { goal: Goal; drivers: NextRun
           <div className="mb-4 font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
             This week
           </div>
-          <div className="grid flex-1 grid-cols-7 gap-[6px]">
+          <div className="grid flex-1 grid-cols-4 gap-[6px] sm:grid-cols-7">
             {goal.week.map((session, i) => {
               const isToday = i === TODAY_INDEX;
               const isNext = i === NEXT_INDEX;

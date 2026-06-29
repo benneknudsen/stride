@@ -44,7 +44,7 @@ export function LatestRunSection({ goal, latest }: { goal: Goal; latest: LatestR
       <SectionHeading index="01" title="Latest run" aside={`· ${latest.when}`} />
       <div className="grid gap-[14px] lg:grid-cols-[1.5fr_1fr]">
         {/* Run detail */}
-        <div className="rounded-[18px] border border-border bg-card p-[22px]">
+        <div className="rounded-[18px] border border-border bg-card p-4 sm:p-[22px]">
           <div className="mb-5 flex items-center justify-between">
             <div className="font-display text-[17px] font-semibold tracking-tight text-fg">
               {latest.title}
@@ -54,7 +54,7 @@ export function LatestRunSection({ goal, latest }: { goal: Goal; latest: LatestR
             </span>
           </div>
 
-          <div className="mb-[22px] grid grid-cols-4 gap-[14px]">
+          <div className="mb-[22px] grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-[14px]">
             <MetricTile value={latest.pace} label="Pace /km" />
             <MetricTile value={String(latest.avgHr)} label="Avg HR" color="var(--color-signal)" />
             <MetricTile value={String(latest.cadence)} label="Cadence" color="var(--color-aqua)" />
