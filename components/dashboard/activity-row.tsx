@@ -27,36 +27,41 @@ export function ActivityRow({ activity, href }: { activity: ActivityRowData; hre
   });
 
   const inner = (
-    <div className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-border py-3.5 last:border-0">
-      {/* Left: name + date + zone */}
-      <div className="flex flex-col gap-0.5 min-w-0">
+    <div className="flex items-center justify-between border-b border-border py-4 last:border-0">
+      <div className="flex flex-col gap-1">
         <span className="flex items-center gap-2">
-          <span className="font-medium text-fg text-sm truncate">{activity.name}</span>
+          <span className="font-medium text-fg">{activity.name}</span>
           <ZoneBadge averageHeartrate={activity.averageHeartrate} />
         </span>
         <span className="text-xs text-muted">
           {dayName}, {dateStr}
         </span>
       </div>
-
-      {/* Right: metrics — fixed column widths for alignment */}
-      <div className="flex items-center gap-0 text-sm">
-        <span className="tabular w-16 text-right">
-          <span className="font-medium text-fg">{formatDistance(activity.distance)}</span>
-          <span className="text-xs text-muted ml-0.5">km</span>
-        </span>
-        <span className="tabular w-14 text-right ml-5">
-          <span className="font-medium text-fg">{formatDuration(activity.movingTime)}</span>
-        </span>
-        <span className="tabular w-14 text-right ml-5">
-          <span className="font-medium text-volt">{formatPace(activity.averageSpeed)}</span>
-        </span>
-        <span className="tabular w-11 text-right ml-5">
-          <span className="font-medium text-signal">{activity.averageHeartrate ? Math.round(activity.averageHeartrate) : "--"}</span>
-        </span>
-        <span className="tabular w-11 text-right ml-5">
-          <span className="font-medium text-aqua">{activity.averageCadence ? Math.round(activity.averageCadence * 2) : "--"}</span>
-        </span>
+      <div className="flex items-center gap-6 text-right">
+        <div className="flex flex-col gap-0.5">
+          <span className="tabular text-sm font-medium text-fg">
+            {formatDistance(activity.distance)} km
+          </span>
+          <span className="tabular text-xs text-muted">{formatDuration(activity.movingTime)}</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="tabular text-sm font-medium text-volt">
+            {formatPace(activity.averageSpeed)}
+          </span>
+          <span className="text-xs text-muted">/km</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="tabular text-sm font-medium text-signal">
+            {activity.averageHeartrate ? Math.round(activity.averageHeartrate) : "--"}
+          </span>
+          <span className="text-xs text-muted">bpm</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="tabular text-sm font-medium text-aqua">
+            {activity.averageCadence ? Math.round(activity.averageCadence * 2) : "--"}
+          </span>
+          <span className="text-xs text-muted">spm</span>
+        </div>
       </div>
     </div>
   );
