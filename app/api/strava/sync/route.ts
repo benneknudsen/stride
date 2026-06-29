@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { activities } from "@/drizzle/schema";
@@ -25,39 +26,43 @@ export async function POST(_req: NextRequest) {
       const batch = await client.getActivities(page, 100);
       if (batch.length === 0) break;
 
+      // Strava calls stay serial (rate limits); collect rows then insert once.
+      const rows: ReturnType<typeof mapStravaToDb>[] = [];
       for (const summary of batch) {
         try {
           const raw = await client.getActivity(summary.id);
-          const data = mapStravaToDb(raw, userId);
-
-          await db
-            .insert(activities)
-            .values(data)
-            .onConflictDoUpdate({
-              target: [activities.userId, activities.stravaActivityId],
-              set: {
-                name: data.name,
-                type: data.type,
-                startDate: data.startDate,
-                distance: data.distance,
-                movingTime: data.movingTime,
-                elapsedTime: data.elapsedTime,
-                totalElevationGain: data.totalElevationGain,
-                averageSpeed: data.averageSpeed,
-                averageHeartrate: data.averageHeartrate,
-                maxHeartrate: data.maxHeartrate,
-                averageCadence: data.averageCadence,
-                summaryPolyline: data.summaryPolyline,
-                splits: data.splits,
-                raw: data.raw,
-                updatedAt: new Date(),
-              },
-            });
-
-          inserted++;
+          rows.push(mapStravaToDb(raw, userId));
         } catch {
           // Skip individual failures — continue with remaining activities
         }
+      }
+
+      if (rows.length > 0) {
+        await db
+          .insert(activities)
+          .values(rows)
+          .onConflictDoUpdate({
+            target: [activities.userId, activities.stravaActivityId],
+            set: {
+              name: sql`excluded.name`,
+              type: sql`excluded.type`,
+              startDate: sql`excluded.start_date`,
+              distance: sql`excluded.distance`,
+              movingTime: sql`excluded.moving_time`,
+              elapsedTime: sql`excluded.elapsed_time`,
+              totalElevationGain: sql`excluded.total_elevation_gain`,
+              averageSpeed: sql`excluded.average_speed`,
+              averageHeartrate: sql`excluded.average_heartrate`,
+              maxHeartrate: sql`excluded.max_heartrate`,
+              averageCadence: sql`excluded.average_cadence`,
+              summaryPolyline: sql`excluded.summary_polyline`,
+              splits: sql`excluded.splits`,
+              raw: sql`excluded.raw`,
+              updatedAt: new Date(),
+            },
+          });
+
+        inserted += rows.length;
       }
 
       if (batch.length < 100) break;

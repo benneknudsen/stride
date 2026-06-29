@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, lte } from "drizzle-orm";
-import { activities, aiAnalyses, stravaTokens, users } from "../../drizzle/schema";
+import { accounts, activities, aiAnalyses, stravaTokens, users } from "../../drizzle/schema";
 import type { AnalysisScope } from "../../types/domain";
 import { db } from "./index";
 
@@ -13,13 +13,36 @@ import { db } from "./index";
 // ---------------------------------------------------------------------------
 
 export async function getUserByEmail(email: string) {
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  return user ?? null;
+  try {
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return user ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getUserById(id: string) {
-  const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-  return user ?? null;
+  try {
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * OAuth accounts linked to a user via NextAuth (GitHub, Google, …). Returns the
+ * non-sensitive identity columns only — never the stored tokens.
+ */
+export async function getAccountsByUserId(userId: string) {
+  try {
+    return await db
+      .select({ provider: accounts.provider, type: accounts.type })
+      .from(accounts)
+      .where(eq(accounts.userId, userId));
+  } catch {
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -27,12 +50,16 @@ export async function getUserById(id: string) {
 // ---------------------------------------------------------------------------
 
 export async function getStravaTokens(userId: string) {
-  const [token] = await db
-    .select()
-    .from(stravaTokens)
-    .where(eq(stravaTokens.userId, userId))
-    .limit(1);
-  return token ?? null;
+  try {
+    const [token] = await db
+      .select()
+      .from(stravaTokens)
+      .where(eq(stravaTokens.userId, userId))
+      .limit(1);
+    return token ?? null;
+  } catch {
+    return null;
+  }
 }
 
 type UpsertStravaTokensInput = {
@@ -87,23 +114,31 @@ export async function getActivities(userId: string, options: GetActivitiesOption
     conditions.push(lte(activities.startDate, to));
   }
 
-  return db
-    .select()
-    .from(activities)
-    .where(and(...conditions))
-    .orderBy(desc(activities.startDate))
-    .limit(limit)
-    .offset(offset);
+  try {
+    return await db
+      .select()
+      .from(activities)
+      .where(and(...conditions))
+      .orderBy(desc(activities.startDate))
+      .limit(limit)
+      .offset(offset);
+  } catch {
+    return [];
+  }
 }
 
 /** Fetch a single activity, enforcing ownership via userId. */
 export async function getActivityById(userId: string, activityId: string) {
-  const [activity] = await db
-    .select()
-    .from(activities)
-    .where(and(eq(activities.id, activityId), eq(activities.userId, userId)))
-    .limit(1);
-  return activity ?? null;
+  try {
+    const [activity] = await db
+      .select()
+      .from(activities)
+      .where(and(eq(activities.id, activityId), eq(activities.userId, userId)))
+      .limit(1);
+    return activity ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,18 +146,22 @@ export async function getActivityById(userId: string, activityId: string) {
 // ---------------------------------------------------------------------------
 
 export async function getCachedAnalysis(userId: string, scope: AnalysisScope, inputHash: string) {
-  const [analysis] = await db
-    .select()
-    .from(aiAnalyses)
-    .where(
-      and(
-        eq(aiAnalyses.userId, userId),
-        eq(aiAnalyses.scope, scope),
-        eq(aiAnalyses.inputHash, inputHash)
+  try {
+    const [analysis] = await db
+      .select()
+      .from(aiAnalyses)
+      .where(
+        and(
+          eq(aiAnalyses.userId, userId),
+          eq(aiAnalyses.scope, scope),
+          eq(aiAnalyses.inputHash, inputHash)
+        )
       )
-    )
-    .limit(1);
-  return analysis ?? null;
+      .limit(1);
+    return analysis ?? null;
+  } catch {
+    return null;
+  }
 }
 
 type InsertAnalysisInput = {

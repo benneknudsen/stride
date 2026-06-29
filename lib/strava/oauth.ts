@@ -18,7 +18,7 @@ export function generatePkce(): { codeVerifier: string; codeChallenge: string } 
 }
 
 /** Build the Strava OAuth authorization URL with PKCE. */
-export function getAuthorizationUrl(codeChallenge: string): string {
+export function getAuthorizationUrl(codeChallenge: string, state: string): string {
   const params = new URLSearchParams({
     client_id: getEnv("STRAVA_CLIENT_ID"),
     redirect_uri: getEnv("STRAVA_REDIRECT_URI"),
@@ -27,6 +27,7 @@ export function getAuthorizationUrl(codeChallenge: string): string {
     scope: "read,activity:read_all",
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
+    state,
   });
   return `${STRAVA_AUTH_URL}?${params.toString()}`;
 }

@@ -24,16 +24,19 @@ export function ZoneBadge({
 
   return (
     <span
-      title={`Zone ${meta.zone} · ${meta.description}`}
+      title={`Zone ${meta.zone} · ${meta.name} · ${meta.description}`}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-pill border px-2 py-0.5",
-        "font-mono text-[10px] uppercase tracking-[0.06em] text-sub",
+        "inline-flex items-center gap-1 rounded-pill px-2 py-0.5",
+        "font-mono text-[11px] font-semibold tracking-wide",
+        "transition-colors duration-150",
         className
       )}
-      style={{ borderColor: `${meta.color}40` }}
+      style={{
+        background: `${meta.color}18`,
+        color: meta.color,
+      }}
     >
-      <span className="size-1.5 rounded-full" style={{ background: meta.color }} />Z{meta.zone} ·{" "}
-      {meta.name}
+      Z{meta.zone}
     </span>
   );
 }

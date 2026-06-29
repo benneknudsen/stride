@@ -30,7 +30,7 @@ export function StrideLoader({
   const [d1, d2, d3] = STAGGER[motion];
 
   const tall = tone === "ink" ? "#0B0D11" : "#C6F432";
-  const dim = tone === "ink" ? "#0B0D11" : "#E9ECF1";
+  const dim = tone === "ink" ? "#0B0D11" : "var(--color-fg)";
 
   const bar = (h: number, opacity: number, delay: number, bg: string): React.CSSProperties => ({
     width: u,
@@ -66,7 +66,8 @@ export function StrideLoader({
             fontWeight: 500,
             fontSize: u * 0.62,
             letterSpacing: "0.04em",
-            backgroundImage: "linear-gradient(90deg,#79828F,#E9ECF1,#79828F)",
+            backgroundImage:
+              "linear-gradient(90deg,var(--color-muted),var(--color-fg),var(--color-muted))",
             backgroundSize: "200% 100%",
             WebkitBackgroundClip: "text",
             backgroundClip: "text",
