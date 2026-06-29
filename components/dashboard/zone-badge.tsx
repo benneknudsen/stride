@@ -36,7 +36,7 @@ export function ZoneBadge({
         color: meta.color,
       }}
     >
-      Z{meta.zone}
+      Zone {meta.zone}
     </span>
   );
 }
