@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -7,6 +8,30 @@ import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
 
 const VERIFY_TOKEN = process.env.STRAVA_WEBHOOK_VERIFY_TOKEN ?? "stride-verify";
+
+/**
+ * Verify the X-Hub-Signature-256 header against an HMAC-SHA256 of the raw body
+ * keyed by the Strava client secret. Returns false on any missing/malformed
+ * input or signature mismatch. Uses a timing-safe comparison.
+ */
+function verifySignature(rawBody: string, header: string | null): boolean {
+  const secret = process.env.STRAVA_CLIENT_SECRET;
+  if (!secret) {
+    console.error("[strava-webhook] STRAVA_CLIENT_SECRET is not set — rejecting POST");
+    return false;
+  }
+  if (!header?.startsWith("sha256=")) return false;
+
+  const provided = header.slice("sha256=".length);
+  const expected = createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+
+  // Buffers must be equal length for timingSafeEqual; hex-decode both.
+  const providedBuf = Buffer.from(provided, "hex");
+  const expectedBuf = Buffer.from(expected, "hex");
+  if (providedBuf.length !== expectedBuf.length) return false;
+
+  return timingSafeEqual(providedBuf, expectedBuf);
+}
 
 // Strava webhook subscription validation
 export function GET(req: NextRequest) {
@@ -24,7 +49,18 @@ export function GET(req: NextRequest) {
 
 // Strava webhook event handler
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as {
+  // Read the raw body BEFORE parsing so the HMAC matches Strava's signature byte-for-byte.
+  const rawBody = await req.text();
+  const signature = req.headers.get("x-hub-signature-256");
+
+  if (!verifySignature(rawBody, signature)) {
+    console.warn(
+      `[strava-webhook] Rejected POST with invalid signature (header present: ${signature !== null})`
+    );
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+
+  const body = JSON.parse(rawBody) as {
     object_type: string;
     object_id: number;
     aspect_type: string;

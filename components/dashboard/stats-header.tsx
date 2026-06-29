@@ -1,39 +1,14 @@
-import { Card } from "@/components/ui/card";
-import { demoActivities, formatDistance, formatPace, getWeeklyVolume } from "@/lib/demo/activities";
-
-interface StatCardProps {
-  label: string;
-  value: string;
-  unit: string;
-  accent?: "volt" | "signal" | "aqua";
-}
-
-function StatCard({ label, value, unit, accent = "volt" }: StatCardProps) {
-  const accentColor = {
-    volt: "text-volt",
-    signal: "text-signal",
-    aqua: "text-aqua",
-  }[accent];
-
-  return (
-    <Card className="flex-1">
-      <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">{label}</p>
-      <div className="mt-2 flex items-baseline gap-2">
-        <span className={`tabular text-3xl font-semibold ${accentColor}`}>{value}</span>
-        <span className="text-sm text-sub">{unit}</span>
-      </div>
-    </Card>
-  );
-}
+import { StatCard } from "@/components/dashboard/stat-card";
+import { auth } from "@/lib/auth";
+import { getActivities } from "@/lib/db/queries";
+import { formatDistance, formatPace, getSummaryStats } from "@/lib/metrics";
 
 export async function StatsHeader() {
-  await new Promise((r) => setTimeout(r, 800));
+  const session = await auth();
+  const userId = session?.user?.id;
+  const activities = userId ? await getActivities(userId) : [];
 
-  const thisWeekVolume = getWeeklyVolume(demoActivities, 0);
-
-  const recentRuns = demoActivities.slice(0, 7);
-  const avgPace = recentRuns.reduce((sum, a) => sum + a.avgPace, 0) / recentRuns.length;
-  const totalDistance = demoActivities.reduce((sum, a) => sum + a.distance, 0);
+  const { thisWeekVolume, avgPace, totalDistance } = getSummaryStats(activities);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

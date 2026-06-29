@@ -1,40 +1,28 @@
-import { eq } from "drizzle-orm";
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import { users } from "@/drizzle/schema";
-import { db } from "@/lib/db";
+import Email from "next-auth/providers/email";
+import authConfig from "@/auth.config";
+import { accounts, sessions, users, verificationTokens } from "@/drizzle/schema";
+import { getDb } from "@/lib/db";
+import { sendVerificationRequest } from "@/lib/email";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
+  // getDb() returns the real Drizzle instance. The exported `db` is a lazy
+  // Proxy, which breaks the adapter's `instanceof` dialect detection.
+  adapter: DrizzleAdapter(getDb(), {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  }),
   providers: [
-    Credentials({
-      credentials: { username: {}, password: {} },
-      async authorize(credentials) {
-        const username = credentials.username as string;
-        const password = credentials.password as string;
-        if (username === "demo" && password === "demo") {
-          const existing = await db
-            .select()
-            .from(users)
-            .where(eq(users.email, "demo@stride.local"));
-          if (existing.length > 0)
-            return { id: existing[0].id, email: existing[0].email, name: existing[0].name };
-          const created = await db
-            .insert(users)
-            .values({ email: "demo@stride.local", name: "Demo User" })
-            .returning();
-          return { id: created[0].id, email: created[0].email, name: created[0].name };
-        }
-        return null;
-      },
+    ...authConfig.providers,
+    Email({
+      server: {}, // dummy — we override sendVerificationRequest
+      from: "Stride <noreply@stride.run>",
+      maxAge: 600, // 10 minutes — matches the email copy
+      sendVerificationRequest,
     }),
   ],
-  session: { strategy: "jwt" },
-  callbacks: {
-    async session({ session, token }) {
-      if (session.user && token.sub) {
-        session.user.id = token.sub;
-      }
-      return session;
-    },
-  },
 });

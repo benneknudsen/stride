@@ -7,12 +7,14 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
   uniqueIndex,
   vector,
 } from "drizzle-orm/pg-core";
+import type { AdapterAccount } from "next-auth/adapters";
 
 /**
  * Database schema — see docs/architecture.md §2.
@@ -49,6 +51,8 @@ export const users = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(createId),
     email: text("email").notNull(),
+    /** Set by NextAuth when an email/OAuth identity is verified. */
+    emailVerified: timestamp("email_verified", { withTimezone: true }),
     name: text("name"),
     image: text("image"),
     /** Strava athlete id (numeric, stored as bigint for headroom). */
@@ -60,6 +64,50 @@ export const users = pgTable(
     uniqueIndex("users_email_unique").on(table.email),
     uniqueIndex("users_strava_athlete_id_unique").on(table.stravaAthleteId),
   ]
+);
+
+// ---------------------------------------------------------------------------
+// NextAuth (Auth.js) adapter tables — required by @auth/drizzle-adapter for the
+// Email magic-link + GitHub/Google OAuth providers. Column/property names follow
+// the Auth.js contract exactly (the adapter accesses them by these keys).
+// ---------------------------------------------------------------------------
+
+export const accounts = pgTable(
+  "accounts",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").$type<AdapterAccount["type"]>().notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (account) => [primaryKey({ columns: [account.provider, account.providerAccountId] })]
+);
+
+export const sessions = pgTable("sessions", {
+  sessionToken: text("session_token").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { withTimezone: true }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+  "verification_tokens",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { withTimezone: true }).notNull(),
+  },
+  (vt) => [primaryKey({ columns: [vt.identifier, vt.token] })]
 );
 
 // ---------------------------------------------------------------------------

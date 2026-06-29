@@ -7,7 +7,6 @@
 <p align="center">AI-powered running training dashboard</p>
 
 <p align="center">
-  <strong><a href="#">Live Demo</a></strong> ·
   <a href="./docs/architecture.md">Architecture</a> ·
   <a href="../../issues">Issues</a>
 </p>
@@ -95,7 +94,6 @@ npm run dev
 - [x] Dashboard with charts (stats, volume, pace distribution)
 - [ ] Activity detail page
 - [ ] AI analysis with generative UI
-- [ ] Demo mode (seeded data)
 - [ ] Deploy to Vercel
 
 ### Phase 2 (Roadmap)

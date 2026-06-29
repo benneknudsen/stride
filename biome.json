@@ -30,6 +30,13 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/.next", "!**/drizzle/migrations", "!**/public"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/.claude",
+      "!**/drizzle/migrations",
+      "!**/public"
+    ]
   }
 }

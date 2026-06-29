@@ -42,18 +42,18 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
-  /* Stride custom tokens */
-  --color-bg: #0b0d11;
-  --color-bg-2: #0f1217;
-  --color-surface: #14181e;
-  --color-card: #1a1f26;
-  --color-card-2: #20262f;
-  --color-border: #262c35;
-  --color-border-2: #363d49;
-  --color-fg: #e9ecf1;
-  --color-sub: #a6adb9;
-  --color-muted: #79828f;
+  /* Stride custom tokens — themed values resolve in :root (light) / .dark.
+     card/border intentionally reuse the shadcn bridge above (identical values). */
+  --color-bg: var(--stride-bg);
+  --color-bg-2: var(--stride-bg-2);
+  --color-surface: var(--stride-surface);
+  --color-card-2: var(--stride-card-2);
+  --color-border-2: var(--stride-border-2);
+  --color-fg: var(--stride-fg);
+  --color-sub: var(--stride-sub);
+  --color-muted: var(--stride-muted);
 
+  /* Brand colors stay constant across themes */
   --color-volt: #c6f432;
   --color-volt-dim: #9fc718;
   --color-signal: #ff5b41;
@@ -76,8 +76,55 @@
   --shadow-volt: 0 24px 60px -22px rgb(198 244 50 / 0.45);
 }
 
-/* ── Stride Dark Theme (default) ── */
+/* ── Stride Light Theme (default before next-themes resolves) ── */
 :root {
+  color-scheme: light;
+
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #c6f432;
+  --primary-foreground: #0b0d11;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #ef4444;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #c6f432;
+  --chart-1: #9fc718;
+  --chart-2: #14b8a6;
+  --chart-3: #ff5b41;
+  --chart-4: #52525b;
+  --chart-5: #71717a;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #18181b;
+  --sidebar-primary: #c6f432;
+  --sidebar-primary-foreground: #0b0d11;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #c6f432;
+
+  /* Stride custom token values (light) */
+  --stride-bg: #fafafa;
+  --stride-bg-2: #f4f4f5;
+  --stride-surface: #ffffff;
+  --stride-card-2: #f4f4f5;
+  --stride-border-2: #d4d4d8;
+  --stride-fg: #18181b;
+  --stride-sub: #52525b;
+  --stride-muted: #71717a;
+}
+
+.dark {
   color-scheme: dark;
 
   --background: #0b0d11;
@@ -103,7 +150,6 @@
   --chart-3: #ff5b41;
   --chart-4: #a6adb9;
   --chart-5: #79828f;
-  --radius: 0.75rem;
   --sidebar: #0f1217;
   --sidebar-foreground: #e9ecf1;
   --sidebar-primary: #c6f432;
@@ -112,40 +158,16 @@
   --sidebar-accent-foreground: #e9ecf1;
   --sidebar-border: #262c35;
   --sidebar-ring: #c6f432;
-}
 
-.dark {
-  --background: #0b0d11;
-  --foreground: #e9ecf1;
-  --card: #1a1f26;
-  --card-foreground: #e9ecf1;
-  --popover: #14181e;
-  --popover-foreground: #e9ecf1;
-  --primary: #c6f432;
-  --primary-foreground: #0b0d11;
-  --secondary: #20262f;
-  --secondary-foreground: #e9ecf1;
-  --muted: #20262f;
-  --muted-foreground: #79828f;
-  --accent: #20262f;
-  --accent-foreground: #e9ecf1;
-  --destructive: #ff5b41;
-  --border: #262c35;
-  --input: #262c35;
-  --ring: #c6f432;
-  --chart-1: #c6f432;
-  --chart-2: #33e0cb;
-  --chart-3: #ff5b41;
-  --chart-4: #a6adb9;
-  --chart-5: #79828f;
-  --sidebar: #0f1217;
-  --sidebar-foreground: #e9ecf1;
-  --sidebar-primary: #c6f432;
-  --sidebar-primary-foreground: #0b0d11;
-  --sidebar-accent: #1a1f26;
-  --sidebar-accent-foreground: #e9ecf1;
-  --sidebar-border: #262c35;
-  --sidebar-ring: #c6f432;
+  /* Stride custom token values (dark) */
+  --stride-bg: #0b0d11;
+  --stride-bg-2: #0f1217;
+  --stride-surface: #14181e;
+  --stride-card-2: #20262f;
+  --stride-border-2: #363d49;
+  --stride-fg: #e9ecf1;
+  --stride-sub: #a6adb9;
+  --stride-muted: #79828f;
 }
 
 /* ── Base ── */
