@@ -4,72 +4,67 @@
 
 <h1 align="center">Stride</h1>
 
-<p align="center">AI-powered running training dashboard</p>
+<p align="center">AI-powered running coach — Strava sync, progression analysis, generative UI</p>
 
 <p align="center">
-  <a href="./docs/architecture.md">Architecture</a> ·
-  <a href="../../issues">Issues</a>
+  <a href="https://stride-ochre-five.vercel.app"><strong>Live → stride-ochre-five.vercel.app</strong></a> ·
+  <a href="../../issues">Issues</a> ·
+  <a href="./docs/architecture.md">Architecture</a>
 </p>
 
 ---
 
-## What is this?
+## What is Stride?
 
-A Next.js 16 application that connects to Strava, visualizes your running data with rich charts, and will layer on AI-powered insights through **generative UI** — the AI returns typed React components, not just text.
+A Next.js 16 running coach platform that connects to Strava, visualizes training data with rich dashboards, and generates personalized insights via **generative AI** — the AI calls typed tools that render pre-defined React components, not plain text.
 
-Currently implemented: Strava OAuth, activity sync, encrypted token storage, and a dark-themed dashboard with charts. The AI analysis layer is the next milestone.
+It's designed to replace a manual running-coach workflow with an intelligent, data-driven platform.
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|------------|
-| Framework | Next.js 16 (App Router, PPR, Turbopack) |
+|---|---|
+| Framework | Next.js 16 (App Router, Turbopack) |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS + shadcn/ui |
-| AI | Vercel AI SDK (pending: streamUI, generative UI) |
-| Database | Drizzle ORM + Vercel Postgres |
+| AI | Vercel AI SDK (streamObject, typed tools) |
+| Database | Drizzle ORM + Neon (Vercel Postgres) |
 | Auth | NextAuth.js v5 |
 | Charts | Recharts |
-| Testing | Vitest |
-| Deployment | Vercel |
+| Testing | Vitest (255 tests) |
+| CI/CD | Vercel (automatic deploys) |
+| LLM Agents | Hermes + Claude Code (Opus, high effort) |
 
 ## Architecture
 
-Full architecture document: [`docs/architecture.md`](./docs/architecture.md)
+### Generative UI
+
+Instead of streaming text, the AI endpoint (`app/api/ai/analyze`) streams typed tool calls as NDJSON. Each tool maps to a validated React component:
+
+| Tool | Component | Purpose |
+|---|---|---|
+| `insight-card` | `InsightCard` | Severity-dotted observations |
+| `trend-callout` | `TrendCallout` | Directional deltas with sparklines |
+| `workout-recommendation` | `WorkoutRecommendation` | Suggested next run |
+| `metric-comparison` | `MetricComparison` | Week-over-week stats |
+| `coach-insight` | `CoachInsight` | Personalized coaching messages |
 
 ### Key Design Decisions
 
-- **Generative UI over plain text** — AI calls typed tools, pre-defined components render with validated props
-- **Server-side AI only** — API keys never reach the browser. Controllable caching, GDPR boundaries
-- **Drizzle over Prisma** — SQL-first, edge-compatible, shows SQL fluency
-- **NextAuth over Clerk** — Free, demonstrates OAuth competence, no vendor lock-in
-- **Encrypted OAuth tokens at rest** — AES-256-GCM, per-row initialization vectors
+- **Generative UI over plain text** — AI calls typed tools, pre-defined components render
+- **Server-side AI only** — API keys never reach the browser
+- **Drizzle over Prisma** — SQL-first, edge-compatible
+- **NextAuth over Clerk** — Free, demonstrates OAuth competence
+- **AES-256-GCM encrypted tokens** — Per-row IVs for Strava OAuth tokens
+- **Heuristic fallback** — AI analysis works without API key for demo/portfolio
 
 ### AI-First Workflow
 
-This project is built with an **orchestrator-agent architecture**:
-
 ```
-Hermes                 →  Plans, verifies, reports, manages issues
+Hermes                 →  Plans, verifies, manages issues
 Claude Code (Opus)     →  Implements features via GitHub Issues
-Claude Code (Sonnet)   →  Parallel sub-agents for review & testing
+Sub-agents (parallel)  →  Code review, security audit, test verification
 ```
-
-**Orchestration loop:**
-1. Hermes breaks down features into GitHub Issues with clear specs
-2. Claude Code (Opus) implements each issue, opens a PR
-3. On review, three Claude Code sub-agents run in parallel:
-   - `security-reviewer` — audits auth, tokens, API key exposure
-   - `test-runner` — runs test suite, type checking, lint
-   - `query-optimizer` — checks Drizzle queries for N+1, missing indexes
-4. Hermes verifies the result and closes the issue
-
-**Custom slash commands:**
-- `/code-review` — review current diff
-- `/security-review` — security audit of pending changes
-- `/verify` — verify a change works
-- `/run` — launch and test the app
-- `/deep-research` — multi-source research report
 
 ## Getting Started
 
@@ -82,24 +77,31 @@ npm run db:migrate
 npm run dev
 ```
 
+Required env vars: `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY` (see `.env.example` for all).
+
 ## Project Status
 
-### Phase 1 (MVP)
-- [x] Architecture design
-- [x] Project scaffold
-- [x] Database schema + Drizzle
-- [x] Auth foundation (NextAuth v5)
-- [x] Strava OAuth + encrypted token storage
-- [x] Activity sync pipeline
-- [x] Dashboard with charts (stats, volume, pace distribution)
-- [ ] Activity detail page
-- [ ] AI analysis with generative UI
-- [ ] Deploy to Vercel
+### ✅ Phase 1 — Complete
 
-### Phase 2 (Roadmap)
-- [ ] RAG chatbot (pgvector embeddings)
-- [ ] Training plan suggestions
-- [ ] Performance benchmarking
+- [x] Architecture + project scaffold
+- [x] Database schema (Drizzle + PostgreSQL)
+- [x] NextAuth v5 foundation
+- [x] Strava PKCE OAuth + encrypted token storage
+- [x] Activity sync pipeline
+- [x] Dashboard (weekly volume, pace distribution, zone breakdown)
+- [x] Activity detail page
+- [x] AI analysis with generative UI (streamObject + 4 typed tools)
+- [x] Training plan dashboard (committed plan, latest run, last 5, next run)
+- [x] Deploy to Vercel + Neon Postgres
+- [x] 255 unit tests
+
+### 🏗️ Phase 2 — Coach Intelligence
+
+- [ ] [#30 Progression metrics engine](../../issues/30) — pace/HR trends, training load
+- [ ] [#31 Coach rule engine](../../issues/31) — 155 bpm, 48h buffer, phases
+- [ ] [#32 Workout recommender](../../issues/32) — next workout engine
+- [ ] [#33 Coach insight cards](../../issues/33) — AI-generated coaching messages
+- [ ] [#34 Coach dashboard](../../issues/34) — unified coaching view
 
 ## Author
 
