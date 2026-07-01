@@ -127,6 +127,45 @@ export async function getActivities(userId: string, options: GetActivitiesOption
   }
 }
 
+/**
+ * Column-projected activity read for the dashboard. Selects only the fields the
+ * dashboard's stat tiles, charts, and activity rows actually consume — omitting
+ * the heavy jsonb/text columns (`raw`, `splits`, `summaryPolyline`) a page view
+ * never touches. One call replaces the six independent `getActivities` reads the
+ * dashboard used to issue (issue #37): the page fetches this once and slices it
+ * per component instead of re-querying the same rows six times.
+ */
+export async function getDashboardActivities(userId: string) {
+  try {
+    return await db
+      .select({
+        id: activities.id,
+        name: activities.name,
+        type: activities.type,
+        startDate: activities.startDate,
+        distance: activities.distance,
+        movingTime: activities.movingTime,
+        averageSpeed: activities.averageSpeed,
+        averageHeartrate: activities.averageHeartrate,
+        averageCadence: activities.averageCadence,
+        totalElevationGain: activities.totalElevationGain,
+        hrZones: activities.hrZones,
+      })
+      .from(activities)
+      .where(eq(activities.userId, userId))
+      .orderBy(desc(activities.startDate))
+      .limit(500);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A single row from {@link getDashboardActivities} — the projected activity
+ * shape shared by every dashboard component's props.
+ */
+export type DashboardActivity = Awaited<ReturnType<typeof getDashboardActivities>>[number];
+
 /** Fetch a single activity, enforcing ownership via userId. */
 export async function getActivityById(userId: string, activityId: string) {
   try {

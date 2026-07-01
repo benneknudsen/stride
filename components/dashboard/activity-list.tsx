@@ -3,24 +3,22 @@ import { ActivityRow } from "@/components/dashboard/activity-row";
 import { ConnectStravaButton } from "@/components/dashboard/connect-strava-button";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { auth } from "@/lib/auth";
-import { getActivities, getStravaTokens } from "@/lib/db/queries";
+import type { DashboardActivity } from "@/lib/db/queries";
 
-export async function ActivityList() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const [tokens, recentActivities] = userId
-    ? await Promise.all([getStravaTokens(userId), getActivities(userId, { limit: 8 })])
-    : [null, []];
-  const stravaConnected = tokens !== null;
-
+export function ActivityList({
+  activities,
+  stravaConnected,
+}: {
+  activities: DashboardActivity[];
+  stravaConnected: boolean;
+}) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Recent Activities</CardTitle>
       </CardHeader>
       <CardContent>
-        {recentActivities.length === 0 ? (
+        {activities.length === 0 ? (
           stravaConnected ? (
             <EmptyState
               icon={ActivityIcon}
@@ -36,7 +34,7 @@ export async function ActivityList() {
             />
           )
         ) : (
-          recentActivities.map((activity) => (
+          activities.map((activity) => (
             <ActivityRow
               key={activity.id}
               activity={activity}
