@@ -8,6 +8,8 @@ import { PaceDistributionChart } from "@/components/dashboard/pace-distribution-
 import { StatsHeader } from "@/components/dashboard/stats-header";
 import { WeeklyVolumeChart } from "@/components/dashboard/weekly-volume-chart";
 import { ZoneBreakdownChart } from "@/components/dashboard/zone-breakdown-chart";
+import { auth } from "@/lib/auth";
+import { getDashboardActivities, getStravaTokens } from "@/lib/db/queries";
 
 export default async function DashboardPage({
   searchParams,
@@ -15,6 +17,20 @@ export default async function DashboardPage({
   searchParams: Promise<{ strava_connected?: string }>;
 }) {
   const { strava_connected } = await searchParams;
+
+  // One column-projected read (≤500 rows) feeds every dashboard section, instead
+  // of six components each re-querying overlapping windows of the same table.
+  const session = await auth();
+  const userId = session?.user?.id;
+  const [activities, tokens] = userId
+    ? await Promise.all([getDashboardActivities(userId), getStravaTokens(userId)])
+    : [[], null];
+  const stravaConnected = tokens !== null;
+
+  // Weekly-volume buckets span the last 12 weeks; bound that section's slice by
+  // the same window the dedicated query used to enforce.
+  const weeklyVolumeFrom = new Date();
+  weeklyVolumeFrom.setDate(weeklyVolumeFrom.getDate() - 12 * 7);
 
   return (
     <DashboardView>
@@ -41,24 +57,24 @@ export default async function DashboardPage({
               </div>
             }
           >
-            <StatsHeader />
+            <StatsHeader activities={activities.slice(0, 30)} />
           </Suspense>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <WeeklyVolumeChart />
-            <PaceDistributionChart />
+            <WeeklyVolumeChart activities={activities} from={weeklyVolumeFrom} />
+            <PaceDistributionChart activities={activities} />
           </div>
 
           <Suspense fallback={<LoadingCard label="Mapping your zones…" />}>
-            <ZoneBreakdownChart />
+            <ZoneBreakdownChart activities={activities} />
           </Suspense>
 
           <Suspense fallback={<LoadingCard label="Generating insights…" />}>
-            <AnalysisSection />
+            <AnalysisSection activities={activities.slice(0, 60)} />
           </Suspense>
 
           <Suspense fallback={<LoadingCard label="Analysing your runs…" />}>
-            <ActivityList />
+            <ActivityList activities={activities.slice(0, 8)} stravaConnected={stravaConnected} />
           </Suspense>
         </div>
       </main>

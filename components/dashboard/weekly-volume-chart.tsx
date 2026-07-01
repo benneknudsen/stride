@@ -1,17 +1,17 @@
-import { auth } from "@/lib/auth";
-import { getActivities } from "@/lib/db/queries";
+import type { DashboardActivity } from "@/lib/db/queries";
 import { getWeeklyVolumeSeries } from "@/lib/metrics";
 import { WeeklyVolumeChartClient } from "./weekly-volume-chart.client";
 
-export async function WeeklyVolumeChart() {
-  const session = await auth();
-  const userId = session?.user?.id;
+export function WeeklyVolumeChart({
+  activities,
+  from,
+}: {
+  activities: DashboardActivity[];
+  from: Date;
+}) {
+  // Bound the shared dashboard slice to the last 12 weeks so the volume buckets
+  // match the original per-component query's `from` window.
+  const scoped = activities.filter((a) => a.startDate >= from);
 
-  // Fetch the last 12 weeks of activities so the volume buckets are complete
-  // (the default getActivities limit would truncate active users' history).
-  const since = new Date();
-  since.setDate(since.getDate() - 12 * 7);
-  const activities = userId ? await getActivities(userId, { from: since, limit: 500 }) : [];
-
-  return <WeeklyVolumeChartClient data={getWeeklyVolumeSeries(activities, 12)} />;
+  return <WeeklyVolumeChartClient data={getWeeklyVolumeSeries(scoped, 12)} />;
 }

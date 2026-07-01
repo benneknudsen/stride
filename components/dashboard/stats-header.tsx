@@ -1,13 +1,8 @@
 import { StatCard } from "@/components/dashboard/stat-card";
-import { auth } from "@/lib/auth";
-import { getActivities } from "@/lib/db/queries";
+import type { DashboardActivity } from "@/lib/db/queries";
 import { formatDistance, formatPace, getSummaryStats } from "@/lib/metrics";
 
-export async function StatsHeader() {
-  const session = await auth();
-  const userId = session?.user?.id;
-  const activities = userId ? await getActivities(userId) : [];
-
+export function StatsHeader({ activities }: { activities: DashboardActivity[] }) {
   const { thisWeekVolume, avgPace, totalDistance } = getSummaryStats(activities);
 
   return (
