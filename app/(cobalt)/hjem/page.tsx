@@ -63,14 +63,14 @@ export default function HjemPage() {
           <Bento span="col-span-12 lg:col-span-6" delay={0.12}>
             <LatestActivityCard latest={view.latest} started={started} />
           </Bento>
-          <Bento span="col-span-6 lg:col-span-3" delay={0.18}>
+          <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.18}>
             <RouteCard
               coords={view.routeCoords}
               km={view.routeKm}
               elevation={view.routeElevation}
             />
           </Bento>
-          <Bento span="col-span-6 lg:col-span-3" delay={0.24}>
+          <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.24}>
             <AvgPaceRing
               paceLabel={view.avgPaceLabel}
               fraction={view.avgPaceFraction}
@@ -82,10 +82,10 @@ export default function HjemPage() {
           <Bento span="col-span-12 sm:col-span-4" delay={0.3}>
             <VolumeCard bars={view.volumeBars} started={started} />
           </Bento>
-          <Bento span="col-span-6 sm:col-span-3" delay={0.36}>
+          <Bento span="col-span-12 sm:col-span-3" delay={0.36}>
             <RecoveryCard pct={view.recoveryPct} note={view.recoveryNote} started={started} />
           </Bento>
-          <Bento span="col-span-6 sm:col-span-5" delay={0.42}>
+          <Bento span="col-span-12 sm:col-span-5" delay={0.42}>
             <AiCoachCard quote={view.coachQuote} />
           </Bento>
 

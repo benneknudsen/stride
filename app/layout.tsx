@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { AppHeader } from "@/components/dashboard/app-header";
 import { ConditionalAppHeader } from "@/components/dashboard/conditional-app-header";
 import { DemoBanner } from "@/components/dashboard/demo-banner";
@@ -20,6 +20,13 @@ export const metadata: Metadata = {
   icons: {
     icon: "/app-icon.svg",
   },
+};
+
+// viewport-fit=cover lets the Cobalt Glass mobile shell read the iOS safe-area
+// insets (env(safe-area-inset-*)) so the topbar clears the status bar and the
+// floating tab bar clears the home indicator.
+export const viewport: Viewport = {
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

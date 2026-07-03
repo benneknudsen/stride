@@ -31,27 +31,27 @@ export function ActivitiesHeader({
         </h1>
       </div>
 
-      <div className="flex gap-8 sm:gap-9 [animation:cg-fade-up_0.7s_0.1s_ease_both] motion-reduce:[animation:none]">
+      <div className="flex gap-6 sm:gap-9 [animation:cg-fade-up_0.7s_0.1s_ease_both] motion-reduce:[animation:none]">
         <CountUpNumber
           value={totalKm}
           decimals={1}
           label="km i alt"
           run={started}
-          className="text-[40px] text-cobalt sm:text-[44px]"
+          className="text-[30px] text-cobalt sm:text-[44px]"
         />
         <CountUpNumber
           value={totalRuns}
           decimals={0}
           label="ture"
           run={started}
-          className="text-[40px] text-cobalt sm:text-[44px]"
+          className="text-[30px] text-cobalt sm:text-[44px]"
         />
         <CountUpNumber
           value={totalSeconds}
           label="timer"
           run={started}
           format={formatTimerLabel}
-          className="text-[40px] text-red sm:text-[44px]"
+          className="text-[30px] text-red sm:text-[44px]"
         />
       </div>
     </header>
