@@ -35,8 +35,10 @@
       "!**/node_modules",
       "!**/.next",
       "!**/.claude",
+      "!**/.vercel",
       "!**/drizzle/migrations",
-      "!**/public"
+      "!**/public",
+      "!docs"
     ]
   }
 }

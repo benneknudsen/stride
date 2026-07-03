@@ -1,5 +1,5 @@
-import { cn } from "@/lib/utils";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
+import { cn } from "@/lib/utils";
 
 // The nav "brik": a cobalt gradient tile holding the silver runner glyph.
 export function Logo({

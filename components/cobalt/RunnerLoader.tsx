@@ -42,7 +42,13 @@ export function RunnerLoader({
           strokeLinejoin="round"
           opacity="0.5"
         />
-        <path d="M64 40 L86 50" stroke={stroke} strokeWidth="10" strokeLinecap="round" opacity="0.5" />
+        <path
+          d="M64 40 L86 50"
+          stroke={stroke}
+          strokeWidth="10"
+          strokeLinecap="round"
+          opacity="0.5"
+        />
         <path
           d="M6 100 H94"
           stroke={stroke}

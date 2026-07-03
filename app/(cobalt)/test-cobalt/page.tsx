@@ -158,9 +158,7 @@ export default function TestCobaltPage() {
             {[1, 2, 3, 4, 5].map((level) => (
               <div key={level} className="flex flex-col items-center gap-2">
                 <IntensityMeter level={level} label={`Niveau ${level}`} />
-                <span className="font-cg-mono text-[10px] tracking-[0.14em] text-ink">
-                  {level}
-                </span>
+                <span className="font-cg-mono text-[10px] tracking-[0.14em] text-ink">{level}</span>
               </div>
             ))}
           </div>

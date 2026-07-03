@@ -1,4 +1,4 @@
-import { intensityBarTone, type IntensityTone } from "@/lib/cobalt/format";
+import { type IntensityTone, intensityBarTone } from "@/lib/cobalt/format";
 import { cn } from "@/lib/utils";
 
 // 5-bar intensity "brik" (never a number). Active bars 1–2 read cobalt, active
