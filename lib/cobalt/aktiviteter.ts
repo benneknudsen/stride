@@ -1,0 +1,146 @@
+// Cobalt Glass — Aktiviteter (Activities) view-model.
+// Pure derivation (no React) from the demo fixture activities, mirroring
+// lib/cobalt/hjem.ts, so the same presentational rows render demo and live
+// data. Bucketing is day/month-granular, keeping server render and client
+// hydration in agreement.
+
+import { type ZoneInfo, zoneForHeartRate } from "@/lib/cobalt/hjem";
+import { demoActivities } from "@/lib/demo/data";
+import { formatPace } from "@/lib/metrics";
+
+const DA_MONTHS_FULL = [
+  "Januar",
+  "Februar",
+  "Marts",
+  "April",
+  "Maj",
+  "Juni",
+  "Juli",
+  "August",
+  "September",
+  "Oktober",
+  "November",
+  "December",
+];
+const DA_MONTHS_SHORT = [
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "maj",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "okt",
+  "nov",
+  "dec",
+];
+const DA_WEEKDAYS = ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"];
+
+/** Filter buckets — plain-language, never zone codes. */
+export type ActivityFilter = "alle" | "rolig" | "moderat" | "haard";
+export type ActivityCategory = Exclude<ActivityFilter, "alle">;
+
+/** Map an IntensityMeter level (1–5) to its filter bucket. */
+export function activityCategory(level: number): ActivityCategory {
+  if (level <= 2) return "rolig";
+  if (level === 3) return "moderat";
+  return "haard";
+}
+
+/** Format total seconds as `h:mm` for the "timer" total (e.g. 7:11). */
+export function formatTimerLabel(seconds: number): string {
+  const totalMinutes = Math.floor(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  return `${hours}:${String(mins).padStart(2, "0")}`;
+}
+
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function clock(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+/** "44 min" under an hour, else "1:51 t". */
+function durationLabel(seconds: number): string {
+  const totalMinutes = Math.round(seconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes} min`;
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  return `${hours}:${String(mins).padStart(2, "0")} t`;
+}
+
+/** "I dag 07:30 · 44 min" for today, else "Tir 30. jun · 45 min". */
+function metaLabel(date: Date, now: Date, movingTime: number): string {
+  const dayPart =
+    startOfDay(date) === startOfDay(now)
+      ? `I dag ${clock(date)}`
+      : `${DA_WEEKDAYS[date.getDay()]} ${date.getDate()}. ${DA_MONTHS_SHORT[date.getMonth()]}`;
+  return `${dayPart} · ${durationLabel(movingTime)}`;
+}
+
+export interface ActivityRowView {
+  id: string;
+  name: string;
+  metaLabel: string;
+  zone: ZoneInfo;
+  category: ActivityCategory;
+  source: "garmin" | "strava";
+  km: number;
+  paceLabel: string;
+  /** Pace reads red on hard efforts, cobalt otherwise. */
+  paceTone: "cobalt" | "red";
+  hr: number;
+}
+
+export interface ActivitiesView {
+  /** Month range of the shown activities, e.g. "Juni – Juli". */
+  periodLabel: string;
+  totalKm: number;
+  totalRuns: number;
+  totalSeconds: number;
+  rows: ActivityRowView[];
+}
+
+export function buildActivitiesView(now: Date = new Date()): ActivitiesView {
+  // "Month totals" window: from the start of the previous calendar month up to
+  // now — a natural recent span that reads as e.g. "Juni – Juli".
+  const windowStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+  const inWindow = demoActivities.filter((a) => a.startDate.getTime() >= windowStart);
+
+  const rows: ActivityRowView[] = inWindow.map((a, i) => {
+    const zone = zoneForHeartRate(a.averageHeartrate);
+    return {
+      id: a.id,
+      name: a.name,
+      metaLabel: metaLabel(a.startDate, now, a.movingTime),
+      zone,
+      category: activityCategory(zone.level),
+      source: i % 2 === 0 ? "garmin" : "strava",
+      km: a.distance / 1000,
+      paceLabel: formatPace(a.averageSpeed),
+      paceTone: zone.tone,
+      hr: a.averageHeartrate,
+    };
+  });
+
+  const months = inWindow.map((a) => a.startDate.getMonth());
+  const minMonth = Math.min(...months);
+  const maxMonth = Math.max(...months);
+  const periodLabel =
+    minMonth === maxMonth
+      ? DA_MONTHS_FULL[minMonth]
+      : `${DA_MONTHS_FULL[minMonth]} – ${DA_MONTHS_FULL[maxMonth]}`;
+
+  return {
+    periodLabel,
+    totalKm: inWindow.reduce((sum, a) => sum + a.distance / 1000, 0),
+    totalRuns: inWindow.length,
+    totalSeconds: inWindow.reduce((sum, a) => sum + a.movingTime, 0),
+    rows,
+  };
+}
