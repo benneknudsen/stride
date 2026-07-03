@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 // carries the red AI spark. The sync flow is self-contained (idle → syncing →
 // synced) so the bar works on any page; pass `onSync` to hook the real API.
 const LINKS = [
-  { label: "Hjem", href: "/" },
-  { label: "Activities", href: "/activities" },
+  { label: "Hjem", href: "/hjem" },
+  { label: "Aktiviteter", href: "/aktiviteter" },
   { label: "Coach", href: "/coach", spark: true },
   { label: "Plan", href: "/plan" },
 ];
@@ -37,12 +37,11 @@ export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: (
     timerRef.current = setTimeout(() => setSyncState("synced"), 1800);
   }, [onSync]);
 
-  const isActive = (href: string) =>
-    href === "/" ? current === "/" : current === href || current.startsWith(`${href}/`);
+  const isActive = (href: string) => current === href || current.startsWith(`${href}/`);
 
   return (
     <nav className="cg-glass mt-[18px] flex items-center justify-between gap-3 rounded-card px-4 py-2.5 md:gap-[18px] md:px-[22px] md:py-[13px]">
-      <Link href="/" className="flex items-center gap-3">
+      <Link href="/hjem" className="flex items-center gap-3">
         <Logo />
         <Wordmark />
       </Link>
