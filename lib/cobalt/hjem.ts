@@ -23,9 +23,10 @@ const DA_MONTHS = [
   "dec",
 ];
 
-/** CPH Marathon target — fixed race date drives the live plan countdown. */
-const RACE_DATE = new Date(2026, 8, 13, 9, 0, 0, 0); // Sunday 13 Sep 2026
-const PLAN_TOTAL_WEEKS = 38;
+/** CPH Marathon target — fixed race date drives the live plan countdown.
+ * Exported so the Plan page (lib/cobalt/plan.ts) derives the same countdown. */
+export const RACE_DATE = new Date(2026, 8, 13, 9, 0, 0, 0); // Sunday 13 Sep 2026
+export const PLAN_TOTAL_WEEKS = 38;
 
 export interface ZoneInfo {
   /** IntensityMeter level 1–5. */
