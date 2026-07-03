@@ -221,3 +221,169 @@
     animation: none;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Cobalt Glass — redesign design tokens (ADDITIVE; coexists with "Volt")
+   Static brand values, deliberately namespaced so they never clobber the
+   legacy shadcn/Volt tokens above. Utilities: bg-cobalt, text-red,
+   bg-silver, text-ink, font-cg-*, rounded-widget/-tile, cg-glass*.
+   ══════════════════════════════════════════════════════════════════════ */
+@theme {
+  /* Colors — core */
+  --color-cobalt: #1b29c0; /* primær brand, tekst, aktive states */
+  --color-cobalt-light: #2536d8; /* gradient-top */
+  --color-cobalt-dark: #131f96; /* gradient-bund */
+  --color-red: #ee2418; /* accent: signal, logo-hoved, highlights */
+  --color-silver: #e9eae5; /* side-baggrund ("sølv-papir") */
+  --color-silver-dark: #dde0ec;
+  --color-ink: #5560a8; /* sekundær tekst, labels, mono ("muted") */
+
+  /* Colors — semantic */
+  --color-onred: #fdf3ee; /* tekst på røde flader */
+  --color-garmin: #007cc3;
+  --color-strava: #fc4c02;
+  --color-success: #2ba84a; /* synced-prik */
+  --color-success-ink: #1b7a38; /* synced-tekst */
+
+  /* Radii (rounded-card 20px / rounded-pill 999px reuse the legacy tokens) */
+  --radius-widget: 24px;
+  --radius-tile: 13px;
+}
+
+@theme inline {
+  --font-cg-display: var(--font-bricolage), "Bricolage Grotesque", sans-serif;
+  --font-cg-serif: var(--font-instrument-serif), "Instrument Serif", serif;
+  --font-cg-sans: var(--font-instrument-sans), "Instrument Sans", sans-serif;
+  --font-cg-mono: var(--font-spline-mono), "Spline Sans Mono", monospace;
+}
+
+/* Liquid-glass surface tokens — kept as raw custom props because the
+   multi-part shadows/gradients read cleaner here than inside utilities. */
+:root {
+  --cg-glass-bg: rgba(255, 255, 255, 0.42);
+  --cg-glass-border: rgba(255, 255, 255, 0.7);
+  --cg-glass-blur: blur(24px);
+  --cg-glass-shadow: 0 8px 32px rgba(27, 41, 192, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --cg-glass-shadow-red: 0 12px 36px rgba(238, 36, 24, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --cg-glass-shadow-cobalt: 0 12px 36px rgba(27, 41, 192, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  --cg-surface-red: linear-gradient(150deg, rgba(238, 36, 24, 0.85), rgba(238, 36, 24, 0.65));
+  --cg-surface-cobalt: rgba(27, 41, 192, 0.9);
+}
+
+/* Glass surface utilities — shared by GlassCard + NavBar */
+@utility cg-glass {
+  background: var(--cg-glass-bg);
+  border: 1px solid var(--cg-glass-border);
+  backdrop-filter: var(--cg-glass-blur);
+  -webkit-backdrop-filter: var(--cg-glass-blur);
+  box-shadow: var(--cg-glass-shadow);
+}
+@utility cg-glass-red {
+  background: var(--cg-surface-red);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  backdrop-filter: var(--cg-glass-blur);
+  -webkit-backdrop-filter: var(--cg-glass-blur);
+  box-shadow: var(--cg-glass-shadow-red);
+}
+@utility cg-glass-cobalt {
+  background: var(--cg-surface-cobalt);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: var(--cg-glass-blur);
+  -webkit-backdrop-filter: var(--cg-glass-blur);
+  box-shadow: var(--cg-glass-shadow-cobalt);
+}
+
+/* ── Cobalt Glass keyframes (cg- prefixed to stay self-contained) ── */
+@keyframes cg-drift1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate(-26px, 18px) scale(1.06);
+    opacity: 0.55;
+  }
+}
+@keyframes cg-drift2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate(30px, -22px) scale(1.08);
+    opacity: 0.32;
+  }
+}
+@keyframes cg-drift3 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translate(-20px, -26px) scale(1.05);
+    opacity: 0.42;
+  }
+}
+@keyframes cg-fade-up {
+  from {
+    opacity: 0.35;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes cg-pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes cg-draw-line {
+  from {
+    stroke-dashoffset: 350;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes cg-grow-bar {
+  from {
+    transform: scaleY(0.45);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes cg-grow-bar-x {
+  from {
+    transform: scaleX(0.45);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes cg-ground-move {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 24;
+  }
+}
+@keyframes cg-overlay-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
