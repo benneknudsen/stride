@@ -1,0 +1,58 @@
+import { CountUpNumber } from "@/components/cobalt/CountUpNumber";
+
+// Plan header: red mono label ("MARATHONPLAN · CPH MARATHON") + a two-line
+// serif-italic headline, with two big count-up stats on the right (week of plan,
+// days to race). Sits on the silver paper (no glass), outside the loading
+// overlay, so it stays interactive while the plan below loads. `started` flips
+// the stats from their dimmed pulsing 0-state into the count-up.
+export function PlanHeader({
+  totalWeeks,
+  weekOfPlan,
+  daysToRace,
+  goalLabel,
+  started,
+}: {
+  totalWeeks: number;
+  weekOfPlan: number;
+  daysToRace: number;
+  goalLabel: string;
+  started: boolean;
+}) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5 px-3 pt-[38px] pb-1.5">
+      <div className="[animation:cg-fade-up_0.7s_ease_both] motion-reduce:[animation:none]">
+        <div className="mb-3 font-cg-mono text-[11px] uppercase tracking-[0.2em] text-red">
+          Marathonplan · CPH Marathon
+        </div>
+        <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
+          {totalWeeks} uger.
+          <br />
+          {goalLabel.replace(/^Mål/, "Ét mål:")}.
+        </h1>
+      </div>
+
+      <div className="flex gap-9 [animation:cg-fade-up_0.7s_0.1s_ease_both] motion-reduce:[animation:none]">
+        <div className="flex flex-col items-end">
+          <CountUpNumber
+            value={weekOfPlan}
+            run={started}
+            className="items-end text-[44px] text-cobalt"
+          />
+          <span className="mt-2 font-cg-mono text-[10px] uppercase tracking-[0.16em] text-ink">
+            Uge af {totalWeeks}
+          </span>
+        </div>
+        <div className="flex flex-col items-end">
+          <CountUpNumber
+            value={daysToRace}
+            run={started}
+            className="items-end text-[44px] text-red"
+          />
+          <span className="mt-2 font-cg-mono text-[10px] uppercase tracking-[0.16em] text-ink">
+            Dage til race
+          </span>
+        </div>
+      </div>
+    </header>
+  );
+}
