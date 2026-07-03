@@ -1,7 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { AppHeader } from "@/components/dashboard/app-header";
-import { ConditionalAppHeader } from "@/components/dashboard/conditional-app-header";
-import { DemoBanner } from "@/components/dashboard/demo-banner";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import {
   bricolage,
@@ -41,13 +38,7 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${instrumentSans.variable} ${instrumentSerif.variable} ${splineMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-gradient-to-br from-bg to-bg-2">
-        <ThemeProvider>
-          <ConditionalAppHeader>
-            <AppHeader />
-          </ConditionalAppHeader>
-          <DemoBanner />
-          {children}
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

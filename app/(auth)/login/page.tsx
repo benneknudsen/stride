@@ -130,7 +130,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-muted">
           Just looking around?{" "}
-          <Link href="/demo" className="font-medium text-volt hover:underline">
+          <Link href="/" className="font-medium text-volt hover:underline">
             View the demo
           </Link>
         </p>
