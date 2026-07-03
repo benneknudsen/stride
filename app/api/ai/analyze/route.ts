@@ -121,10 +121,7 @@ export async function POST(req: NextRequest) {
 
   // Live AI key configured → require authentication to prevent cost abuse.
   if (!userId) {
-    return Response.json(
-      { error: "authentication_required" },
-      { status: 401 }
-    );
+    return Response.json({ error: "authentication_required" }, { status: 401 });
   }
 
   const prompt = buildAnalysisPrompt(input);

@@ -57,7 +57,12 @@ export function SyncButton({
       style={{ boxShadow: "0 6px 20px rgba(27, 41, 192, 0.25)" }}
     >
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M20 12 A8 8 0 1 1 17.5 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+        <path
+          d="M20 12 A8 8 0 1 1 17.5 6"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
         <path
           d="M17.5 2.5 V6.5 H13.5"
           stroke="currentColor"

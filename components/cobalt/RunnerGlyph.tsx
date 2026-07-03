@@ -43,7 +43,13 @@ export function RunnerGlyph({
         strokeLinejoin="round"
         opacity="0.55"
       />
-      <path d="M64 40 L86 50" stroke={stroke} strokeWidth="11" strokeLinecap="round" opacity="0.55" />
+      <path
+        d="M64 40 L86 50"
+        stroke={stroke}
+        strokeWidth="11"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
     </svg>
   );
 }
