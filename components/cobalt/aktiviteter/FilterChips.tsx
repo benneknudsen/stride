@@ -21,7 +21,7 @@ export function FilterChips({
   onChange: (filter: ActivityFilter) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
       {FILTERS.map((f) => {
         const isActive = f.key === active;
         return (
@@ -31,7 +31,7 @@ export function FilterChips({
             onClick={() => onChange(f.key)}
             aria-pressed={isActive}
             className={cn(
-              "rounded-pill px-[18px] py-2 font-cg-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
+              "shrink-0 rounded-pill px-[18px] py-2 font-cg-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
               isActive
                 ? "border border-cobalt bg-cobalt text-silver"
                 : "cg-glass text-ink hover:text-cobalt"

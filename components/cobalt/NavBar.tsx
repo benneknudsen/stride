@@ -41,7 +41,7 @@ export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: (
     href === "/" ? current === "/" : current === href || current.startsWith(`${href}/`);
 
   return (
-    <nav className="cg-glass mt-[18px] flex items-center justify-between gap-[18px] rounded-card px-[22px] py-[13px]">
+    <nav className="cg-glass mt-[18px] flex items-center justify-between gap-3 rounded-card px-4 py-2.5 md:gap-[18px] md:px-[22px] md:py-[13px]">
       <Link href="/" className="flex items-center gap-3">
         <Logo />
         <Wordmark />

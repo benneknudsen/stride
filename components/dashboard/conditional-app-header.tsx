@@ -12,7 +12,7 @@ import { usePathname } from "next/navigation";
 // Component into a "use client" module pulls its whole server tree into the
 // browser bundle and breaks the build. Instead it's passed in as children,
 // rendered on the server and handed to us as an already-serialized element.
-const COBALT_ROUTES = ["/test-cobalt", "/hjem", "/activities", "/coach", "/plan"];
+const COBALT_ROUTES = ["/test-cobalt", "/hjem", "/aktiviteter", "/coach", "/plan"];
 
 export function ConditionalAppHeader({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
