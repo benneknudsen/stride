@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { BackgroundBlobs } from "@/components/cobalt/BackgroundBlobs";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
 import { NavBar } from "@/components/cobalt/NavBar";
+import { auth } from "@/lib/auth";
 
 // Shared shell for every app page — Hjem (/), Aktiviteter, Coach, Plan. Silver
 // "paper" background with the drifting blobs behind, then the centred content
@@ -12,7 +14,15 @@ import { NavBar } from "@/components/cobalt/NavBar";
 // extra bottom padding so the last widgets clear the floating BottomTabBar; the
 // horizontal gutter tightens from 28px to 16px. All of this collapses to the
 // desktop values from md up, where the tab bar is hidden.
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // Auth guard for the whole (app) group: every page here is user-scoped, so
+  // bounce anonymous visitors to the login route before rendering the shell.
+  // Mirrors the session check in actions/activities.ts. The (auth)/login route
+  // lives in a different route group with its own layout, so it is never caught
+  // by this guard.
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
   return (
     <div className="relative min-h-screen bg-silver font-cg-sans text-cobalt">
       <BackgroundBlobs />
