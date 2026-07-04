@@ -7,7 +7,19 @@ import { db } from "@/lib/db";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
 
-const VERIFY_TOKEN = process.env.STRAVA_WEBHOOK_VERIFY_TOKEN ?? "stride-verify";
+/**
+ * The shared secret Strava echoes back during webhook subscription validation.
+ * Read lazily (not at module load) so POST event handling still works if the
+ * token is unset, but any verification attempt fails loudly instead of silently
+ * trusting a hardcoded default — see issue #41.
+ */
+function getVerifyToken(): string {
+  const token = process.env.STRAVA_VERIFY_TOKEN;
+  if (!token) {
+    throw new Error("STRAVA_VERIFY_TOKEN is not set");
+  }
+  return token;
+}
 
 /**
  * Verify the X-Hub-Signature-256 header against an HMAC-SHA256 of the raw body
@@ -35,12 +47,13 @@ function verifySignature(rawBody: string, header: string | null): boolean {
 
 // Strava webhook subscription validation
 export function GET(req: NextRequest) {
+  const verifyToken = getVerifyToken();
   const { searchParams } = req.nextUrl;
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN && challenge) {
+  if (mode === "subscribe" && token === verifyToken && challenge) {
     return NextResponse.json({ "hub.challenge": challenge });
   }
 
