@@ -71,7 +71,12 @@ export async function POST(_req: NextRequest) {
 
     return NextResponse.json({ ok: true, inserted });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Sync failed";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    // Log the real cause server-side; never leak internal error details (stack
+    // traces, upstream Strava messages, token issues) to the client — see #42.
+    console.error("[strava-sync] Historical sync failed", err);
+    return NextResponse.json(
+      { ok: false, error: "Sync failed. Please try again later." },
+      { status: 500 }
+    );
   }
 }
