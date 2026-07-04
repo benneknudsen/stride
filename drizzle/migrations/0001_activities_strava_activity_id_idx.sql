@@ -1,0 +1,1 @@
+CREATE INDEX "activities_strava_activity_id_idx" ON "activities" USING btree ("strava_activity_id");
