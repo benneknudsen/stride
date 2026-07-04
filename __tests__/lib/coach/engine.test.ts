@@ -271,6 +271,32 @@ describe("validateWorkout — hard: Adios Pro 4 shoe", () => {
   });
 });
 
+describe("validateWorkout — session type casing", () => {
+  it("recognises speed sessions regardless of casing", () => {
+    const result = validateWorkout(
+      ctx({ phase: "sharpen", plannedType: "Intervals", shoeType: "adios_pro" })
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it("applies the long-run cap to a capitalised 'Long' type", () => {
+    const result = validateWorkout(
+      ctx({ phase: "burn", plannedType: "Long", plannedDistanceKm: 17 })
+    );
+    expect(result.issues.map((i) => i.constraintId)).toContain("long-run-cap");
+  });
+
+  it("treats an uppercase 'REST' day as a non-run day for strength", () => {
+    const result = validateWorkout(ctx({ plannedType: "REST", includesStrength: true }));
+    expect(result.valid).toBe(true);
+  });
+
+  it("flags base-phase quality work for a capitalised 'Tempo'", () => {
+    const result = validateWorkout(ctx({ phase: "burn", plannedType: "Tempo" }));
+    expect(result.warnings.map((w) => w.constraintId)).toContain("base-phase-zone2");
+  });
+});
+
 describe("validateWorkout — hard: long-run cap", () => {
   it("blocks a 17 km long run in a base phase (cap 16)", () => {
     const result = validateWorkout(

@@ -203,9 +203,11 @@ export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
   if (input.avgPaceLast7 !== null && input.avgPacePrev7 !== null) {
     const delta = input.avgPaceLast7 - input.avgPacePrev7; // negative = faster
     const faster = delta < 0;
-    const absDelta = Math.abs(delta);
+    // Round to whole seconds BEFORE splitting into m:ss — rounding the
+    // remainder alone can yield ":60" (e.g. 59.6 s → 0:60).
+    const absDelta = Math.round(Math.abs(delta));
     const deltaMin = Math.floor(absDelta / 60);
-    const deltaSec = Math.round(absDelta % 60);
+    const deltaSec = absDelta % 60;
     blocks.push({
       tool: "metricComparison",
       title: "Average pace: last 7 days vs prior",

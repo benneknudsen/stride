@@ -9,6 +9,7 @@
 // A few numbers (activity count, the long run, form %, the 14-day load bars)
 // are derived from the fixtures so the surrounding UI reads as live data.
 
+import { RACE_DATE } from "@/lib/coach/engine";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
 
@@ -76,6 +77,38 @@ function dailyKm(now: Date, daysAgo: number): number {
   return km;
 }
 
+/** Average heart rate across runs in the day-window (from, to] days ago, or null. */
+function windowAvgHr(now: Date, fromDaysAgo: number, toDaysAgo: number): number | null {
+  const start = now.getTime() - toDaysAgo * DAY_MS;
+  const end = now.getTime() - fromDaysAgo * DAY_MS;
+  const samples = demoActivities
+    .filter((a) => a.startDate.getTime() > start && a.startDate.getTime() <= end)
+    .map((a) => a.averageHeartrate)
+    .filter((hr) => hr > 0);
+  if (samples.length === 0) return null;
+  return Math.round(samples.reduce((sum, hr) => sum + hr, 0) / samples.length);
+}
+
+/** Whole weeks until the goal race (never negative). */
+function weeksToRace(now: Date): number {
+  return Math.max(0, Math.round((RACE_DATE.getTime() - now.getTime()) / (7 * DAY_MS)));
+}
+
+/** Half-marathon estimate from a run's average speed — "t:mm–t:mm" (± 2 min). */
+function estimateHalfMarathonRange(averageSpeed: number): string | null {
+  if (!averageSpeed || averageSpeed <= 0) return null;
+  const HALF_MARATHON_KM = 21.0975;
+  // Race pace runs a touch faster than training pace — a conservative 95%.
+  const estimateSec = (1000 / averageSpeed) * 0.95 * HALF_MARATHON_KM;
+  const fmt = (totalSec: number) => {
+    const totalMin = Math.round(totalSec / 60);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return `${h}:${m.toString().padStart(2, "0")}`;
+  };
+  return `${fmt(estimateSec - 120)}–${fmt(estimateSec + 120)}`;
+}
+
 /** Longest run within the last `days`, or null when the window is empty. */
 function longestInWindow(now: Date, days: number) {
   const from = now.getTime() - days * DAY_MS;
@@ -96,27 +129,36 @@ export function buildCoachView(now: Date = new Date()): CoachView {
   const longRunPace = formatPace(longRun.averageSpeed);
   const longRunHr = longRun.averageHeartrate;
 
+  // Every numeric claim in the transcript is derived from the fixtures — a
+  // scripted chat must never assert data the surrounding dashboards contradict.
+  const avgHrLast7 = windowAvgHr(now, 0, 7);
+  const avgHrPrev7 = windowAvgHr(now, 7, 14);
+  const raceWeeks = weeksToRace(now);
+
+  const hrTrendLine =
+    avgHrLast7 !== null && avgHrPrev7 !== null
+      ? avgHrLast7 < avgHrPrev7
+        ? `Din aerobe form udvikler sig — gennemsnitspulsen er faldet fra ${avgHrPrev7} til ${avgHrLast7} den seneste uge.`
+        : avgHrLast7 > avgHrPrev7
+          ? `Din puls ligger lidt højere end ugen før (${avgHrPrev7} → ${avgHrLast7}), så mærk efter undervejs.`
+          : `Din puls ligger stabilt på ${avgHrLast7} — god konsistens.`
+      : "Din træning ser konsistent ud.";
+
   const initialMessages: ChatMessage[] = [
     {
       id: "m1",
       role: "coach",
-      text: "Godmorgen Benjamin! Din tempo-tolerance stiger — de sidste tre hårde pas har haft faldende puls ved samme pace. Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25.",
+      text: `Godmorgen Benjamin! ${hrTrendLine} Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25.`,
     },
     { id: "m2", role: "user", text: "Hvordan så min lange tur ud i søndags?" },
     {
       id: "m3",
       role: "coach",
-      text: `Stærk tur: ${longRunKm} km i snit ${longRunPace} /km med stabil puls på ${longRunHr}. Du løb negativ split — anden halvdel 12 sekunder hurtigere. Det er præcis den udvikling vi vil se 10 uger før race.`,
+      text: `Stærk tur: ${longRunKm} km i snit ${longRunPace} /km med stabil puls på ${longRunHr}. Det er præcis den udvikling vi vil se ${raceWeeks} uger før race.`,
     },
   ];
 
-  const prompts = ["Analysér min uge", "Foreslå næste pas", "Er jeg klar til CPH Marathon?"];
-
-  const replies = [
-    "Godt spørgsmål. Ud fra dine seneste 28 ture ligger du 8 % foran planen, og restitutionen er på 86 % — så jeg vil holde fast i torsdagens progressive pas og ellers prioritere rolige kilometer resten af ugen.",
-    "Din uge ser balanceret ud: 41 % i rolig snak-fart, resten fordelt på moderat og hårdt. Vil du have, at jeg justerer søndagens lange tur, hvis vejret bliver varmt?",
-    "Baseret på din nuværende form estimerer jeg en marathontid på 3:41–3:48. Målet på 3:45 er realistisk, hvis volumen holder de næste 6 uger.",
-  ];
+  const prompts = ["Analysér min uge", "Foreslå næste pas", "Er jeg klar til halvmarathon?"];
 
   // Form (readiness): same heuristic as the Hjem "Restitution" widget so the
   // two pages agree — lower recent HR reads as fresher legs.
@@ -132,6 +174,19 @@ export function buildCoachView(now: Date = new Date()): CoachView {
   const thisWeek = getWeeklyVolume(demoActivities, 0);
   const lastWeek = getWeeklyVolume(demoActivities, 1);
   const trendRatio = lastWeek === 0 ? 1 : thisWeek / lastWeek;
+
+  const volDeltaPct = Math.round((trendRatio - 1) * 100);
+  const volLine =
+    volDeltaPct >= 0 ? `${volDeltaPct} % over sidste uge` : `${-volDeltaPct} % under sidste uge`;
+  const halfEstimate = estimateHalfMarathonRange(longRun.averageSpeed);
+
+  const replies = [
+    `Godt spørgsmål. Ud fra dine seneste ${demoActivities.length} ture ligger ugens volumen ${volLine}, og restitutionen er på ${pct} % — så jeg vil holde fast i torsdagens progressive pas og ellers prioritere rolige kilometer resten af ugen.`,
+    "Din uge ser balanceret ud med hovedvægten på rolig snak-fart og resten fordelt på moderat og hårdt. Vil du have, at jeg justerer søndagens lange tur, hvis vejret bliver varmt?",
+    halfEstimate
+      ? `Baseret på din nuværende form estimerer jeg en halvmarathontid på ${halfEstimate}. Silkeborg Halvmarathon om ${raceWeeks} uger er realistisk, hvis volumen holder.`
+      : `Silkeborg Halvmarathon er om ${raceWeeks} uger — hold volumen stabil, så tager vi en formvurdering, når der er flere ture i bogen.`,
+  ];
   const [trend, trendTone] =
     trendRatio > 1.05
       ? (["STIGENDE", "cobalt"] as const)
