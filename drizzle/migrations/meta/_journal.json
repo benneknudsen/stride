@@ -8,6 +8,13 @@
       "when": 1782552818492,
       "tag": "0000_sturdy_skreet",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783172604347,
+      "tag": "0001_activities_strava_activity_id_idx",
+      "breakpoints": true
     }
   ]
 }

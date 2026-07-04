@@ -193,6 +193,9 @@ export const activities = pgTable(
   (table) => [
     uniqueIndex("activities_user_strava_activity_unique").on(table.userId, table.stravaActivityId),
     index("activities_user_start_date_idx").on(table.userId, table.startDate),
+    // Webhook delete/lookup filters by strava_activity_id alone; the composite
+    // unique above leads with user_id and can't serve it — see issue #38.
+    index("activities_strava_activity_id_idx").on(table.stravaActivityId),
   ]
 );
 
