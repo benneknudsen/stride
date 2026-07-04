@@ -187,8 +187,14 @@ const SPEED_SESSION_TYPES = new Set(["tempo", "intervals", "race", "fartlek", "s
 /** Session types that are NOT a run — leg strength on these days is fine. */
 const NON_RUN_TYPES = new Set(["rest", "strength", "cross", "off", "mobility", "yoga"]);
 
+/** Lowercased, trimmed session type — callers (AI tools, UI) vary the casing. */
+function normalizeType(type?: string): string | undefined {
+  return type?.trim().toLowerCase() || undefined;
+}
+
 function isSpeedSession(type?: string): boolean {
-  return type != null && SPEED_SESSION_TYPES.has(type);
+  const normalized = normalizeType(type);
+  return normalized != null && SPEED_SESSION_TYPES.has(normalized);
 }
 
 /** A hard effort either by session type (speed work) or by target zone (≥ Z3). */
@@ -200,7 +206,8 @@ function isQualityEffort(context: WorkoutContext): boolean {
 
 /** Whether the day carries a run (so leg strength would clash with it). */
 function isRunDay(context: WorkoutContext): boolean {
-  if (context.plannedType != null) return !NON_RUN_TYPES.has(context.plannedType);
+  const normalized = normalizeType(context.plannedType);
+  if (normalized != null) return !NON_RUN_TYPES.has(normalized);
   return context.plannedDistanceKm != null && context.plannedDistanceKm > 0;
 }
 
@@ -303,7 +310,7 @@ const longRunCap: Constraint = {
   severity: "hard",
   category: "long-run",
   evaluate(context) {
-    if (context.plannedType !== "long") return null;
+    if (normalizeType(context.plannedType) !== "long") return null;
     if (context.plannedDistanceKm == null) return null;
     const cap = getPhase(context.phase).longRunMaxKm;
     if (context.plannedDistanceKm <= cap) return null;

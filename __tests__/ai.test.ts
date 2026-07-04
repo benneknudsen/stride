@@ -87,6 +87,17 @@ describe("heuristicBlocks", () => {
     const blocks = heuristicBlocks(buildAnalysisInput(SAMPLE, "overall", NOW));
     expect(blocks.some((b) => b.tool === "workoutRecommendation")).toBe(true);
   });
+
+  it("never renders a pace delta with 60 in the seconds place", () => {
+    // 59.6 s delta used to round the remainder alone and produce "0:60".
+    const input = buildAnalysisInput(SAMPLE, "overall", NOW);
+    const crafted = { ...input, avgPaceLast7: 359.6, avgPacePrev7: 300 };
+    const comparison = heuristicBlocks(crafted).find((b) => b.tool === "metricComparison");
+    expect(comparison).toBeDefined();
+    if (comparison?.tool === "metricComparison") {
+      expect(comparison.deltaLabel).toBe("+1:00");
+    }
+  });
 });
 
 describe("blockToToolCall / toolCallToBlock", () => {

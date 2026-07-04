@@ -58,6 +58,13 @@ const requestSchema = z.object({
   activities: z.array(requestActivitySchema).min(1).max(500),
 });
 
+/**
+ * Upper bound on streamed blocks per response. The prompt asks for 3–5; this
+ * caps a model that ignores the instruction so a runaway stream can't inflate
+ * response size or token spend.
+ */
+const MAX_BLOCKS = 8;
+
 const NDJSON_HEADERS = {
   "Content-Type": "application/x-ndjson; charset=utf-8",
   "Cache-Control": "no-store",
@@ -150,6 +157,7 @@ export async function POST(req: NextRequest) {
           });
           for await (const block of result.elementStream) {
             emit(block);
+            if (collected.length >= MAX_BLOCKS) break;
           }
           usedModel = id;
           break;

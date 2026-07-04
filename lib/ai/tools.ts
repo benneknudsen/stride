@@ -60,7 +60,12 @@ export const workoutRecommendationSchema = z.object({
   details: z.string().describe("The session prescription, e.g. '5 × 1 km @ 4:40 with 90s jog'"),
   rationale: z.string().describe("One sentence on why this fits the athlete right now"),
   targetPace: z.string().optional().describe("Optional target pace, e.g. '4:40 /km'"),
-  distanceKm: z.number().optional().describe("Optional total session distance in km"),
+  distanceKm: z
+    .number()
+    .positive()
+    .max(60)
+    .optional()
+    .describe("Optional total session distance in km (must be a realistic 0–60 km)"),
 });
 
 /** A head-to-head comparison of one metric across two periods. */

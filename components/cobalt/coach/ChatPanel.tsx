@@ -101,7 +101,7 @@ export function ChatPanel({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") send();
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
           }}
           placeholder="Skriv til din coach…"
           aria-label="Skriv til din coach"
