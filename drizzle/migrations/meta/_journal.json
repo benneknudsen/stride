@@ -15,6 +15,13 @@
       "when": 1783172604347,
       "tag": "0001_activities_strava_activity_id_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783172634171,
+      "tag": "0002_accounts_user_id_idx",
+      "breakpoints": true
     }
   ]
 }

@@ -89,7 +89,12 @@ export const accounts = pgTable(
     id_token: text("id_token"),
     session_state: text("session_state"),
   },
-  (account) => [primaryKey({ columns: [account.provider, account.providerAccountId] })]
+  (account) => [
+    primaryKey({ columns: [account.provider, account.providerAccountId] }),
+    // NextAuth adapter lookups and user-cascade deletes filter accounts by
+    // user_id; the composite PK leads with provider and can't serve it — #43.
+    index("accounts_user_id_idx").on(account.userId),
+  ]
 );
 
 export const sessions = pgTable("sessions", {
