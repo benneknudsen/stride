@@ -8,12 +8,21 @@ import { db } from "@/lib/db";
 
 export type Activity = InferSelectModel<typeof activities>;
 
+/**
+ * List-view projection of {@link Activity}: every column except the heavy
+ * jsonb/text payloads (`raw`, `splits`, `summaryPolyline`). List rows, stat
+ * tiles, and charts never read those columns, and shipping them to the client
+ * bloats the wire payload — so getActivities() projects them out (query
+ * optimizer MELLEM-1). Use getActivity() when the full row is needed.
+ */
+export type ActivityListItem = Omit<Activity, "raw" | "splits" | "summaryPolyline">;
+
 export async function getActivities(opts?: {
   limit?: number;
   offset?: number;
   from?: Date;
   to?: Date;
-}): Promise<Activity[]> {
+}): Promise<ActivityListItem[]> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
@@ -23,8 +32,33 @@ export async function getActivities(opts?: {
   if (opts?.from) conditions.push(gte(activities.startDate, opts.from));
   if (opts?.to) conditions.push(lte(activities.startDate, opts.to));
 
+  // Column projection: select every column except the heavy jsonb/text
+  // payloads (`raw`, `splits`, `summaryPolyline`) a list view never reads —
+  // same pattern as getDashboardActivities() in lib/db/queries.ts. The full
+  // row, including those columns, is served by getActivity().
   return db
-    .select()
+    .select({
+      id: activities.id,
+      userId: activities.userId,
+      stravaActivityId: activities.stravaActivityId,
+      name: activities.name,
+      type: activities.type,
+      distance: activities.distance,
+      movingTime: activities.movingTime,
+      elapsedTime: activities.elapsedTime,
+      totalElevationGain: activities.totalElevationGain,
+      startDate: activities.startDate,
+      averageSpeed: activities.averageSpeed,
+      maxSpeed: activities.maxSpeed,
+      averageHeartrate: activities.averageHeartrate,
+      maxHeartrate: activities.maxHeartrate,
+      averageCadence: activities.averageCadence,
+      averageWatts: activities.averageWatts,
+      calories: activities.calories,
+      hrZones: activities.hrZones,
+      createdAt: activities.createdAt,
+      updatedAt: activities.updatedAt,
+    })
     .from(activities)
     .where(and(...conditions))
     .orderBy(desc(activities.startDate))
@@ -45,6 +79,6 @@ export async function getActivity(id: string): Promise<Activity | null> {
   return rows[0] ?? null;
 }
 
-export async function getRecentActivities(limit = 10): Promise<Activity[]> {
+export async function getRecentActivities(limit = 10): Promise<ActivityListItem[]> {
   return getActivities({ limit });
 }
