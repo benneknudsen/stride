@@ -33,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="da"
       suppressHydrationWarning
       className={`${spaceGrotesk.variable} ${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${instrumentSans.variable} ${instrumentSerif.variable} ${splineMono.variable} h-full antialiased`}
     >

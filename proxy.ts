@@ -27,8 +27,11 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/", req.nextUrl));
   }
 
-  // Protect the dashboard (root) and everything under /dashboard.
-  const isProtected = pathname === "/" || pathname.startsWith("/dashboard");
+  // Protect all app routes (root /, /aktiviteter, /coach, /plan).
+  const APP_ROUTES = ["/", "/aktiviteter", "/coach", "/plan"];
+  const isProtected = APP_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
   if (!isAuthed && isProtected) {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }

@@ -4,11 +4,8 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 
-type OAuthProvider = "github" | "google";
+type OAuthProvider = "google";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -24,12 +21,12 @@ export default function LoginPage() {
     try {
       const result = await signIn("email", { email, redirect: false });
       if (result?.error) {
-        setError("We couldn't send the magic link. Please try again.");
+        setError("Kunne ikke sende magic link. Prøv igen.");
       } else {
         setEmailSent(true);
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("Noget gik galt. Prøv igen.");
     } finally {
       setEmailLoading(false);
     }
@@ -41,7 +38,7 @@ export default function LoginPage() {
     try {
       await signIn(provider, { callbackUrl: "/" });
     } catch {
-      setError("Something went wrong signing you in. Please try again.");
+      setError("Noget gik galt. Prøv igen.");
       setOauthLoading(null);
     }
   }
@@ -49,176 +46,87 @@ export default function LoginPage() {
   const busy = emailLoading || oauthLoading !== null;
 
   return (
-    <Card hover={false} className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Welcome to Stride</CardTitle>
-        <CardDescription>Sign in to your training dashboard.</CardDescription>
-      </CardHeader>
+    <div className="w-full max-w-[360px]">
+      {/* Cobalt Glass card */}
+      <div className="rounded-card border border-cobalt/10 bg-white/60 p-8 shadow-glass backdrop-blur-xl">
+        <h1 className="mb-1 font-cg-sans text-[22px] font-bold leading-tight tracking-tight text-cobalt">
+          Log ind
+        </h1>
+        <p className="mb-6 text-[14px] leading-relaxed text-ink">Din løbecoach venter på dig.</p>
 
-      <CardContent className="space-y-6">
         {emailSent ? (
-          <p className="rounded-lg border border-border-2 bg-card-2 px-4 py-3 text-sm text-fg">
-            Check your email for the magic link.
-          </p>
+          <div className="rounded-card border border-cobalt/15 bg-cobalt/[0.04] px-4 py-3 text-[14px] text-cobalt">
+            Tjek din email — vi har sendt et magic link.
+          </div>
         ) : (
           <form onSubmit={handleMagicLink} className="space-y-3">
-            <Input
+            <input
               type="email"
               required
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder="din@email.dk"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={busy}
-              aria-invalid={error !== null}
-              aria-label="Email address"
+              className="w-full rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] text-cobalt placeholder:text-ink/40 outline-none transition-colors focus:border-cobalt/40"
             />
-            <Button type="submit" size="lg" className="w-full" disabled={busy || !email}>
+            <button
+              type="submit"
+              disabled={busy || !email}
+              className="flex w-full items-center justify-center gap-2 rounded-card bg-cobalt px-4 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
               {emailLoading ? (
                 <>
-                  <Loader2 className="animate-spin" />
-                  Sending…
+                  <Loader2 size={16} className="animate-spin" />
+                  Sender…
                 </>
               ) : (
                 "Send magic link"
               )}
-            </Button>
+            </button>
           </form>
         )}
 
         {error && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="mt-3 text-[13px] text-red">
             {error}
           </p>
         )}
 
-        <div className="flex items-center gap-3">
-          <span className="h-px flex-1 bg-border" />
-          <span className="text-xs text-muted">or continue with</span>
-          <span className="h-px flex-1 bg-border" />
+        <div className="my-5 flex items-center gap-3">
+          <span className="h-px flex-1 bg-cobalt/10" />
+          <span className="text-[11px] uppercase tracking-widest text-ink/40">eller</span>
+          <span className="h-px flex-1 bg-cobalt/10" />
         </div>
 
-        <div className="grid gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="w-full"
-            disabled={busy}
-            onClick={() => handleOAuth("github")}
-          >
-            {oauthLoading === "github" ? <Loader2 className="animate-spin" /> : <GitHubIcon />}
-            Continue with GitHub
-          </Button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => handleOAuth("google")}
+          className="flex w-full items-center justify-center gap-2 rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.03] disabled:opacity-50"
+        >
+          {oauthLoading === "google" ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <GoogleIcon />
+          )}
+          Fortsæt med Google
+        </button>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            className="w-full"
-            disabled={busy}
-            onClick={() => handleOAuth("google")}
-          >
-            {oauthLoading === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
-            Continue with Google
-          </Button>
-        </div>
-
-        {process.env.NODE_ENV === "development" &&
-          typeof window !== "undefined" &&
-          window.location.hostname === "localhost" && <DevLogin busy={busy} setError={setError} />}
-
-        <p className="text-center text-sm text-muted">
-          Just looking around?{" "}
-          <Link href="/" className="font-medium text-volt hover:underline">
-            View the demo
+        <p className="mt-6 text-center text-[13px] text-ink/60">
+          Kigger du bare?{" "}
+          <Link href="/demo" className="font-semibold text-cobalt hover:underline">
+            Prøv demoen
           </Link>
         </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function DevLogin({ busy, setError }: { busy: boolean; setError: (msg: string | null) => void }) {
-  const [username, setUsername] = useState("dev");
-  const [password, setPassword] = useState("dev");
-  const [loading, setLoading] = useState(false);
-
-  async function handleDevLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const result = await signIn("credentials", {
-        username,
-        password,
-        redirect: false,
-      });
-      if (result?.error) {
-        setError("Dev login failed");
-      } else {
-        window.location.href = "/";
-      }
-    } catch {
-      setError("Dev login failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="flex items-center gap-3">
-        <span className="h-px flex-1 bg-border" />
-        <span className="text-xs text-muted">dev only</span>
-        <span className="h-px flex-1 bg-border" />
       </div>
-      <form onSubmit={handleDevLogin} className="space-y-3">
-        <Input
-          type="text"
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          disabled={busy || loading}
-        />
-        <Input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={busy || loading}
-        />
-        <Button
-          type="submit"
-          size="lg"
-          className="w-full"
-          variant="secondary"
-          disabled={busy || loading}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="animate-spin" /> Logging in…
-            </>
-          ) : (
-            "Dev Login"
-          )}
-        </Button>
-      </form>
-    </>
-  );
-}
-
-function GitHubIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.95 0-1.31.47-2.39 1.24-3.23-.13-.3-.54-1.52.12-3.17 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.25 2.87.12 3.17.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12.01 12.01 0 0 0 24 12.5C24 5.87 18.63.5 12 .5Z" />
-    </svg>
+    </div>
   );
 }
 
 function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M23.52 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.87Z"

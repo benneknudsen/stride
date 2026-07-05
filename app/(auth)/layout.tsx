@@ -1,3 +1,4 @@
+import { BackgroundBlobs } from "@/components/cobalt/BackgroundBlobs";
 import { StrideLogo } from "@/components/ui/StrideLogo";
 
 export default function AuthLayout({
@@ -6,9 +7,12 @@ export default function AuthLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <main className="flex min-h-screen flex-1 flex-col items-center justify-center gap-8 bg-gradient-to-br from-bg to-bg-2 px-6 py-12">
-      <StrideLogo size={32} tone="duo" />
-      {children}
-    </main>
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-silver font-cg-sans">
+      <BackgroundBlobs />
+      <div className="relative z-10 flex flex-col items-center gap-8 px-6">
+        <StrideLogo size={36} tone="duo" />
+        {children}
+      </div>
+    </div>
   );
 }
