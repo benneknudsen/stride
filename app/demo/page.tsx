@@ -12,7 +12,7 @@ import { RecentRunsCard } from "@/components/cobalt/hjem/RecentRunsCard";
 import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
-import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
+import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
 import { buildHomeView, greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
 
 function Bento({ span, delay, children }: { span: string; delay: number; children: ReactNode }) {
@@ -28,26 +28,28 @@ function Bento({ span, delay, children }: { span: string; delay: number; childre
 
 export default function DemoPage() {
   const [view, setView] = useState<HomeView | null>(null);
-  const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const now = new Date();
-    setView(buildHomeView(now));
-    setGreeting(greetingForHour(now.getHours()));
-    const timer = setTimeout(() => setLoading(false), 2000);
-    return () => clearTimeout(timer);
+    try {
+      const v = buildHomeView(now);
+      setView(v);
+      setGreeting(greetingForHour(now.getHours()));
+    } catch (e) {
+      console.error("buildHomeView failed", e);
+    }
+    setTimeout(() => setReady(true), 2000);
   }, []);
 
   if (!view) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-silver">
-        <LoadingOverlay show label="HENTER DEMO DATA…" />
+      <main className="flex min-h-screen flex-col items-center justify-center gap-5 bg-silver">
+        <RunnerLoader size={70} label="HENTER DEMO DATA…" />
       </main>
     );
   }
-
-  const started = !loading;
 
   return (
     <main className="min-h-screen bg-silver font-cg-sans">
@@ -68,16 +70,16 @@ export default function DemoPage() {
           weekNumber={view.weekNumber}
           weeklyKm={view.weeklyKm}
           greeting={greeting}
-          started={started}
+          started={ready}
         />
 
         <div className="relative pt-4">
           <div className="grid grid-cols-12 gap-4">
             <Bento span="col-span-12" delay={0.05}>
-              <PlanStrip {...view.plan} started={started} />
+              <PlanStrip {...view.plan} started={ready} />
             </Bento>
             <Bento span="col-span-12 lg:col-span-6" delay={0.12}>
-              <LatestActivityCard latest={view.latest} started={started} />
+              <LatestActivityCard latest={view.latest} started={ready} />
             </Bento>
             <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.18}>
               <RouteCard
@@ -91,14 +93,14 @@ export default function DemoPage() {
                 paceLabel={view.avgPaceLabel}
                 fraction={view.avgPaceFraction}
                 deltaLabel={view.avgPaceDeltaLabel}
-                started={started}
+                started={ready}
               />
             </Bento>
             <Bento span="col-span-12 sm:col-span-4" delay={0.3}>
-              <VolumeCard bars={view.volumeBars} started={started} />
+              <VolumeCard bars={view.volumeBars} started={ready} />
             </Bento>
             <Bento span="col-span-12 sm:col-span-3" delay={0.36}>
-              <RecoveryCard pct={view.recoveryPct} note={view.recoveryNote} started={started} />
+              <RecoveryCard pct={view.recoveryPct} note={view.recoveryNote} started={ready} />
             </Bento>
             <Bento span="col-span-12 sm:col-span-5" delay={0.42}>
               <AiCoachCard quote={view.coachQuote} />
@@ -110,8 +112,6 @@ export default function DemoPage() {
               <DataSourcesCard />
             </Bento>
           </div>
-
-          <LoadingOverlay show={loading} label="HENTER DEMO DATA…" />
         </div>
       </div>
     </main>
