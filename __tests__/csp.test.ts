@@ -6,14 +6,15 @@ const styleSrc = (csp: string) => csp.split("; ").find((d) => d.startsWith("styl
 const connectSrc = (csp: string) => csp.split("; ").find((d) => d.startsWith("connect-src")) ?? "";
 
 describe("buildCsp", () => {
-  it("puts the nonce and strict-dynamic in script-src", () => {
+  it("uses unsafe-inline in script-src (RSC navigation compat)", () => {
     const csp = buildCsp("abc123", false);
-    expect(scriptSrc(csp)).toContain("'nonce-abc123'");
-    expect(scriptSrc(csp)).toContain("'strict-dynamic'");
+    expect(scriptSrc(csp)).toContain("'unsafe-inline'");
+    expect(scriptSrc(csp)).not.toContain("'nonce-'");
+    expect(scriptSrc(csp)).not.toContain("'strict-dynamic'");
   });
 
-  it("does NOT allow unsafe-inline scripts (the whole point of the nonce)", () => {
-    expect(scriptSrc(buildCsp("n", false))).not.toContain("'unsafe-inline'");
+  it("allows unsafe-inline scripts for RSC navigation compatibility", () => {
+    expect(scriptSrc(buildCsp("n", false))).toContain("'unsafe-inline'");
   });
 
   it("keeps unsafe-inline for styles so Recharts/Leaflet/Tailwind still render", () => {
