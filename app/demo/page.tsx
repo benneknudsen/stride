@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AiCoachCard } from "@/components/cobalt/hjem/AiCoachCard";
 import { AvgPaceRing } from "@/components/cobalt/hjem/AvgPaceRing";
 import { DataSourcesCard } from "@/components/cobalt/hjem/DataSourcesCard";
@@ -13,7 +13,7 @@ import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
-import { buildHomeView, greetingForHour } from "@/lib/cobalt/hjem";
+import { buildHomeView, greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
 
 function Bento({ span, delay, children }: { span: string; delay: number; children: ReactNode }) {
   return (
@@ -27,22 +27,31 @@ function Bento({ span, delay, children }: { span: string; delay: number; childre
 }
 
 export default function DemoPage() {
-  const view = useMemo(() => buildHomeView(), []);
+  const [view, setView] = useState<HomeView | null>(null);
   const [loading, setLoading] = useState(true);
-  const [greeting, setGreeting] = useState("Godmorgen");
+  const [greeting, setGreeting] = useState("");
 
   useEffect(() => {
-    setGreeting(greetingForHour(new Date().getHours()));
+    const now = new Date();
+    setView(buildHomeView(now));
+    setGreeting(greetingForHour(now.getHours()));
     const timer = setTimeout(() => setLoading(false), 2000);
     return () => clearTimeout(timer);
   }, []);
+
+  if (!view) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-silver">
+        <LoadingOverlay show label="HENTER DEMO DATA…" />
+      </main>
+    );
+  }
 
   const started = !loading;
 
   return (
     <main className="min-h-screen bg-silver font-cg-sans">
       <div className="relative mx-auto max-w-[1360px] px-4 pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)_+_96px)] md:px-7 md:pt-0 md:pb-10">
-        {/* Demo banner */}
         <div className="mb-6 flex items-center justify-between rounded-card border border-cobalt/10 bg-white/60 px-5 py-3 shadow-glass backdrop-blur-xl">
           <span className="text-[13px] text-ink/70">
             🏃 <strong className="text-cobalt">Demo-tilstand</strong> — data er fiktiv.
@@ -67,7 +76,6 @@ export default function DemoPage() {
             <Bento span="col-span-12" delay={0.05}>
               <PlanStrip {...view.plan} started={started} />
             </Bento>
-
             <Bento span="col-span-12 lg:col-span-6" delay={0.12}>
               <LatestActivityCard latest={view.latest} started={started} />
             </Bento>
@@ -86,7 +94,6 @@ export default function DemoPage() {
                 started={started}
               />
             </Bento>
-
             <Bento span="col-span-12 sm:col-span-4" delay={0.3}>
               <VolumeCard bars={view.volumeBars} started={started} />
             </Bento>
@@ -96,7 +103,6 @@ export default function DemoPage() {
             <Bento span="col-span-12 sm:col-span-5" delay={0.42}>
               <AiCoachCard quote={view.coachQuote} />
             </Bento>
-
             <Bento span="col-span-12 lg:col-span-7" delay={0.48}>
               <RecentRunsCard runs={view.recentRuns} />
             </Bento>
