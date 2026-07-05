@@ -558,3 +558,44 @@ export function validateWorkout(context: WorkoutContext): ValidationResult {
 
   return result;
 }
+
+// ── Client serialization ──────────────────────────────────────────────────────
+
+/**
+ * A `ValidationResult` flattened for the client boundary: optional fields become
+ * explicit `null` (JSON-friendly, no `undefined` gaps across a server→client
+ * prop) and a ready-to-render `summary` line is added.
+ */
+export interface SerializedValidationResult {
+  valid: boolean;
+  issues: ValidationIssue[];
+  warnings: ValidationIssue[];
+  hrAdjustmentBpm: number | null;
+  paceAdjustment: string | null;
+  /** One-line Danish headline for the UI. */
+  summary: string;
+}
+
+function summarizeValidation(result: ValidationResult): string {
+  if (!result.valid) {
+    const n = result.issues.length;
+    return `${n} blokerende ${n === 1 ? "problem" : "problemer"}`;
+  }
+  if (result.warnings.length > 0) {
+    const n = result.warnings.length;
+    return `Godkendt med ${n} ${n === 1 ? "advarsel" : "advarsler"}`;
+  }
+  return "Godkendt";
+}
+
+/** Flatten a `ValidationResult` into a plain, JSON-safe shape for the client. */
+export function serializeValidationResult(result: ValidationResult): SerializedValidationResult {
+  return {
+    valid: result.valid,
+    issues: result.issues,
+    warnings: result.warnings,
+    hrAdjustmentBpm: result.hrAdjustmentBpm ?? null,
+    paceAdjustment: result.paceAdjustment ?? null,
+    summary: summarizeValidation(result),
+  };
+}
