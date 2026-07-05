@@ -19,7 +19,11 @@ export function buildCsp(nonce: string, isDev: boolean): string {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    `connect-src 'self'${isDev ? " ws:" : ""}`,
+    // `connect-src` must allowlist the external origins the browser may reach:
+    // the Strava API/OAuth host and the Vercel AI Gateway (AI SDK streaming).
+    // Without these, `'self'` alone blocks those fetch/XHR/stream connections
+    // (issue #62). Dev additionally needs a websocket for HMR.
+    `connect-src 'self' https://www.strava.com https://ai-gateway.vercel.sh${isDev ? " ws:" : ""}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
