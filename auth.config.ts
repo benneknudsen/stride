@@ -42,6 +42,20 @@ const authConfig = {
   providers,
   session: { strategy: "jwt" as const },
   callbacks: {
+    /**
+     * Session-fixation mitigation. On initial sign-in (`user` present) and on
+     * explicit session updates (`trigger === "update"`), mint a fresh, random
+     * session id (`sid`). NextAuth re-signs the JWT cookie whenever the token
+     * changes, so rotating `sid` forces the underlying session-token cookie to
+     * rotate at the authentication boundary — a token fixed before login can
+     * never be elevated into an authenticated one.
+     */
+    async jwt({ token, user, trigger }) {
+      if (user || trigger === "update") {
+        token.sid = crypto.randomUUID();
+      }
+      return token;
+    },
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
