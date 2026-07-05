@@ -176,9 +176,13 @@ export const PHASES: Record<PhaseKey, PhaseRules> = {
 
 const PHASE_ORDER: PhaseKey[] = ["adapt", "burn", "sharpen", "peak"];
 
-/** Calendar-day key (YYYYMMDD as an int) — compares dates ignoring time-of-day. */
+/**
+ * A monotonic per-day ordering key — strictly increasing with the calendar day
+ * and ignoring time-of-day. Only ever compared, never displayed, so the month
+ * stays 0-indexed (the `+1` a literal YYYYMMDD would need buys nothing here).
+ */
 function dayNumber(d: Date): number {
-  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();
 }
 
 /** The phase rules for a key. */
