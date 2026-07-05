@@ -13,6 +13,7 @@ import {
   POOR_SLEEP_PACE_ADJUSTMENT,
   RACE_DATE,
   type SessionType,
+  serializeValidationResult,
   validateWorkout,
   WEEKDAYS,
   type WorkoutContext,
@@ -493,6 +494,44 @@ describe("validateWorkout — safety: weekly progression", () => {
     expect(zeroPrev.warnings.map((w) => w.constraintId)).not.toContain(
       "weekly-distance-progression"
     );
+  });
+});
+
+describe("serializeValidationResult", () => {
+  it("turns unset adjustments into explicit null", () => {
+    const serialized = serializeValidationResult(validateWorkout(ctx()));
+    expect(serialized.hrAdjustmentBpm).toBeNull();
+    expect(serialized.paceAdjustment).toBeNull();
+  });
+
+  it("carries the poor-sleep adjustments through", () => {
+    const serialized = serializeValidationResult(
+      validateWorkout(ctx({ plannedType: "easy", sleepQuality: "poor" }))
+    );
+    expect(serialized.hrAdjustmentBpm).toBe(POOR_SLEEP_HR_BUMP_BPM);
+    expect(serialized.paceAdjustment).toBe(POOR_SLEEP_PACE_ADJUSTMENT);
+  });
+
+  it("summarises a clean result, warnings, and hard blocks", () => {
+    const clean = serializeValidationResult(validateWorkout(ctx()));
+    expect(clean.summary).toBe("Godkendt");
+
+    const warned = serializeValidationResult(
+      validateWorkout(ctx({ plannedType: "easy", sleepQuality: "poor" }))
+    );
+    expect(warned.summary).toBe("Godkendt med 1 advarsel");
+
+    const blocked = serializeValidationResult(
+      validateWorkout(ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 14, 8, 0) }))
+    );
+    expect(blocked.summary).toBe("1 blokerende problem");
+  });
+
+  it("stays a plain JSON round-trippable object", () => {
+    const serialized = serializeValidationResult(
+      validateWorkout(ctx({ plannedType: "tempo", sleepQuality: "poor" }))
+    );
+    expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
   });
 });
 
