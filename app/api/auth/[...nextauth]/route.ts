@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { handlers } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -12,7 +12,7 @@ export const { GET } = handlers;
  * unauthenticated brute-force / email-bombing of the magic-link endpoint.
  * All other auth POSTs pass straight through.
  */
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
   const { pathname } = new URL(req.url);
   const isMagicLink = pathname.endsWith("/signin/email") || pathname.endsWith("/callback/email");
 
