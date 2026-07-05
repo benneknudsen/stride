@@ -1,22 +1,12 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { BackgroundBlobs } from "@/components/cobalt/BackgroundBlobs";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
 import { NavBar } from "@/components/cobalt/NavBar";
-import { auth } from "@/lib/auth";
 
-// Shared shell for every app page — Hjem (/), Aktiviteter, Coach, Plan, Demo.
-// Auth guard skips /demo — public portfolio page.
-//
-// Mobile: content starts below the iOS status bar (safe-area top inset) and gets
-// extra bottom padding so the last widgets clear the floating BottomTabBar.
+// Shared Cobalt Glass shell for every (app) page.
+// Auth is handled by the proxy middleware (proxy.ts) — this layout only
+// provides the visual wrapper. /demo is public because it's not in
+// the middleware's APP_ROUTES list.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth();
-  const heads = await headers();
-  const pathname = heads.get("x-next-pathname") || heads.get("next-url") || "";
-
-  if (!session?.user?.id && !pathname.startsWith("/demo")) redirect("/login");
-
   return (
     <div className="relative min-h-screen bg-silver font-cg-sans text-cobalt">
       <BackgroundBlobs />
