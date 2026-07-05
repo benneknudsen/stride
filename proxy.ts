@@ -11,12 +11,11 @@ const { auth } = NextAuth(authConfig);
  * Request proxy. Two responsibilities:
  *
  *  1. Auth-gate the dashboard (unchanged from the original middleware).
- *  2. Attach a per-request CSP nonce (issue #61). `next.config.ts` `headers()`
- *     is evaluated once at build time and cannot produce a unique value per
- *     response, so the nonce is minted here. It is set on both the inbound
- *     request headers (so Next.js reads it and stamps its own `<script>` tags)
- *     and the response headers (so the browser enforces it). The remaining
- *     static security headers stay in `next.config.ts`.
+ *  2. Attach the CSP header. `next.config.ts` `headers()` can only emit static
+ *     headers, so the policy is built here. The CSP no longer uses a nonce
+ *     (`script-src 'self' 'unsafe-inline'`), so no per-request/session value is
+ *     minted — `buildCsp` receives an empty nonce. The remaining static
+ *     security headers stay in `next.config.ts`.
  */
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -36,39 +35,20 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 
-  // Session-wide CSP nonce — stored in a cookie so every request in the same
-  // session shares the same nonce. Per-request nonces break client-side RSC
-  // navigation because the browser enforces the old page's CSP while the new
-  // RSC payload carries a different nonce (issue #67).
-  const COOKIE = "__Host-nonce";
-  let nonce = req.cookies.get(COOKIE)?.value;
-  if (!nonce) {
-    nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  }
-  const csp = buildCsp(nonce, process.env.NODE_ENV === "development");
+  const csp = buildCsp("", process.env.NODE_ENV === "development");
 
   const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
-
-  // Persist the nonce for the session — HttpOnly, Secure, SameSite=Lax, 24h.
-  response.cookies.set(COOKIE, nonce, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 86400,
-  });
 
   return response;
 });
 
 /**
  * Run on document/page requests. Static assets, image optimisation, the favicon
- * and API routes (JSON — no inline scripts) are excluded so the nonce work is
+ * and API routes (JSON — no inline scripts) are excluded so the CSP work is
  * spent only where an HTML document with scripts is served. The auth-protected
  * paths (`/`, `/dashboard/*`, `/login`) fall inside this matcher.
  */
