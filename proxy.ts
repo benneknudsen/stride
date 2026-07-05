@@ -36,8 +36,15 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 
-  // Continue to the page, stamping a fresh CSP nonce onto request + response.
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  // Session-wide CSP nonce — stored in a cookie so every request in the same
+  // session shares the same nonce. Per-request nonces break client-side RSC
+  // navigation because the browser enforces the old page's CSP while the new
+  // RSC payload carries a different nonce (issue #67).
+  const COOKIE = "__Host-nonce";
+  let nonce = req.cookies.get(COOKIE)?.value;
+  if (!nonce) {
+    nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  }
   const csp = buildCsp(nonce, process.env.NODE_ENV === "development");
 
   const requestHeaders = new Headers(req.headers);
@@ -46,6 +53,16 @@ export default auth((req) => {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+
+  // Persist the nonce for the session — HttpOnly, Secure, SameSite=Lax, 24h.
+  response.cookies.set(COOKIE, nonce, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 86400,
+  });
+
   return response;
 });
 
