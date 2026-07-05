@@ -31,6 +31,28 @@ export interface PhaseRules {
 
 export type Severity = "hard" | "soft" | "phase" | "safety";
 
+/**
+ * The canonical session types the plan works in. Run days carry an effort
+ * (easy → race); the rest are non-run days. Callers that receive loosely-typed
+ * strings (AI tool output, form input) should normalise/validate at the
+ * boundary — internally `normalizeType` still tolerates casing.
+ */
+export type SessionType =
+  | "easy"
+  | "recovery"
+  | "tempo"
+  | "intervals"
+  | "fartlek"
+  | "speed"
+  | "long"
+  | "race"
+  | "rest"
+  | "strength"
+  | "cross"
+  | "off"
+  | "mobility"
+  | "yoga";
+
 export interface Constraint {
   id: string;
   description: string;
@@ -41,7 +63,7 @@ export interface Constraint {
 
 export interface WorkoutContext {
   plannedDate: Date;
-  plannedType?: string; // "easy" | "tempo" | "intervals" | "long" | "race" | etc.
+  plannedType?: SessionType;
   plannedDistanceKm?: number;
   plannedPace?: string;
   plannedZone?: number;
