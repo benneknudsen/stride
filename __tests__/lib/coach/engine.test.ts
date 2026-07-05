@@ -82,6 +82,14 @@ describe("getCurrentPhase — phase windows", () => {
     expect(getCurrentPhase(new Date(2026, 9, 1))).toBe("peak"); // 1 Oct, post-race
   });
 
+  it("keeps ordering correct for dates well after the peak block", () => {
+    // Exercises the day-ordering key across month- and year-rollovers past peak.
+    expect(getCurrentPhase(new Date(2026, 8, 15, 0, 1))).toBe("peak"); // 15 Sep, just after end
+    expect(getCurrentPhase(new Date(2026, 11, 31))).toBe("peak"); // 31 Dec 2026
+    expect(getCurrentPhase(new Date(2027, 0, 1))).toBe("peak"); // 1 Jan 2027 — year rollover
+    expect(getCurrentPhase(new Date(2030, 5, 15))).toBe("peak"); // far future
+  });
+
   it("defaults to the system clock when no date is given", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 6, 15)); // 15 Jul 2026 — burn
