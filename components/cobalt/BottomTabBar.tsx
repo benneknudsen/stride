@@ -15,7 +15,7 @@ const red = "var(--color-red)";
 const TABS: { label: string; href: string; icon: ReactNode }[] = [
   {
     label: "Hjem",
-    href: "/hjem",
+    href: "/",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3.5" y="3.5" width="7" height="7" rx="2" fill={cobalt} />
