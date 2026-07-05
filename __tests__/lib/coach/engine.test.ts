@@ -11,6 +11,7 @@ import {
   POOR_SLEEP_HR_BUMP_BPM,
   POOR_SLEEP_PACE_ADJUSTMENT,
   RACE_DATE,
+  type SessionType,
   validateWorkout,
   type WorkoutContext,
   ZONE2_CEILING_BPM,
@@ -272,27 +273,31 @@ describe("validateWorkout — hard: Adios Pro 4 shoe", () => {
 });
 
 describe("validateWorkout — session type casing", () => {
+  // Loosely-cased strings stand in for untyped callers (AI tool output, form
+  // input) that reach the engine before normalisation — hence the casts.
   it("recognises speed sessions regardless of casing", () => {
     const result = validateWorkout(
-      ctx({ phase: "sharpen", plannedType: "Intervals", shoeType: "adios_pro" })
+      ctx({ phase: "sharpen", plannedType: "Intervals" as SessionType, shoeType: "adios_pro" })
     );
     expect(result.valid).toBe(true);
   });
 
   it("applies the long-run cap to a capitalised 'Long' type", () => {
     const result = validateWorkout(
-      ctx({ phase: "burn", plannedType: "Long", plannedDistanceKm: 17 })
+      ctx({ phase: "burn", plannedType: "Long" as SessionType, plannedDistanceKm: 17 })
     );
     expect(result.issues.map((i) => i.constraintId)).toContain("long-run-cap");
   });
 
   it("treats an uppercase 'REST' day as a non-run day for strength", () => {
-    const result = validateWorkout(ctx({ plannedType: "REST", includesStrength: true }));
+    const result = validateWorkout(
+      ctx({ plannedType: "REST" as SessionType, includesStrength: true })
+    );
     expect(result.valid).toBe(true);
   });
 
   it("flags base-phase quality work for a capitalised 'Tempo'", () => {
-    const result = validateWorkout(ctx({ phase: "burn", plannedType: "Tempo" }));
+    const result = validateWorkout(ctx({ phase: "burn", plannedType: "Tempo" as SessionType }));
     expect(result.warnings.map((w) => w.constraintId)).toContain("base-phase-zone2");
   });
 });
