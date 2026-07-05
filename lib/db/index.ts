@@ -1,8 +1,23 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import * as relations from "../../drizzle/relations";
 import * as schema from "../../drizzle/schema";
 
+/**
+ * WebSocket-pooled Neon driver.
+ *
+ * We use `drizzle-orm/neon-serverless` (a pooled WebSocket connection) rather
+ * than `neon-http`. The HTTP driver opens a fresh TLS roundtrip per statement
+ * and — critically — throws "No transactions support in neon-http driver", so
+ * hot, multi-statement paths (the dashboard read, the webhook upsert) paid a
+ * roundtrip per query and could not run inside a transaction (issues #64, #66).
+ * The Pool keeps a warm WebSocket that multiplexes statements and supports
+ * real interactive transactions.
+ *
+ * `webSocketConstructor` is left unset: the driver falls back to the native
+ * global `WebSocket`, which is present on Node 22+ / the Vercel runtime, so no
+ * `ws` dependency is required.
+ */
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export function getDb() {
@@ -11,8 +26,8 @@ export function getDb() {
     if (!connectionString) {
       throw new Error("POSTGRES_URL (or DATABASE_URL) is not set");
     }
-    const sql = neon(connectionString);
-    _db = drizzle(sql, {
+    const pool = new Pool({ connectionString });
+    _db = drizzle(pool, {
       schema: { ...schema, ...relations },
       casing: "snake_case",
     });
