@@ -30,18 +30,28 @@ export default function DemoPage() {
   const [view, setView] = useState<HomeView | null>(null);
   const [greeting, setGreeting] = useState("");
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const now = new Date();
     try {
+      const now = new Date();
       const v = buildHomeView(now);
       setView(v);
       setGreeting(greetingForHour(now.getHours()));
+      setTimeout(() => setReady(true), 2000);
     } catch (e) {
-      console.error("buildHomeView failed", e);
+      setError(String(e));
     }
-    setTimeout(() => setReady(true), 2000);
   }, []);
+
+  if (error) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-silver p-8">
+        <h1 className="text-xl font-bold text-red">Fejl ved indlæsning</h1>
+        <pre className="max-w-full overflow-auto text-sm text-ink">{error}</pre>
+      </main>
+    );
+  }
 
   if (!view) {
     return (
@@ -65,14 +75,12 @@ export default function DemoPage() {
             Log ind
           </a>
         </div>
-
         <Hero
           weekNumber={view.weekNumber}
           weeklyKm={view.weeklyKm}
           greeting={greeting}
           started={ready}
         />
-
         <div className="relative pt-4">
           <div className="grid grid-cols-12 gap-4">
             <Bento span="col-span-12" delay={0.05}>
