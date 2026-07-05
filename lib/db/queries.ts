@@ -1,7 +1,17 @@
 import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { cache } from "react";
 import { accounts, activities, aiAnalyses, stravaTokens, users } from "../../drizzle/schema";
 import type { AnalysisScope } from "../../types/domain";
 import { db } from "./index";
+
+/**
+ * Default look-back window for the dashboard read. The dashboard only renders
+ * recent training load (last ~3 months of stat tiles, charts, and rows), so
+ * bounding the query to 90 days keeps it from scanning a user's entire history
+ * as their activity count grows unbounded (issue #63).
+ */
+const DASHBOARD_WINDOW_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Typed query functions. Every read that returns user-owned data takes a
@@ -134,31 +144,39 @@ export async function getActivities(userId: string, options: GetActivitiesOption
  * never touches. One call replaces the six independent `getActivities` reads the
  * dashboard used to issue (issue #37): the page fetches this once and slices it
  * per component instead of re-querying the same rows six times.
+ *
+ * Bounded to the last {@link DASHBOARD_WINDOW_DAYS} days by default so the read
+ * stays cheap as a user's history grows (issue #63); pass `sinceDays` to widen
+ * or narrow the window. Wrapped in React `cache()` for per-request dedup — the
+ * six dashboard components that slice this share a single query per render.
  */
-export async function getDashboardActivities(userId: string) {
-  try {
-    return await db
-      .select({
-        id: activities.id,
-        name: activities.name,
-        type: activities.type,
-        startDate: activities.startDate,
-        distance: activities.distance,
-        movingTime: activities.movingTime,
-        averageSpeed: activities.averageSpeed,
-        averageHeartrate: activities.averageHeartrate,
-        averageCadence: activities.averageCadence,
-        totalElevationGain: activities.totalElevationGain,
-        hrZones: activities.hrZones,
-      })
-      .from(activities)
-      .where(eq(activities.userId, userId))
-      .orderBy(desc(activities.startDate))
-      .limit(500);
-  } catch {
-    return [];
+export const getDashboardActivities = cache(
+  async (userId: string, sinceDays: number = DASHBOARD_WINDOW_DAYS) => {
+    const since = new Date(Date.now() - sinceDays * DAY_MS);
+    try {
+      return await db
+        .select({
+          id: activities.id,
+          name: activities.name,
+          type: activities.type,
+          startDate: activities.startDate,
+          distance: activities.distance,
+          movingTime: activities.movingTime,
+          averageSpeed: activities.averageSpeed,
+          averageHeartrate: activities.averageHeartrate,
+          averageCadence: activities.averageCadence,
+          totalElevationGain: activities.totalElevationGain,
+          hrZones: activities.hrZones,
+        })
+        .from(activities)
+        .where(and(eq(activities.userId, userId), gte(activities.startDate, since)))
+        .orderBy(desc(activities.startDate))
+        .limit(500);
+    } catch {
+      return [];
+    }
   }
-}
+);
 
 /**
  * A single row from {@link getDashboardActivities} — the projected activity
