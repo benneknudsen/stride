@@ -16,35 +16,42 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Typed query functions. Every read that returns user-owned data takes a
  * `userId` so ownership is enforced at the query layer, not in the caller.
+ *
+ * Read getters are wrapped in React `cache()` for per-request deduplication
+ * (issue #65): when several Server Components in the same render request the
+ * same row (e.g. the layout and a page both fetch the session user), the query
+ * runs once and the result is shared. `cache()` is a no-op outside a request
+ * scope, so callers and tests see normal call-through semantics. Write paths
+ * (`upsert*`, `insert*`) are intentionally left uncached.
  */
 
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
 
-export async function getUserByEmail(email: string) {
+export const getUserByEmail = cache(async (email: string) => {
   try {
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     return user ?? null;
   } catch {
     return null;
   }
-}
+});
 
-export async function getUserById(id: string) {
+export const getUserById = cache(async (id: string) => {
   try {
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return user ?? null;
   } catch {
     return null;
   }
-}
+});
 
 /**
  * OAuth accounts linked to a user via NextAuth (GitHub, Google, …). Returns the
  * non-sensitive identity columns only — never the stored tokens.
  */
-export async function getAccountsByUserId(userId: string) {
+export const getAccountsByUserId = cache(async (userId: string) => {
   try {
     return await db
       .select({ provider: accounts.provider, type: accounts.type })
@@ -53,13 +60,13 @@ export async function getAccountsByUserId(userId: string) {
   } catch {
     return [];
   }
-}
+});
 
 // ---------------------------------------------------------------------------
 // Strava tokens (encrypted at rest)
 // ---------------------------------------------------------------------------
 
-export async function getStravaTokens(userId: string) {
+export const getStravaTokens = cache(async (userId: string) => {
   try {
     const [token] = await db
       .select()
@@ -70,7 +77,7 @@ export async function getStravaTokens(userId: string) {
   } catch {
     return null;
   }
-}
+});
 
 type UpsertStravaTokensInput = {
   userId: string;
@@ -113,7 +120,7 @@ type GetActivitiesOptions = {
   to?: Date;
 };
 
-export async function getActivities(userId: string, options: GetActivitiesOptions = {}) {
+export const getActivities = cache(async (userId: string, options: GetActivitiesOptions = {}) => {
   const { limit = 30, offset = 0, from, to } = options;
 
   const conditions = [eq(activities.userId, userId)];
@@ -135,7 +142,7 @@ export async function getActivities(userId: string, options: GetActivitiesOption
   } catch {
     return [];
   }
-}
+});
 
 /**
  * Column-projected activity read for the dashboard. Selects only the fields the
@@ -185,7 +192,7 @@ export const getDashboardActivities = cache(
 export type DashboardActivity = Awaited<ReturnType<typeof getDashboardActivities>>[number];
 
 /** Fetch a single activity, enforcing ownership via userId. */
-export async function getActivityById(userId: string, activityId: string) {
+export const getActivityById = cache(async (userId: string, activityId: string) => {
   try {
     const [activity] = await db
       .select()
@@ -196,30 +203,32 @@ export async function getActivityById(userId: string, activityId: string) {
   } catch {
     return null;
   }
-}
+});
 
 // ---------------------------------------------------------------------------
 // AI analyses (inputHash-deduplicated cache)
 // ---------------------------------------------------------------------------
 
-export async function getCachedAnalysis(userId: string, scope: AnalysisScope, inputHash: string) {
-  try {
-    const [analysis] = await db
-      .select()
-      .from(aiAnalyses)
-      .where(
-        and(
-          eq(aiAnalyses.userId, userId),
-          eq(aiAnalyses.scope, scope),
-          eq(aiAnalyses.inputHash, inputHash)
+export const getCachedAnalysis = cache(
+  async (userId: string, scope: AnalysisScope, inputHash: string) => {
+    try {
+      const [analysis] = await db
+        .select()
+        .from(aiAnalyses)
+        .where(
+          and(
+            eq(aiAnalyses.userId, userId),
+            eq(aiAnalyses.scope, scope),
+            eq(aiAnalyses.inputHash, inputHash)
+          )
         )
-      )
-      .limit(1);
-    return analysis ?? null;
-  } catch {
-    return null;
+        .limit(1);
+      return analysis ?? null;
+    } catch {
+      return null;
+    }
   }
-}
+);
 
 type InsertAnalysisInput = {
   userId: string;
