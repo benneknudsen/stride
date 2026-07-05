@@ -4,6 +4,7 @@ import {
   getActiveConstraints,
   getCurrentPhase,
   getPhase,
+  getWeekPlan,
   MAX_WEEKLY_INCREASE_RATIO,
   MIN_RECOVERY_HOURS,
   PHASES,
@@ -13,6 +14,7 @@ import {
   RACE_DATE,
   type SessionType,
   validateWorkout,
+  WEEKDAYS,
   type WorkoutContext,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
@@ -129,6 +131,70 @@ describe("getPhase — phase rules", () => {
       const dayAfter = new Date(prevEnd);
       dayAfter.setDate(dayAfter.getDate() + 1);
       expect(getCurrentPhase(dayAfter)).toBe(ALL_PHASES[i]);
+    }
+  });
+});
+
+describe("getWeekPlan", () => {
+  it("lays out a full Mon–Sun week", () => {
+    for (const phase of ALL_PHASES) {
+      const week = getWeekPlan(phase);
+      expect(week.map((s) => s.weekday)).toEqual([...WEEKDAYS]);
+    }
+  });
+
+  it("schedules exactly the phase's sessionsPerWeek run days", () => {
+    for (const phase of ALL_PHASES) {
+      const runs = getWeekPlan(phase).filter((s) => s.type !== "rest");
+      expect(runs).toHaveLength(getPhase(phase).sessionsPerWeek);
+    }
+  });
+
+  it("keeps the base phases all-easy in Zone 2 with no tempo or long run", () => {
+    for (const phase of ["adapt", "burn"] as PhaseKey[]) {
+      const runs = getWeekPlan(phase).filter((s) => s.type !== "rest");
+      expect(runs.every((s) => s.type === "easy" && s.zone === 2)).toBe(true);
+    }
+  });
+
+  it("adds a Wednesday tempo in sharpen but still no long run", () => {
+    const week = getWeekPlan("sharpen");
+    const tempo = week.find((s) => s.type === "tempo");
+    expect(tempo?.weekday).toBe("wed");
+    expect(week.some((s) => s.type === "long")).toBe(false);
+  });
+
+  it("adds both a Wednesday tempo and a Sunday long run in peak", () => {
+    const week = getWeekPlan("peak");
+    expect(week.find((s) => s.type === "tempo")?.weekday).toBe("wed");
+    const long = week.find((s) => s.type === "long");
+    expect(long?.weekday).toBe("sun");
+    expect(long?.distanceKm).toBe(getPhase("peak").longRunMaxKm);
+  });
+
+  it("leaves dates unset without a start, and stamps consecutive days with one", () => {
+    expect(getWeekPlan("burn").every((s) => s.date === undefined)).toBe(true);
+
+    const monday = new Date(2026, 6, 6); // 6 Jul 2026 — a Monday
+    const week = getWeekPlan("burn", monday);
+    week.forEach((session, i) => {
+      expect(session.date?.getDate()).toBe(monday.getDate() + i);
+    });
+  });
+
+  it("produces a plan that never self-violates its own phase constraints", () => {
+    for (const phase of ALL_PHASES) {
+      for (const session of getWeekPlan(phase)) {
+        if (session.type === "rest") continue;
+        const result = validateWorkout({
+          plannedDate: new Date(2026, 6, 15),
+          phase,
+          plannedType: session.type,
+          plannedZone: session.zone,
+          plannedDistanceKm: session.distanceKm,
+        });
+        expect(result.valid).toBe(true);
+      }
     }
   });
 });

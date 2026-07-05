@@ -201,6 +201,90 @@ export function getCurrentPhase(date: Date = new Date()): PhaseKey {
   return day < dayNumber(PHASES.adapt.startDate) ? "adapt" : "peak";
 }
 
+// ── Week plan ─────────────────────────────────────────────────────────────────
+
+/** Monday-first weekday keys — the plan always runs Mon → Sun. */
+export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+export type Weekday = (typeof WEEKDAYS)[number];
+
+/** One day in a generated training week. Non-run days carry `type: "rest"`. */
+export interface PlannedSession {
+  weekday: Weekday;
+  /** Concrete calendar date — only set when `getWeekPlan` is given a week start. */
+  date?: Date;
+  type: SessionType;
+  /** Target HR zone for run days. */
+  zone?: number;
+  distanceKm?: number;
+  description: string;
+}
+
+/**
+ * Which weekdays carry a run, keyed by the phase's `sessionsPerWeek`. Rest days
+ * are spaced so no two runs stack without recovery; the long run (when present)
+ * always lands on Sunday and the tempo mid-week on Wednesday.
+ */
+const WEEK_RUN_DAYS: Record<number, readonly Weekday[]> = {
+  4: ["mon", "wed", "fri", "sun"],
+  5: ["mon", "tue", "wed", "fri", "sun"],
+};
+
+function addDays(base: Date, days: number): Date {
+  const next = new Date(base);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+/**
+ * A full Mon–Sun training week for a phase, derived from its `PhaseRules`.
+ * Easy days sit at the phase's `minDistanceKm` in Zone 2; the tempo (sharpen/
+ * peak) uses `maxDistanceKm`; the long run (peak) uses `longRunMaxKm`. Pass
+ * `startDate` — treated as the week's Monday — to stamp a concrete date on each
+ * day. The result never self-violates the constraint set for its phase.
+ */
+export function getWeekPlan(phase: PhaseKey, startDate?: Date): PlannedSession[] {
+  const rules = getPhase(phase);
+  const runDays = WEEK_RUN_DAYS[rules.sessionsPerWeek] ?? WEEK_RUN_DAYS[4];
+  const tempoDay: Weekday | null = rules.hasTempoSession ? "wed" : null;
+  const longDay: Weekday | null = rules.hasLongRun ? "sun" : null;
+
+  return WEEKDAYS.map((weekday, index) => {
+    const date = startDate ? addDays(startDate, index) : undefined;
+
+    if (!runDays.includes(weekday)) {
+      return { weekday, date, type: "rest", description: "Hvile" };
+    }
+    if (weekday === longDay) {
+      return {
+        weekday,
+        date,
+        type: "long",
+        zone: 2,
+        distanceKm: rules.longRunMaxKm,
+        description: "Lang tur (Z2)",
+      };
+    }
+    if (weekday === tempoDay) {
+      return {
+        weekday,
+        date,
+        type: "tempo",
+        zone: 4,
+        distanceKm: rules.maxDistanceKm,
+        description: "Tempo",
+      };
+    }
+    return {
+      weekday,
+      date,
+      type: "easy",
+      zone: 2,
+      distanceKm: rules.minDistanceKm,
+      description: "Rolig Z2",
+    };
+  });
+}
+
 // ── Constraint helpers ──────────────────────────────────────────────────────
 
 /** Session types that count as fast/quality work (Adios Pro 4 territory). */
