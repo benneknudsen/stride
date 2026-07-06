@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 
 /**
- * The Content-Security-Policy is set per-request in `proxy.ts` so it can carry a
- * fresh nonce for `script-src` (issue #61) — a static header here cannot produce
- * a unique value per response. The headers below are request-independent, so
- * they stay static.
+ * The Content-Security-Policy is set in `proxy.ts` (per-request so it runs on
+ * every HTML response). The CSP is static (no per-request nonce — Next.js RSC
+ * runtime doesn't stamp inline scripts with nonces during client navigation).
+ * The headers below are request-independent, so they stay static.
  */
 
 /** Applied to every response — see issue #46. */
