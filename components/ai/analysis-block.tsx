@@ -1,4 +1,5 @@
 import type { AnalysisBlock } from "@/lib/ai/tools";
+import { CoachInsight } from "./coach-insight";
 import { InsightCard } from "./insight-card";
 import { MetricComparison } from "./metric-comparison";
 import { TrendCallout } from "./trend-callout";
@@ -20,6 +21,8 @@ export function AnalysisBlockView({ block }: { block: AnalysisBlock }) {
       return <WorkoutRecommendation block={block} />;
     case "metricComparison":
       return <MetricComparison block={block} />;
+    case "coachInsight":
+      return <CoachInsight block={block} />;
     default:
       return assertNever(block);
   }

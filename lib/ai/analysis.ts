@@ -14,8 +14,9 @@
 
 import { createHash } from "node:crypto";
 import { formatPace } from "@/lib/metrics";
+import { computeSnapshot, type LoadRisk } from "@/lib/training/progression";
 import type { AnalysisScope } from "@/types/domain";
-import type { AnalysisBlock } from "./tools";
+import type { AnalysisBlock, AnalysisBlockOf } from "./tools";
 
 // ---------------------------------------------------------------------------
 // Input shaping
@@ -36,6 +37,24 @@ export interface AnalysisActivity {
   totalElevationGain?: number | null;
 }
 
+/**
+ * Progression metrics folded into the analysis input (#33) — a rounded subset
+ * of `ProgressionSnapshot` (lib/training/progression.ts), kept small and
+ * deterministic so it hashes stably.
+ */
+export interface AnalysisProgression {
+  /** True when at least 4 weeks of history exist. Metrics below are null without it. */
+  hasFullWindow: boolean;
+  /** Acute:chronic training-load ratio, rounded to 2 decimals. */
+  loadRatio: number | null;
+  /** Risk band for the load ratio. */
+  loadRisk: LoadRisk | null;
+  /** Total running distance over the 4-week window, in km. */
+  volumeKm: number | null;
+  /** Whether the load ratio says the athlete can safely add volume. */
+  readyToIncrease: boolean | null;
+}
+
 /** A compact, rounded summary of an athlete's training — the model's context. */
 export interface AnalysisInput {
   scope: AnalysisScope;
@@ -53,6 +72,8 @@ export interface AnalysisInput {
   avgHrLast7: number | null;
   /** Average heart rate (bpm) over the prior 7 days, null if none. */
   avgHrPrev7: number | null;
+  /** Training-load progression over the trailing 4 weeks. */
+  progression: AnalysisProgression;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -103,6 +124,27 @@ export function buildAnalysisInput(
     return round(meters / 1000);
   });
 
+  // Progression metrics via the shared engine. AnalysisActivity carries no
+  // activity type or HR zones — everything reaching this path is a run.
+  const snapshot = computeSnapshot(
+    activities.map((a) => ({
+      type: "Run",
+      distance: a.distance,
+      movingTime: a.movingTime,
+      averageHeartrate: a.averageHeartrate ?? null,
+      hrZones: null,
+      startDate: a.startDate,
+    })),
+    now
+  );
+  const progression: AnalysisProgression = {
+    hasFullWindow: snapshot.hasFullWindow,
+    loadRatio: snapshot.trainingLoad.ratio !== null ? round(snapshot.trainingLoad.ratio, 2) : null,
+    loadRisk: snapshot.trainingLoad.risk,
+    volumeKm: snapshot.volumeKm !== null ? round(snapshot.volumeKm) : null,
+    readyToIncrease: snapshot.readyToIncrease,
+  };
+
   const last7 = activities.filter((a) => a.startDate.getTime() > nowMs - 7 * DAY_MS);
   const prev7 = activities.filter(
     (a) =>
@@ -120,6 +162,7 @@ export function buildAnalysisInput(
     avgPacePrev7: windowPace(prev7),
     avgHrLast7: windowHr(last7),
     avgHrPrev7: windowHr(prev7),
+    progression,
   };
 }
 
@@ -155,6 +198,9 @@ export function buildAnalysisPrompt(input: AnalysisInput): string {
     `Avg pace prior 7 days: ${paceLine(input.avgPacePrev7)}`,
     `Avg HR last 7 days: ${input.avgHrLast7 ?? "n/a"} bpm`,
     `Avg HR prior 7 days: ${input.avgHrPrev7 ?? "n/a"} bpm`,
+    `Training load ratio (acute:chronic): ${input.progression.loadRatio ?? "n/a"} (risk: ${input.progression.loadRisk ?? "n/a"})`,
+    `4-week volume: ${input.progression.volumeKm ?? "n/a"} km`,
+    `Ready to increase volume: ${input.progression.readyToIncrease ?? "unknown"}`,
   ].join("\n");
 }
 
@@ -172,6 +218,64 @@ export function formatPaceSecPerKm(secondsPerKm: number | null): string {
 function pct(from: number, to: number): number {
   if (from <= 0) return to > 0 ? 100 : 0;
   return Math.round(((to - from) / from) * 100);
+}
+
+/** 4-week volume that counts as a milestone worth celebrating. */
+const MILESTONE_VOLUME_KM = 100;
+
+/**
+ * The deterministic coach message for the current progression state, or null
+ * when there's nothing worth saying (or under 4 weeks of history — the engine's
+ * "never guess" rule). Priority: risk warning > volume milestone > headroom
+ * insight.
+ */
+export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachInsight"> | null {
+  const { hasFullWindow, loadRatio, loadRisk, volumeKm, readyToIncrease } = input.progression;
+  if (!hasFullWindow) return null;
+
+  if ((loadRisk === "elevated" || loadRisk === "high") && loadRatio !== null) {
+    return {
+      tool: "coachInsight",
+      type: "warning",
+      title: "Load is climbing fast",
+      body: `Your last 7 days carry ${loadRatio}× the training load of your 4-week base — that's ${loadRisk} injury-risk territory.`,
+      data: {
+        label: "Load ratio",
+        value: loadRatio.toFixed(2),
+        direction: "up",
+        changeLabel: `${Math.round((loadRatio - 1) * 100) >= 0 ? "+" : ""}${Math.round((loadRatio - 1) * 100)}%`,
+      },
+      action: "Plan an easy week",
+    };
+  }
+
+  if (volumeKm !== null && volumeKm >= MILESTONE_VOLUME_KM) {
+    return {
+      tool: "coachInsight",
+      type: "milestone",
+      title: "100 km month unlocked",
+      body: `${volumeKm} km over the last 4 weeks — a serious aerobic base most runners never build.`,
+      data: { label: "4-week volume", value: `${volumeKm} km`, direction: "up" },
+      action: "Keep the streak going",
+    };
+  }
+
+  if (readyToIncrease === true) {
+    return {
+      tool: "coachInsight",
+      type: "insight",
+      title: "Room to build",
+      body: "Your training load sits in the optimal band, so your body is absorbing the work — you can safely add volume this week.",
+      data: {
+        label: "Load ratio",
+        value: loadRatio !== null ? loadRatio.toFixed(2) : "optimal",
+        direction: "flat",
+      },
+      action: "Add up to 10% this week",
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -260,6 +364,10 @@ export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
       distanceKm: 8,
     });
   }
+
+  // 5) The coach message, when the progression data warrants one.
+  const coach = coachInsightBlock(input);
+  if (coach) blocks.push(coach);
 
   return blocks;
 }
