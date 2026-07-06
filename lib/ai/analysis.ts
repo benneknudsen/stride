@@ -234,6 +234,7 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
   if (!hasFullWindow) return null;
 
   if ((loadRisk === "elevated" || loadRisk === "high") && loadRatio !== null) {
+    const pctChange = Math.round((loadRatio - 1) * 100);
     return {
       tool: "coachInsight",
       type: "warning",
@@ -243,7 +244,7 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
         label: "Load ratio",
         value: loadRatio.toFixed(2),
         direction: "up",
-        changeLabel: `${Math.round((loadRatio - 1) * 100) >= 0 ? "+" : ""}${Math.round((loadRatio - 1) * 100)}%`,
+        changeLabel: `${pctChange >= 0 ? "+" : ""}${pctChange}%`,
       },
       action: "Plan an easy week",
     };

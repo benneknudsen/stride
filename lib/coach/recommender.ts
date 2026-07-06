@@ -22,10 +22,8 @@ import {
   getWeekPlan,
   MIN_RECOVERY_HOURS,
   PHASES,
-  type PhaseKey,
   type PlannedSession,
   POOR_SLEEP_HR_BUMP_BPM,
-  WEEKDAYS,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
 import type { Goal } from "@/lib/training/goals";
@@ -35,7 +33,9 @@ import type { ProgressionSnapshot } from "@/lib/training/progression";
 export type WeekDay = PlannedSession;
 
 export interface WorkoutInput {
+  /** Carried for future multi-goal support — not yet wired into the recommender. */
   userId: string;
+  /** Carried for future multi-goal support — not yet wired into the recommender. */
   goal: Goal;
   progression: ProgressionSnapshot;
   lastRun: Date;
@@ -101,12 +101,6 @@ function mondayOfWeek(date: Date): Date {
   return monday;
 }
 
-/** The plan slot for `date` inside its phase week (Mon-first). */
-function plannedSessionFor(phase: PhaseKey, date: Date): PlannedSession {
-  const plan = getWeekPlan(phase, mondayOfWeek(date));
-  return plan[WEEKDAYS.indexOf(WEEKDAYS[(date.getDay() + 6) % 7])];
-}
-
 function restCard(reason: string[], weekStrip: WeekDay[]): WorkoutRecommendation {
   return {
     type: "rest",
@@ -151,7 +145,7 @@ export function recommendWorkout(
   }
 
   // The phase week plan decides the day's slot (rest / easy / tempo / long).
-  const slot = plannedSessionFor(phase, now);
+  const slot = weekStrip[(now.getDay() + 6) % 7];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
     return restCard(reason, weekStrip);
@@ -183,7 +177,7 @@ export function recommendWorkout(
   } else if (readyForMore) {
     distanceKm = rules.maxDistanceKm;
     reason.push(
-      `Pace-efficiency er forbedret og belastningen er optimal — klar til ${phase}-fasens øvre distance.`
+      `Pace-efficiency data er stabil og belastningen er optimal — klar til ${phase}-fasens øvre distance.`
     );
   } else {
     distanceKm = rules.minDistanceKm;
