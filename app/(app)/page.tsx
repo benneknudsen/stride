@@ -35,10 +35,9 @@ function Bento({ span, delay, children }: { span: string; delay: number; childre
 export default function HjemPage() {
   const view = useMemo(() => buildHomeView(), []);
   const [loading, setLoading] = useState(true);
-  const [greeting, setGreeting] = useState("Godmorgen");
+  const [greeting] = useState(() => greetingForHour(new Date().getHours()));
 
   useEffect(() => {
-    setGreeting(greetingForHour(new Date().getHours()));
     const timer = setTimeout(() => setLoading(false), 2000);
     return () => clearTimeout(timer);
   }, []);
