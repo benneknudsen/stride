@@ -25,6 +25,18 @@ export type Sentiment = z.infer<typeof sentimentSchema>;
 export const trendDirectionSchema = z.enum(["up", "down", "flat"]);
 export type TrendDirection = z.infer<typeof trendDirectionSchema>;
 
+export const coachInsightTypeSchema = z.enum(["insight", "warning", "milestone"]);
+export type CoachInsightType = z.infer<typeof coachInsightTypeSchema>;
+
+/** One progression metric rendered inside a coach insight — a labelled value with a trend arrow. */
+export const progressionPointSchema = z.object({
+  label: z.string().describe("Metric name, e.g. 'Load ratio' or '4-week volume'"),
+  value: z.string().describe("The metric's current value with unit, e.g. '1.62' or '104 km'"),
+  direction: trendDirectionSchema.describe("Which way the metric is trending"),
+  changeLabel: z.string().optional().describe("Optional signed change, e.g. '+38%'"),
+});
+export type ProgressionPoint = z.infer<typeof progressionPointSchema>;
+
 // ---------------------------------------------------------------------------
 // Tool input schemas — one per pre-defined component
 // ---------------------------------------------------------------------------
@@ -80,6 +92,17 @@ export const metricComparisonSchema = z.object({
   ),
 });
 
+/** A coach message grounded in the athlete's progression metrics (#33). */
+export const coachInsightSchema = z.object({
+  type: coachInsightTypeSchema.describe(
+    "insight (observation), warning (risk to act on), milestone (achievement to celebrate)"
+  ),
+  title: z.string().describe("Short coach headline, ≤ 6 words"),
+  body: z.string().describe("One or two sentences of coach guidance, grounded in the data"),
+  data: progressionPointSchema.describe("The progression metric backing this message"),
+  action: z.string().optional().describe("Optional call to action, e.g. 'Plan an easy week'"),
+});
+
 // ---------------------------------------------------------------------------
 // Tool registry — what the model is offered
 // ---------------------------------------------------------------------------
@@ -107,6 +130,11 @@ export const analysisTools = {
     description: "Compare one metric across two time periods, current vs previous.",
     inputSchema: metricComparisonSchema,
   }),
+  coachInsight: tool({
+    description:
+      "Deliver a coach message — insight, warning, or milestone — backed by a progression metric.",
+    inputSchema: coachInsightSchema,
+  }),
 } as const;
 
 export type AnalysisToolName = keyof typeof analysisTools;
@@ -125,6 +153,7 @@ export const analysisBlockSchema = z.discriminatedUnion("tool", [
   trendCalloutSchema.extend({ tool: z.literal("trendCallout") }),
   workoutRecommendationSchema.extend({ tool: z.literal("workoutRecommendation") }),
   metricComparisonSchema.extend({ tool: z.literal("metricComparison") }),
+  coachInsightSchema.extend({ tool: z.literal("coachInsight") }),
 ]);
 
 export type AnalysisBlock = z.infer<typeof analysisBlockSchema>;
