@@ -12,7 +12,7 @@
  *
  * Dev additionally needs `'unsafe-eval'` (React Refresh) and a websocket (HMR).
  */
-export function buildCsp(nonce: string, isDev: boolean): string {
+export function buildCsp(_nonce: string, isDev: boolean): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
