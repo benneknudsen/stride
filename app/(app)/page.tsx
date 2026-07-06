@@ -12,7 +12,7 @@ import { RecentRunsCard } from "@/components/cobalt/hjem/RecentRunsCard";
 import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
-import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
+import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
 import { buildHomeView, greetingForHour } from "@/lib/cobalt/hjem";
 
 // Widget wrapper applying the staggered fadeUp entrance. `span` is the 12-col
@@ -28,9 +28,10 @@ function Bento({ span, delay, children }: { span: string; delay: number; childre
   );
 }
 
-// Hjem (Dashboard) — the Cobalt Glass bento. Nav + hero stay interactive while a
-// single overlay covers the widget area for ~2s; when it lifts, the hero km
-// counts up and every widget animation runs.
+// Hjem (Dashboard) — the Cobalt Glass bento. For the first ~2s the page shows
+// nothing but a centered RunnerLoader; when it lifts, the whole view (hero +
+// widgets) appears at once with the hero km counting up and every widget
+// animation running.
 export default function HjemPage() {
   const view = useMemo(() => buildHomeView(), []);
   const [loading, setLoading] = useState(true);
@@ -44,6 +45,15 @@ export default function HjemPage() {
 
   const started = !loading;
 
+  // Loading: only the loader is on screen — no data leaks through.
+  if (loading) {
+    return (
+      <main className="flex min-h-[60vh] items-center justify-center">
+        <RunnerLoader label="HENTER DINE DATA…" />
+      </main>
+    );
+  }
+
   return (
     <main>
       <Hero
@@ -53,8 +63,7 @@ export default function HjemPage() {
         started={started}
       />
 
-      {/* Widget area: covered by one loading overlay; nav + hero stay clickable. */}
-      <div className="relative pt-4">
+      <div className="pt-4">
         <div className="grid grid-cols-12 gap-4">
           <Bento span="col-span-12" delay={0.05}>
             <PlanStrip {...view.plan} started={started} />
@@ -96,8 +105,6 @@ export default function HjemPage() {
             <DataSourcesCard />
           </Bento>
         </div>
-
-        <LoadingOverlay show={loading} label="HENTER DINE DATA…" />
       </div>
     </main>
   );
