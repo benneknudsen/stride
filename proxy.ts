@@ -7,6 +7,11 @@ import { buildCsp } from "@/lib/csp";
 // the Drizzle adapter. The full instance lives in lib/auth.ts (Node runtime).
 const { auth } = NextAuth(authConfig);
 
+// The CSP no longer depends on any per-request value (the nonce is gone), so the
+// policy is identical for every request. Build it once at module load instead of
+// on every request.
+const CSP = buildCsp("", process.env.NODE_ENV === "development");
+
 /**
  * Request proxy. Two responsibilities:
  *
@@ -35,13 +40,10 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 
-  const csp = buildCsp("", process.env.NODE_ENV === "development");
-
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("Content-Security-Policy", csp);
-
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set("Content-Security-Policy", csp);
+  // CSP is only consumed on the response; nothing reads it off the request, so
+  // there is no need to clone/override the request headers.
+  const response = NextResponse.next();
+  response.headers.set("Content-Security-Policy", CSP);
 
   return response;
 });
@@ -53,5 +55,7 @@ export default auth((req) => {
  * paths (`/`, `/dashboard/*`, `/login`) fall inside this matcher.
  */
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map|txt|xml|json)$).*)",
+  ],
 };
