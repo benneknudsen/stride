@@ -92,6 +92,13 @@ claude -p "Scaffold a Next.js 16 project with TypeScript strict, Tailwind, shadc
 - Performance benchmarking (Lighthouse 95+)
 - Vitest + Playwright test suite
 
+> **Hermes: read `docs/handoff-2026-07-07-coach-review.md` before planning the
+> next tasks.** It contains the 2026-07-07 coach/AI review outcome (4 bugs
+> fixed in commit `13ab63b`), the remaining findings backlog (B1–B10), the
+> Benjamin-approved roadmap for the live AI coach chat (T1–T5 supersede the
+> "RAG chatbot" line above — RAG is deferred), and a recorded product
+> decision: sleep data is removed and must not be reintroduced.
+
 ---
 
 ## How to use
