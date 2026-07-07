@@ -9,9 +9,12 @@
 // Data source: the seeded demo fixtures, like every other Cobalt Glass page —
 // portfolio visitors won't connect Strava (see CLAUDE.md).
 
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { buildCoachDashboard, type CoachDashboardData } from "@/lib/coach/dashboard";
 import { demoActivities } from "@/lib/demo/data";
+
+/** Cache tag on the progression charts — busted when new activity data lands. */
+const PROGRESSION_TAG = "progression";
 
 /** The full dashboard, computed fresh — the real-time workout card path. */
 export function computeCoachDashboard(): CoachDashboardData {
@@ -25,5 +28,15 @@ export const getProgressionCharts = unstable_cache(
     return { paceSeries, zoneSeries, volumeSeries, loadGauge };
   },
   ["coach-dashboard-progression"],
-  { revalidate: 3600, tags: ["progression"] }
+  { revalidate: 3600, tags: [PROGRESSION_TAG] }
 );
+
+/**
+ * Expire the progression-chart cache immediately. Called by the Strava webhook
+ * and sync routes when activity data changes, so the 1 h cache never serves
+ * charts that predate the newest run (`expire: 0` = hard expiry, matching the
+ * pre-Next-16 `revalidateTag` behaviour).
+ */
+export function revalidateProgression(): void {
+  revalidateTag(PROGRESSION_TAG, { expire: 0 });
+}

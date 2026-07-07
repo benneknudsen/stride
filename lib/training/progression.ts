@@ -195,9 +195,15 @@ export function computeProgression(
   });
 }
 
-/** Fetch enough history to cover `weeks` of snapshots plus each one's 4-week window. */
+/**
+ * Fetch enough history to cover `weeks` of snapshots plus each one's 4-week
+ * window, and one extra window beyond that. The margin is what lets
+ * `hasFullWindow` flip true: it needs a run OLDER than the oldest snapshot's
+ * window, and fetching exactly to the window edge would make the earliest
+ * fetched run at most `WINDOW_DAYS` old — leaving the flag permanently false.
+ */
 async function fetchRuns(userId: string, weeks: number, asOf: Date) {
-  const from = new Date(asOf.getTime() - (weeks * 7 + WINDOW_DAYS) * DAY_MS);
+  const from = new Date(asOf.getTime() - (weeks * 7 + 2 * WINDOW_DAYS) * DAY_MS);
   const rows = await getActivities(userId, { from, to: asOf, limit: 1000 });
   return (rows as ProgressionActivityInput[]).filter(isRun);
 }

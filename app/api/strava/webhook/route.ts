@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { activities, users } from "@/drizzle/schema";
+import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
@@ -102,11 +103,21 @@ export async function POST(req: NextRequest) {
 
   if (body.aspect_type === "delete") {
     // Serialize concurrent handlers for the same activity (see the create/update
-    // note below) so a delete can't interleave with an in-flight upsert.
+    // note below) so a delete can't interleave with an in-flight upsert. Scoped
+    // to the owning user — the unique key is (userId, stravaActivityId), so an
+    // id-only delete could reach into another user's rows.
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${stravaActivityId})`);
-      await tx.delete(activities).where(eq(activities.stravaActivityId, stravaActivityId));
+      await tx
+        .delete(activities)
+        .where(
+          and(
+            eq(activities.userId, user.id),
+            eq(activities.stravaActivityId, stravaActivityId)
+          )
+        );
     });
+    revalidateProgression();
     return NextResponse.json({ ok: true });
   }
 
@@ -147,6 +158,7 @@ export async function POST(req: NextRequest) {
             },
           });
       });
+      revalidateProgression();
     } catch {
       // Don't fail the webhook — Strava will retry
       return NextResponse.json({ ok: true });

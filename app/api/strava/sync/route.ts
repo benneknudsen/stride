@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { activities } from "@/drizzle/schema";
 import { auth } from "@/lib/auth";
+import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
@@ -67,6 +68,10 @@ export async function POST(_req: NextRequest) {
 
       if (batch.length < 100) break;
       page++;
+    }
+
+    if (inserted > 0) {
+      revalidateProgression();
     }
 
     return NextResponse.json({ ok: true, inserted });
