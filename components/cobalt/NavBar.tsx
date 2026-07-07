@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { label: "Hjem", href: "/" },
   { label: "Aktiviteter", href: "/aktiviteter" },
-  { label: "Coach", href: "/coach", spark: true },
+  { label: "Coach", href: "/dashboard/coach", spark: true },
   { label: "Plan", href: "/plan" },
 ];
 
