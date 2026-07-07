@@ -35,7 +35,7 @@ function snapshot(overrides: Partial<ProgressionSnapshot> = {}): ProgressionSnap
   };
 }
 
-/** A recovered, well-slept input anchored to `now`; override only what a test needs. */
+/** A fully recovered input anchored to `now`; override only what a test needs. */
 function input(now: Date, overrides: Partial<WorkoutInput> = {}): WorkoutInput {
   return {
     userId: "user-1",
@@ -54,42 +54,38 @@ function recommend(
   return recommendWorkout(input(now, overrides), now);
 }
 
-describe("step 1 — 48-hour recovery buffer", () => {
-  it("recommends rest when the last run was under 48 h ago", () => {
-    const rec = recommend({ lastRun: new Date(BURN_WEDNESDAY.getTime() - 24 * HOUR_MS) });
+describe("step 2 — recovery buffer (24 h easy / 48 h tempo)", () => {
+  it("recommends rest when an easy day comes under 24 h after the last run", () => {
+    const rec = recommend({ lastRun: new Date(BURN_WEDNESDAY.getTime() - 12 * HOUR_MS) });
     expect(rec.type).toBe("rest");
     expect(rec.distanceKm).toBe(0);
   });
 
   it("explains the recovery buffer in the reason list", () => {
+    const rec = recommend({ lastRun: new Date(BURN_WEDNESDAY.getTime() - 12 * HOUR_MS) });
+    expect(rec.reason.join(" ")).toMatch(/24/);
+  });
+
+  it("allows an easy run at exactly 24 h", () => {
     const rec = recommend({ lastRun: new Date(BURN_WEDNESDAY.getTime() - 24 * HOUR_MS) });
+    expect(rec.type).not.toBe("rest");
+  });
+
+  it("recommends rest when the tempo day comes under 48 h after the last run", () => {
+    const rec = recommend(
+      { lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 24 * HOUR_MS) },
+      SHARPEN_WEDNESDAY
+    );
+    expect(rec.type).toBe("rest");
     expect(rec.reason.join(" ")).toMatch(/48/);
   });
 
-  it("allows a run at exactly 48 h", () => {
-    const rec = recommend({ lastRun: new Date(BURN_WEDNESDAY.getTime() - 48 * HOUR_MS) });
-    expect(rec.type).not.toBe("rest");
-  });
-});
-
-describe("step 2 — sleep quality", () => {
-  it("eases the pace after poor sleep", () => {
-    const rested = recommend({ sleepQuality: "good" });
-    const tired = recommend({ sleepQuality: "poor" });
-    expect(tired.paceRange).not.toEqual(rested.paceRange);
-    expect(tired.reason.join(" ")).toMatch(/søvn/i);
-  });
-
-  it("lowers the heart-rate cap by 5 bpm after poor sleep", () => {
-    const rested = recommend({ sleepQuality: "good" });
-    const tired = recommend({ sleepQuality: "poor" });
-    expect(tired.heartRateCap).toBe(rested.heartRateCap - 5);
-  });
-
-  it("leaves pace untouched on ok sleep", () => {
-    const rested = recommend({ sleepQuality: "good" });
-    const ok = recommend({ sleepQuality: "ok" });
-    expect(ok.paceRange).toEqual(rested.paceRange);
+  it("allows the tempo session at exactly 48 h", () => {
+    const rec = recommend(
+      { lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 48 * HOUR_MS) },
+      SHARPEN_WEDNESDAY
+    );
+    expect(rec.type).toBe("tempo");
   });
 });
 

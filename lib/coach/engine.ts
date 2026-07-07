@@ -71,7 +71,6 @@ export interface WorkoutContext {
   includesStrength?: boolean;
   lastRunDate?: Date;
   lastRunDistanceKm?: number;
-  sleepQuality?: "good" | "ok" | "poor";
   footballYesterday?: boolean;
   phase: PhaseKey;
   weeklyDistanceKm?: number;
@@ -89,10 +88,6 @@ export interface ValidationResult {
   valid: boolean;
   issues: ValidationIssue[];
   warnings: ValidationIssue[];
-  /** HR adjustment if sleep modifier is active */
-  hrAdjustmentBpm?: number;
-  /** Pace adjustment suggestion */
-  paceAdjustment?: string;
 }
 
 // ── Tunable limits ──────────────────────────────────────────────────────────
@@ -103,17 +98,19 @@ export const RACE_DATE = new Date(2026, 8, 20); // 20 Sep 2026
 /** Absolute Zone 2 heart-rate ceiling in bpm — a fixed number, NOT a %HRmax. */
 export const ZONE2_CEILING_BPM = 155;
 
-/** Minimum recovery window between two runs, in hours. */
+/**
+ * Minimum recovery window before a QUALITY session (tempo/intervals/race), in
+ * hours. Easy runs only need {@link EASY_MIN_RECOVERY_HOURS} — a strict 48 h
+ * gap between every run would make the 5-session sharpen/peak weeks impossible
+ * (at most 4 runs fit in 7 days with 48 h spacing).
+ */
 export const MIN_RECOVERY_HOURS = 48;
+
+/** Minimum recovery window before an easy / long (Zone 2) run, in hours. */
+export const EASY_MIN_RECOVERY_HOURS = 24;
 
 /** Largest safe week-over-week distance growth (10%). */
 export const MAX_WEEKLY_INCREASE_RATIO = 1.1;
-
-/** Heart-rate bump (bpm) attributed to a poor night's sleep. */
-export const POOR_SLEEP_HR_BUMP_BPM = 5;
-
-/** Pace easing suggested after poor sleep. */
-export const POOR_SLEEP_PACE_ADJUSTMENT = "+10-15 sek/km";
 
 // ── Phases ──────────────────────────────────────────────────────────────────
 
@@ -224,13 +221,16 @@ export interface PlannedSession {
 }
 
 /**
- * Which weekdays carry a run, keyed by the phase's `sessionsPerWeek`. Rest days
- * are spaced so no two runs stack without recovery; the long run (when present)
- * always lands on Sunday and the tempo mid-week on Wednesday.
+ * Which weekdays carry a run, keyed by the phase's `sessionsPerWeek`. The long
+ * run (when present) always lands on Sunday and the tempo mid-week on
+ * Wednesday. Layouts respect the recovery windows: the Wednesday tempo gets
+ * {@link MIN_RECOVERY_HOURS} clear on both sides, and easy/long days never sit
+ * closer than {@link EASY_MIN_RECOVERY_HOURS} — including across the week
+ * boundary (Sunday → next Monday).
  */
 const WEEK_RUN_DAYS: Record<number, readonly Weekday[]> = {
   4: ["mon", "wed", "fri", "sun"],
-  5: ["mon", "tue", "wed", "fri", "sun"],
+  5: ["mon", "wed", "fri", "sat", "sun"],
 };
 
 function addDays(base: Date, days: number): Date {
@@ -351,21 +351,26 @@ const zone2HrCeiling: Constraint = {
   },
 };
 
-/** Restitution — at least 48 h between runs. */
-const recovery48h: Constraint = {
-  id: "recovery-48h",
-  description: `At least ${MIN_RECOVERY_HOURS} h between runs.`,
+/**
+ * Restitution — a recovery window before every run: 48 h before quality work,
+ * 24 h before easy/long runs (a flat 48 h would outlaw the 5-session weeks).
+ */
+const recoveryWindow: Constraint = {
+  id: "recovery-window",
+  description: `At least ${MIN_RECOVERY_HOURS} h before quality sessions, ${EASY_MIN_RECOVERY_HOURS} h before easy runs.`,
   severity: "hard",
   category: "recovery",
   evaluate(context) {
     if (context.lastRunDate == null) return null;
+    if (!isRunDay(context)) return null;
+    const required = isQualityEffort(context) ? MIN_RECOVERY_HOURS : EASY_MIN_RECOVERY_HOURS;
     const gap = hoursBetween(context.plannedDate, context.lastRunDate);
-    if (gap >= MIN_RECOVERY_HOURS) return null;
+    if (gap >= required) return null;
     return {
-      constraintId: "recovery-48h",
+      constraintId: "recovery-window",
       severity: "hard",
-      message: `Only ${Math.round(gap)} h since the last run — below the ${MIN_RECOVERY_HOURS} h recovery minimum.`,
-      suggestion: "Push this run back so at least 48 h have passed.",
+      message: `Only ${Math.round(gap)} h since the last run — below the ${required} h recovery minimum for this session.`,
+      suggestion: `Push this run back so at least ${required} h have passed.`,
     };
   },
 };
@@ -451,23 +456,6 @@ const footballRecovery: Constraint = {
   },
 };
 
-/** Søvn — poor sleep raises HR and warrants an easier pace. */
-const poorSleep: Constraint = {
-  id: "sleep-hr-adjustment",
-  description: "Poor sleep raises HR 3–5 bpm — ease the pace.",
-  severity: "soft",
-  category: "sleep",
-  evaluate(context) {
-    if (context.sleepQuality !== "poor") return null;
-    return {
-      constraintId: "sleep-hr-adjustment",
-      severity: "soft",
-      message: `Poor sleep — expect HR ~${POOR_SLEEP_HR_BUMP_BPM} bpm higher; treat it as a softer day.`,
-      suggestion: `Ease the pace by ${POOR_SLEEP_PACE_ADJUSTMENT} and judge effort by feel.`,
-    };
-  },
-};
-
 /** Basefase — keep ~90% of running in Zone 2 during the adapt/burn base. */
 const basePhaseZone2: Constraint = {
   id: "base-phase-zone2",
@@ -511,12 +499,11 @@ const weeklyProgression: Constraint = {
 /** Every constraint, in evaluation order. */
 export const ALL_CONSTRAINTS: Constraint[] = [
   zone2HrCeiling,
-  recovery48h,
+  recoveryWindow,
   noStrengthOnRunDays,
   adiosProSpeedOnly,
   longRunCap,
   footballRecovery,
-  poorSleep,
   basePhaseZone2,
   weeklyProgression,
 ];
@@ -535,8 +522,7 @@ export function getActiveConstraints(phase: PhaseKey): Constraint[] {
 /**
  * Run every active constraint against the context. Hard violations land in
  * `issues` (and flip `valid` false); soft / phase / safety violations land in
- * `warnings` (advisory only). Poor sleep additionally populates the HR and pace
- * adjustment hints.
+ * `warnings` (advisory only).
  */
 export function validateWorkout(context: WorkoutContext): ValidationResult {
   const issues: ValidationIssue[] = [];
@@ -549,33 +535,24 @@ export function validateWorkout(context: WorkoutContext): ValidationResult {
     else warnings.push(issue);
   }
 
-  const result: ValidationResult = {
+  return {
     valid: issues.length === 0,
     issues,
     warnings,
   };
-
-  if (context.sleepQuality === "poor") {
-    result.hrAdjustmentBpm = POOR_SLEEP_HR_BUMP_BPM;
-    result.paceAdjustment = POOR_SLEEP_PACE_ADJUSTMENT;
-  }
-
-  return result;
 }
 
 // ── Client serialization ──────────────────────────────────────────────────────
 
 /**
- * A `ValidationResult` flattened for the client boundary: optional fields become
- * explicit `null` (JSON-friendly, no `undefined` gaps across a server→client
- * prop) and a ready-to-render `summary` line is added.
+ * A `ValidationResult` flattened for the client boundary (plain JSON, no
+ * `undefined` gaps across a server→client prop) with a ready-to-render
+ * `summary` line added.
  */
 export interface SerializedValidationResult {
   valid: boolean;
   issues: ValidationIssue[];
   warnings: ValidationIssue[];
-  hrAdjustmentBpm: number | null;
-  paceAdjustment: string | null;
   /** One-line Danish headline for the UI. */
   summary: string;
 }
@@ -598,8 +575,6 @@ export function serializeValidationResult(result: ValidationResult): SerializedV
     valid: result.valid,
     issues: result.issues,
     warnings: result.warnings,
-    hrAdjustmentBpm: result.hrAdjustmentBpm ?? null,
-    paceAdjustment: result.paceAdjustment ?? null,
     summary: summarizeValidation(result),
   };
 }

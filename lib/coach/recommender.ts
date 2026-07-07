@@ -1,29 +1,29 @@
 // Stride — workout recommender (issue #32). Turns the athlete's current state
-// (progression snapshot, recovery status, sleep, football) into one concrete
+// (progression snapshot, recovery status, football) into one concrete
 // next-workout card. Sits on top of the rule engine: phases, week structure and
 // the safety limits all come from `lib/coach/engine.ts` — this module only
 // decides, it never redefines the rules.
 //
-// The eight decision steps, in order:
-//   1. Recovery buffer (48 h, 72 h with injury history) — broken → rest day.
-//   2. Poor sleep → pace eased 5–10 s/km and the HR cap dropped 5 bpm.
+// The seven decision steps, in order:
+//   1. The phase week plan decides the day's slot (rest / easy / tempo / long).
+//   2. Recovery buffer (48 h before tempo, 24 h before easy/long, 72 h with
+//      injury history) — broken → rest day.
 //   3. Football yesterday → no hard session (tempo downgrades to easy).
 //   4. Distance from the phase band (adapt 6–8, burn 8–10, …).
 //   5. Improved pace efficiency + optimal load → unlock the band's upper end.
 //   6. Intensity: Zone 2 by default; tempo only where the phase allows it.
-//   7. Shoe: Vomero everywhere except tempo (Adios Pro 4).
-//   8. Assemble the workout card with reasons and the week strip.
+//   7. Shoe: Vomero everywhere except tempo (Adios Pro 4); assemble the card.
 //
 // Pure and deterministic: the clock is a parameter, so tests pin any date.
 
 import {
+  EASY_MIN_RECOVERY_HOURS,
   getCurrentPhase,
   getPhase,
   getWeekPlan,
   MIN_RECOVERY_HOURS,
   PHASES,
   type PlannedSession,
-  POOR_SLEEP_HR_BUMP_BPM,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
 import type { Goal } from "@/lib/training/goals";
@@ -39,7 +39,6 @@ export interface WorkoutInput {
   goal: Goal;
   progression: ProgressionSnapshot;
   lastRun: Date;
-  sleepQuality?: "good" | "ok" | "poor";
   footballYesterday: boolean;
   /** Athletes with prior injuries get an extra recovery day between runs. */
   injuryHistory?: boolean;
@@ -67,9 +66,6 @@ export const PAUSE_DISTANCE_FACTOR = 0.8;
 /** Heart-rate ceiling for a tempo session, in bpm. */
 export const TEMPO_HR_CAP_BPM = 172;
 
-/** Pace eased after a poor night: 5 s/km on the fast end, 10 s/km on the slow. */
-const POOR_SLEEP_PACE_EASE_S = { min: 5, max: 10 };
-
 /** Target pace bands per run type, min (fast) → max (slow), in min/km. */
 const PACE_RANGES: Record<Exclude<WorkoutRecommendation["type"], "rest">, PaceRange> = {
   easy: { min: "5:45", max: "6:15" },
@@ -85,13 +81,6 @@ const HOUR_MS = 3_600_000;
 
 function hoursSince(from: Date, now: Date): number {
   return (now.getTime() - from.getTime()) / HOUR_MS;
-}
-
-/** "5:45" + 10 s → "5:55". */
-function addSecondsToPace(pace: string, seconds: number): string {
-  const [min, sec] = pace.split(":").map(Number);
-  const total = min * 60 + sec + seconds;
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
 /** The Monday of the week `date` falls in, at the same time of day. */
@@ -128,23 +117,7 @@ export function recommendWorkout(
   const weekStrip = getWeekPlan(phase, mondayOfWeek(now));
   const reason: string[] = [];
 
-  // 1. Recovery buffer — broken buffer always wins.
-  const recoveryHours = input.injuryHistory ? INJURY_RECOVERY_HOURS : MIN_RECOVERY_HOURS;
-  const gap = hoursSince(input.lastRun, now);
-  if (gap < recoveryHours) {
-    if (input.injuryHistory) {
-      reason.push(
-        `Skadehistorik: kroppen får ${INJURY_RECOVERY_HOURS} timer mellem løbeture — kun ${Math.round(gap)} timer siden sidste tur.`
-      );
-    } else {
-      reason.push(
-        `Kun ${Math.round(gap)} timer siden sidste løbetur — under ${MIN_RECOVERY_HOURS}-timers restitutionsbufferen.`
-      );
-    }
-    return restCard(reason, weekStrip);
-  }
-
-  // The phase week plan decides the day's slot (rest / easy / tempo / long).
+  // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
   const slot = weekStrip[(now.getDay() + 6) % 7];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
@@ -158,6 +131,27 @@ export function recommendWorkout(
       : slot.type === "long"
         ? "long"
         : "easy";
+
+  // 2. Recovery buffer — 48 h before a hard session, 24 h before an easy/long
+  // run, 72 h with an injury history. Broken buffer always wins over the slot.
+  const recoveryHours = input.injuryHistory
+    ? INJURY_RECOVERY_HOURS
+    : type === "tempo"
+      ? MIN_RECOVERY_HOURS
+      : EASY_MIN_RECOVERY_HOURS;
+  const gap = hoursSince(input.lastRun, now);
+  if (gap < recoveryHours) {
+    if (input.injuryHistory) {
+      reason.push(
+        `Skadehistorik: kroppen får ${INJURY_RECOVERY_HOURS} timer mellem løbeture — kun ${Math.round(gap)} timer siden sidste tur.`
+      );
+    } else {
+      reason.push(
+        `Kun ${Math.round(gap)} timer siden sidste løbetur — under ${recoveryHours}-timers restitutionsbufferen før ${type === "tempo" ? "et hårdt pas" : "en rolig tur"}.`
+      );
+    }
+    return restCard(reason, weekStrip);
+  }
 
   // 3. Football yesterday → no hard session.
   if (type === "tempo" && input.footballYesterday) {
@@ -198,23 +192,11 @@ export function recommendWorkout(
     reason.push(`${PAUSE_DAYS}+ dages pause — distancen er sat 20% ned for en sikker genstart.`);
   }
 
-  // 2. Sleep — poor sleep eases the pace and drops the HR cap.
-  let paceRange: PaceRange = PACE_RANGES[type];
-  let heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
-  if (input.sleepQuality === "poor") {
-    paceRange = {
-      min: addSecondsToPace(paceRange.min, POOR_SLEEP_PACE_EASE_S.min),
-      max: addSecondsToPace(paceRange.max, POOR_SLEEP_PACE_EASE_S.max),
-    };
-    heartRateCap -= POOR_SLEEP_HR_BUMP_BPM;
-    reason.push(
-      `Dårlig søvn — pace sat ${POOR_SLEEP_PACE_EASE_S.min}–${POOR_SLEEP_PACE_EASE_S.max} s/km ned og pulsloftet ${POOR_SLEEP_HR_BUMP_BPM} bpm lavere.`
-    );
-  }
+  const paceRange: PaceRange = PACE_RANGES[type];
+  const heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
 
   // 7. Shoe: the Adios Pro 4 is tempo-only; everything else runs in the Vomero.
   const shoe: WorkoutRecommendation["shoe"] = type === "tempo" ? "adios-pro-4" : "vomero";
 
-  // 8. The card.
   return { type, distanceKm, paceRange, heartRateCap, shoe, reason, weekStrip };
 }

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ALL_CONSTRAINTS,
+  EASY_MIN_RECOVERY_HOURS,
   getActiveConstraints,
   getCurrentPhase,
   getPhase,
@@ -9,8 +10,6 @@ import {
   MIN_RECOVERY_HOURS,
   PHASES,
   type PhaseKey,
-  POOR_SLEEP_HR_BUMP_BPM,
-  POOR_SLEEP_PACE_ADJUSTMENT,
   RACE_DATE,
   type SessionType,
   serializeValidationResult,
@@ -206,6 +205,37 @@ describe("getWeekPlan", () => {
       }
     }
   });
+
+  it("spaces every run so the plan respects its own recovery windows", () => {
+    // Validate each run day against the previous run day — including the wrap
+    // from Sunday into the next week's Monday. 5-session weeks live on the
+    // 24 h easy window; the Wednesday tempo must still get 48 h clear.
+    const monday = new Date(2026, 6, 6, 8, 0); // a Monday, 08:00
+    for (const phase of ALL_PHASES) {
+      const week = getWeekPlan(phase, monday);
+      const runs = week.filter((s) => s.type !== "rest");
+      const nextMonday = new Date(monday);
+      nextMonday.setDate(nextMonday.getDate() + 7);
+      const pairs = runs.slice(1).map((session, i) => [runs[i], session] as const);
+      // Sunday → next Monday: the week repeats, so the wrap must hold too.
+      pairs.push([runs[runs.length - 1], { ...runs[0], date: nextMonday }]);
+
+      for (const [prev, session] of pairs) {
+        const result = validateWorkout({
+          plannedDate: session.date as Date,
+          phase,
+          plannedType: session.type,
+          plannedZone: session.zone,
+          plannedDistanceKm: session.distanceKm,
+          lastRunDate: prev.date,
+        });
+        expect(
+          result.issues.map((i) => i.constraintId),
+          `${phase}: ${prev.weekday} → ${session.weekday}`
+        ).not.toContain("recovery-window");
+      }
+    }
+  });
 });
 
 describe("getActiveConstraints", () => {
@@ -243,21 +273,37 @@ describe("getActiveConstraints", () => {
   });
 });
 
-describe("validateWorkout — hard: 48 h recovery", () => {
-  it("blocks a run only 24 h after the last one", () => {
+describe("validateWorkout — hard: recovery window", () => {
+  it("blocks an easy run only 12 h after the last one", () => {
+    const result = validateWorkout(
+      ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 14, 20, 0) })
+    );
+    expect(result.valid).toBe(false);
+    const issue = result.issues.find((i) => i.constraintId === "recovery-window");
+    expect(issue?.message).toContain(String(EASY_MIN_RECOVERY_HOURS));
+  });
+
+  it("allows an easy run at exactly the 24 h mark", () => {
     const result = validateWorkout(
       ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 14, 8, 0) })
     );
+    expect(result.valid).toBe(true);
+  });
+
+  it("blocks a quality session only 24 h after the last run", () => {
+    const result = validateWorkout(
+      ctx({ phase: "sharpen", plannedType: "tempo", lastRunDate: new Date(2026, 6, 14, 8, 0) })
+    );
     expect(result.valid).toBe(false);
-    const issue = result.issues.find((i) => i.constraintId === "recovery-48h");
+    const issue = result.issues.find((i) => i.constraintId === "recovery-window");
     expect(issue?.message).toContain(String(MIN_RECOVERY_HOURS));
   });
 
-  it("allows a run at exactly the 48 h mark", () => {
+  it("allows a quality session at exactly the 48 h mark", () => {
     const result = validateWorkout(
-      ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 13, 8, 0) })
+      ctx({ phase: "sharpen", plannedType: "tempo", lastRunDate: new Date(2026, 6, 13, 8, 0) })
     );
-    expect(result.valid).toBe(true);
+    expect(result.issues.map((i) => i.constraintId)).not.toContain("recovery-window");
   });
 
   it("allows a run well clear of the window (72 h)", () => {
@@ -267,9 +313,16 @@ describe("validateWorkout — hard: 48 h recovery", () => {
     expect(result.issues).toHaveLength(0);
   });
 
+  it("does not fire on a non-run day, however recent the last run", () => {
+    const result = validateWorkout(
+      ctx({ plannedType: "rest", lastRunDate: new Date(2026, 6, 15, 6, 0) })
+    );
+    expect(result.issues.map((i) => i.constraintId)).not.toContain("recovery-window");
+  });
+
   it("does not fire when no previous run is known", () => {
     const result = validateWorkout(ctx({ plannedType: "easy" }));
-    expect(result.issues.map((i) => i.constraintId)).not.toContain("recovery-48h");
+    expect(result.issues.map((i) => i.constraintId)).not.toContain("recovery-window");
   });
 });
 
@@ -435,31 +488,6 @@ describe("validateWorkout — soft: football the day before", () => {
   });
 });
 
-describe("validateWorkout — soft: poor sleep", () => {
-  it("warns and emits HR + pace adjustments on poor sleep", () => {
-    const result = validateWorkout(ctx({ plannedType: "easy", sleepQuality: "poor" }));
-    expect(result.valid).toBe(true);
-    expect(result.warnings.map((w) => w.constraintId)).toContain("sleep-hr-adjustment");
-    expect(result.hrAdjustmentBpm).toBe(POOR_SLEEP_HR_BUMP_BPM);
-    expect(result.paceAdjustment).toBe(POOR_SLEEP_PACE_ADJUSTMENT);
-  });
-
-  it("leaves adjustments unset for good or ok sleep", () => {
-    for (const sleepQuality of ["good", "ok"] as const) {
-      const result = validateWorkout(ctx({ plannedType: "easy", sleepQuality }));
-      expect(result.hrAdjustmentBpm).toBeUndefined();
-      expect(result.paceAdjustment).toBeUndefined();
-      expect(result.warnings.map((w) => w.constraintId)).not.toContain("sleep-hr-adjustment");
-    }
-  });
-
-  it("leaves adjustments unset when sleep is not reported", () => {
-    const result = validateWorkout(ctx({ plannedType: "easy" }));
-    expect(result.hrAdjustmentBpm).toBeUndefined();
-    expect(result.paceAdjustment).toBeUndefined();
-  });
-});
-
 describe("validateWorkout — phase: base-phase Zone 2 guidance", () => {
   it("warns about quality work during a base phase", () => {
     const result = validateWorkout(ctx({ phase: "burn", plannedType: "tempo" }));
@@ -506,38 +534,23 @@ describe("validateWorkout — safety: weekly progression", () => {
 });
 
 describe("serializeValidationResult", () => {
-  it("turns unset adjustments into explicit null", () => {
-    const serialized = serializeValidationResult(validateWorkout(ctx()));
-    expect(serialized.hrAdjustmentBpm).toBeNull();
-    expect(serialized.paceAdjustment).toBeNull();
-  });
-
-  it("carries the poor-sleep adjustments through", () => {
-    const serialized = serializeValidationResult(
-      validateWorkout(ctx({ plannedType: "easy", sleepQuality: "poor" }))
-    );
-    expect(serialized.hrAdjustmentBpm).toBe(POOR_SLEEP_HR_BUMP_BPM);
-    expect(serialized.paceAdjustment).toBe(POOR_SLEEP_PACE_ADJUSTMENT);
-  });
-
   it("summarises a clean result, warnings, and hard blocks", () => {
     const clean = serializeValidationResult(validateWorkout(ctx()));
     expect(clean.summary).toBe("Godkendt");
 
-    const warned = serializeValidationResult(
-      validateWorkout(ctx({ plannedType: "easy", sleepQuality: "poor" }))
-    );
+    // A base-phase tempo trips exactly one (phase) warning.
+    const warned = serializeValidationResult(validateWorkout(ctx({ plannedType: "tempo" })));
     expect(warned.summary).toBe("Godkendt med 1 advarsel");
 
     const blocked = serializeValidationResult(
-      validateWorkout(ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 14, 8, 0) }))
+      validateWorkout(ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 14, 20, 0) }))
     );
     expect(blocked.summary).toBe("1 blokerende problem");
   });
 
   it("stays a plain JSON round-trippable object", () => {
     const serialized = serializeValidationResult(
-      validateWorkout(ctx({ plannedType: "tempo", sleepQuality: "poor" }))
+      validateWorkout(ctx({ plannedType: "tempo", footballYesterday: true }))
     );
     expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
   });
@@ -547,7 +560,6 @@ describe("validateWorkout — result structure & edge cases", () => {
   it("passes a clean, minimal context", () => {
     const result = validateWorkout(ctx());
     expect(result).toMatchObject({ valid: true, issues: [], warnings: [] });
-    expect(result.hrAdjustmentBpm).toBeUndefined();
   });
 
   it("never throws on a context with only the required fields", () => {
@@ -559,9 +571,9 @@ describe("validateWorkout — result structure & edge cases", () => {
   it("keeps hard violations out of warnings and soft ones out of issues", () => {
     const result = validateWorkout(
       ctx({
-        plannedType: "easy",
-        lastRunDate: new Date(2026, 6, 14, 8, 0), // 24 h — hard block
-        sleepQuality: "poor", // soft warning
+        plannedType: "tempo",
+        lastRunDate: new Date(2026, 6, 14, 20, 0), // 12 h — hard block
+        footballYesterday: true, // soft warning
       })
     );
     expect(result.issues.every((i) => i.severity === "hard")).toBe(true);
@@ -569,9 +581,9 @@ describe("validateWorkout — result structure & edge cases", () => {
   });
 
   it("is invalid when a hard issue is present but valid with warnings alone", () => {
-    const warned = validateWorkout(ctx({ plannedType: "easy", sleepQuality: "poor" }));
+    const warned = validateWorkout(ctx({ plannedType: "tempo" })); // base-phase warning
     const blocked = validateWorkout(
-      ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 14, 8, 0) })
+      ctx({ plannedType: "easy", lastRunDate: new Date(2026, 6, 14, 20, 0) })
     );
     expect(warned.valid).toBe(true);
     expect(warned.warnings.length).toBeGreaterThan(0);
@@ -586,7 +598,7 @@ describe("validateWorkout — result structure & edge cases", () => {
         plannedZone: 4, // Zone 2 ceiling
         includesStrength: true, // strength on a run day
         shoeType: "adios_pro", // race shoe on an easy day
-        lastRunDate: new Date(2026, 6, 14, 8, 0), // inside 48 h
+        lastRunDate: new Date(2026, 6, 14, 20, 0), // 12 h — inside every window
       })
     );
     expect(result.valid).toBe(false);
@@ -596,7 +608,7 @@ describe("validateWorkout — result structure & edge cases", () => {
         "zone2-hr-ceiling",
         "no-strength-on-run-days",
         "adios-pro-speed-only",
-        "recovery-48h",
+        "recovery-window",
       ])
     );
   });
@@ -604,7 +616,7 @@ describe("validateWorkout — result structure & edge cases", () => {
   it("tags every issue and warning with a matching, known constraint id", () => {
     const knownIds = new Set(ALL_CONSTRAINTS.map((c) => c.id));
     const result = validateWorkout(
-      ctx({ phase: "burn", plannedType: "tempo", sleepQuality: "poor" })
+      ctx({ phase: "burn", plannedType: "tempo", footballYesterday: true })
     );
     for (const entry of [...result.issues, ...result.warnings]) {
       expect(knownIds.has(entry.constraintId)).toBe(true);
