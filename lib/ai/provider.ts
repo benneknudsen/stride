@@ -16,7 +16,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 
 /** Sensible defaults so the app runs with only `OPENROUTER_API_KEY` set. */
-const DEFAULT_PRIMARY = "google/gemini-2.0-flash-001";
+const DEFAULT_PRIMARY = "google/gemma-4-31b-it:free";
 const DEFAULT_FALLBACK = "google/gemini-2.0-flash-001";
 
 const openrouter = createOpenAI({
