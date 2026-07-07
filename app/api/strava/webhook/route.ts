@@ -111,10 +111,7 @@ export async function POST(req: NextRequest) {
       await tx
         .delete(activities)
         .where(
-          and(
-            eq(activities.userId, user.id),
-            eq(activities.stravaActivityId, stravaActivityId)
-          )
+          and(eq(activities.userId, user.id), eq(activities.stravaActivityId, stravaActivityId))
         );
     });
     revalidateProgression();
