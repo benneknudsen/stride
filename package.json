@@ -17,6 +17,7 @@
     "test:e2e": "echo \"Error: no e2e tests yet\" && exit 1"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.81",
     "@auth/drizzle-adapter": "^1.11.2",
     "@base-ui/react": "^1.6.0",
     "@neondatabase/serverless": "^1.1.0",
