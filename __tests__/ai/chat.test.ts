@@ -67,7 +67,7 @@ afterEach(() => {
 
 describe("POST /api/ai/chat", () => {
   it("streams the scripted NDJSON notice when no AI key is configured", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "");
+    vi.stubEnv("OPENROUTER_API_KEY", "");
     authMock.mockResolvedValue(null); // no session required in demo mode
 
     const res = await POST(chatRequest());
@@ -82,7 +82,7 @@ describe("POST /api/ai/chat", () => {
   });
 
   it("returns 401 without a session when an AI key is configured", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     authMock.mockResolvedValue(null);
 
     const res = await POST(chatRequest());
@@ -92,7 +92,7 @@ describe("POST /api/ai/chat", () => {
   });
 
   it("streams NDJSON reply fragments when authed and configured", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
 
     const res = await POST(chatRequest());
 
@@ -108,7 +108,7 @@ describe("POST /api/ai/chat", () => {
   });
 
   it("rate limits a user after 30 requests in the window", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
 
     for (let i = 0; i < 30; i++) {
       const res = await POST(chatRequest());
@@ -123,7 +123,7 @@ describe("POST /api/ai/chat", () => {
   });
 
   it("streams the scripted floor when every provider fails", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     streamTextMock.mockImplementation(() => {
       throw new Error("provider down");
     });
@@ -137,7 +137,7 @@ describe("POST /api/ai/chat", () => {
   });
 
   it("rejects an empty message list", async () => {
-    vi.stubEnv("AI_GATEWAY_API_KEY", "test-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
 
     const res = await POST(chatRequest({ messages: [] }));
 

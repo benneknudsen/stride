@@ -1,21 +1,28 @@
 /**
  * Provider router with fallback.
  *
- * All model access goes through the Vercel AI Gateway (`ai`'s built-in
- * `gateway`), so swapping providers is a config change (`AI_PRIMARY` /
- * `AI_FALLBACK`) rather than a code change, and a single `AI_GATEWAY_API_KEY`
- * fronts every provider. The router exposes the primary model plus an ordered
+ * All model access goes through OpenRouter (via the OpenAI-compatible
+ * provider from `@ai-sdk/openai`), so swapping models is a config change
+ * (`AI_PRIMARY` / `AI_FALLBACK`) rather than a code change, and a single
+ * `OPENROUTER_API_KEY` fronts every provider. Set `OPENROUTER_API_KEY` in
+ * `.env.local`. The router exposes the primary model plus an ordered
  * fallback list; callers try them in order (see the analyze route).
  *
  * Per CLAUDE.md, AI keys NEVER reach the browser — this module is server-only
  * and is imported exclusively from `app/api/ai/*`.
  */
 
-import { gateway, type LanguageModel } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import type { LanguageModel } from "ai";
 
-/** Sensible defaults so the app runs with only `AI_GATEWAY_API_KEY` set. */
-const DEFAULT_PRIMARY = "anthropic/claude-haiku-4-5";
-const DEFAULT_FALLBACK = "openai/gpt-4o-mini";
+/** Sensible defaults so the app runs with only `OPENROUTER_API_KEY` set. */
+const DEFAULT_PRIMARY = "google/gemini-2.0-flash-001";
+const DEFAULT_FALLBACK = "google/gemini-2.0-flash-001";
+
+const openrouter = createOpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
 
 /**
  * Whether a real AI provider is reachable. When false, the analyze route serves
@@ -23,10 +30,10 @@ const DEFAULT_FALLBACK = "openai/gpt-4o-mini";
  * works for portfolio visitors who never configure a key.
  */
 export function isAIConfigured(): boolean {
-  return Boolean(process.env.AI_GATEWAY_API_KEY?.trim());
+  return Boolean(process.env.OPENROUTER_API_KEY?.trim());
 }
 
-/** The configured primary and fallback model identifiers (gateway routes them). */
+/** The configured primary and fallback model identifiers (OpenRouter routes them). */
 export function getModelIds(): { primary: string; fallback: string } {
   return {
     primary: process.env.AI_PRIMARY?.trim() || DEFAULT_PRIMARY,
@@ -34,9 +41,9 @@ export function getModelIds(): { primary: string; fallback: string } {
   };
 }
 
-/** Resolve a gateway model from its identifier, e.g. `"openai/gpt-4o-mini"`. */
+/** Resolve an OpenRouter model from its identifier, e.g. `"google/gemini-2.0-flash-001"`. */
 export function resolveModel(modelId: string): LanguageModel {
-  return gateway(modelId);
+  return openrouter(modelId);
 }
 
 /**
