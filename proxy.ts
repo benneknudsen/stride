@@ -31,8 +31,8 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/", req.nextUrl));
   }
 
-  // Protect all app routes (root /, /aktiviteter, /coach, /plan).
-  const APP_ROUTES = ["/", "/aktiviteter", "/coach", "/plan"];
+  // Protect all app routes (root /, /aktiviteter, /coach, /dashboard/*, /plan).
+  const APP_ROUTES = ["/", "/aktiviteter", "/coach", "/dashboard", "/plan"];
   const isProtected = APP_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
