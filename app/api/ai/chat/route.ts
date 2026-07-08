@@ -13,6 +13,12 @@
  * requires a session (401) and rate-limits per user. Provider routing tries
  * each `getModelCandidates()` entry in order until one streams output.
  *
+ * Conversation history is persisted per user (issue #74): the route loads the
+ * newest `MAX_CONTEXT_MESSAGES` from `chat_messages` as model context and
+ * appends the user/assistant turn after a successful stream. Both reads and
+ * writes are best-effort — a DB outage degrades the chat to stateless, it
+ * never breaks the route.
+ *
  * Keys never reach the browser — the model is only touched server-side here.
  */
 
@@ -30,6 +36,7 @@ import {
   type WorkoutContext,
 } from "@/lib/coach/engine";
 import { recommendWorkout } from "@/lib/coach/recommender";
+import { getChatHistory, insertChatMessage } from "@/lib/db/queries";
 import { rateLimit } from "@/lib/rate-limit";
 import { GOALS } from "@/lib/training/goals";
 import {
@@ -67,6 +74,9 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /** Upper bound on model round-trips in the tool loop. */
 const MAX_STEPS = 8;
+
+/** Cap on messages sent to the model (persisted history + this turn). */
+const MAX_CONTEXT_MESSAGES = 50;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -329,12 +339,24 @@ export async function POST(req: NextRequest) {
 
   const now = new Date();
   const tools = buildCoachTools(userId, now);
-  const messages = parsed.data.messages;
+  const incoming = parsed.data.messages;
+  const latest = incoming[incoming.length - 1];
+
+  // Persisted history is the canonical context (issue #74) — the client only
+  // holds the current session's transcript. When the DB has nothing (new user,
+  // or best-effort read failed) fall back to the client transcript so the
+  // model still sees this session. Cap to the newest MAX_CONTEXT_MESSAGES.
+  const history = await getChatHistory(userId, MAX_CONTEXT_MESSAGES);
+  const messages = (history.length > 0 ? [...history, latest] : incoming).slice(
+    -MAX_CONTEXT_MESSAGES
+  );
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let emitted = 0;
+      let answer = "";
       const emit = (reply: ChatReply) => {
         emitted += 1;
         controller.enqueue(encoder.encode(`${JSON.stringify(reply)}\n`));
@@ -353,6 +375,7 @@ export async function POST(req: NextRequest) {
           });
           for await (const delta of result.textStream) {
             if (delta.length === 0) continue;
+            answer += delta;
             emit({ role: "assistant", content: delta });
           }
           break;
@@ -365,6 +388,16 @@ export async function POST(req: NextRequest) {
 
       // Every provider failed before emitting → scripted floor.
       if (emitted === 0) emit(PROVIDER_DOWN_REPLY);
+
+      // Persist the completed round (best-effort, inserts swallow DB errors).
+      // Only on a real model answer — the scripted floor stays out of history
+      // so a retried question doesn't accumulate duplicate user turns.
+      if (answer.length > 0) {
+        if (latest.role === "user") {
+          await insertChatMessage({ userId, role: "user", content: latest.content });
+        }
+        await insertChatMessage({ userId, role: "assistant", content: answer });
+      }
 
       controller.close();
     },

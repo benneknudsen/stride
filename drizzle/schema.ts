@@ -236,7 +236,9 @@ export const aiAnalyses = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// chat_messages — Phase 2 RAG conversation threading
+// chat_messages — persisted AI coach conversation history (issue #74).
+// One rolling thread per user; the chat route loads the newest N rows as
+// model context and appends each user/assistant turn after streaming.
 // ---------------------------------------------------------------------------
 
 export const chatMessages = pgTable(
@@ -246,13 +248,11 @@ export const chatMessages = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** Groups messages into a single conversation thread. */
-    conversationId: text("conversation_id").notNull(),
     role: chatRoleEnum("role").notNull(),
     content: text("content").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("chat_messages_user_conversation_idx").on(table.userId, table.conversationId)]
+  (table) => [index("chat_messages_user_created_idx").on(table.userId, table.createdAt)]
 );
 
 // ---------------------------------------------------------------------------

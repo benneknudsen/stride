@@ -1,6 +1,13 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { cache } from "react";
-import { accounts, activities, aiAnalyses, stravaTokens, users } from "../../drizzle/schema";
+import {
+  accounts,
+  activities,
+  aiAnalyses,
+  chatMessages,
+  stravaTokens,
+  users,
+} from "../../drizzle/schema";
 import type { AnalysisScope } from "../../types/domain";
 import { db } from "./index";
 
@@ -253,4 +260,46 @@ export async function insertAnalysis(input: InsertAnalysisInput) {
     })
     .returning();
   return analysis;
+}
+
+// ---------------------------------------------------------------------------
+// Chat messages (issue #74) — persisted AI coach conversation history.
+// Both functions are best-effort: a DB outage must never break the chat
+// route, so failures are swallowed and the chat degrades to stateless.
+// ---------------------------------------------------------------------------
+
+export async function insertChatMessage(input: {
+  userId: string;
+  role: "user" | "assistant";
+  content: string;
+}): Promise<void> {
+  try {
+    await db.insert(chatMessages).values(input);
+  } catch {
+    // Best-effort — the message simply isn't persisted.
+  }
+}
+
+/**
+ * The user's newest `limit` chat messages in chronological order, ready to be
+ * prepended to the model context. System rows are excluded — the route owns
+ * its own system prompt.
+ */
+export async function getChatHistory(
+  userId: string,
+  limit: number = 50
+): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  try {
+    const rows = await db
+      .select({ role: chatMessages.role, content: chatMessages.content })
+      .from(chatMessages)
+      .where(
+        and(eq(chatMessages.userId, userId), inArray(chatMessages.role, ["user", "assistant"]))
+      )
+      .orderBy(desc(chatMessages.createdAt))
+      .limit(limit);
+    return rows.reverse() as { role: "user" | "assistant"; content: string }[];
+  } catch {
+    return [];
+  }
 }
