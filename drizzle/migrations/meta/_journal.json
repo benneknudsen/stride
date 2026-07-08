@@ -22,6 +22,13 @@
       "when": 1783172634171,
       "tag": "0002_accounts_user_id_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783499151415,
+      "tag": "0003_exotic_patriot",
+      "breakpoints": true
     }
   ]
 }
