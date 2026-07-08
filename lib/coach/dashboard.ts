@@ -8,7 +8,7 @@
 // dashboard is unit-testable with fixture data. The server page decides what
 // to cache (progression series, 1 h) vs. compute per request (workout card).
 
-import type { PlannedSession } from "@/lib/coach/engine";
+import { getLocalDate, type PlannedSession } from "@/lib/coach/engine";
 import {
   recommendWorkout,
   type WeekDay,
@@ -190,7 +190,9 @@ export interface WeekStripDay {
  * carries a run. Only rest left this week → nothing is marked next.
  */
 export function buildWeekStrip(weekStrip: WeekDay[], now: Date): WeekStripDay[] {
-  const todayIndex = (now.getDay() + 6) % 7;
+  // E2: "today" is the athlete's Danish weekday, so the marker lines up with the
+  // recommender's slot (both derived via `getLocalDate`) even on a UTC server.
+  const todayIndex = (getLocalDate(now).getDay() + 6) % 7;
   const nextIndex = weekStrip.findIndex((day, index) => index >= todayIndex && day.type !== "rest");
   return weekStrip.map((day, index) => ({
     weekday: day.weekday,

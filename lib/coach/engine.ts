@@ -10,9 +10,9 @@
 //      WorkoutContext. `validateWorkout` runs the active set and sorts the
 //      results into blocking issues vs. non-blocking warnings.
 //
-// Everything here is pure and deterministic — the only clock read is the
-// default argument of `getCurrentPhase` — which keeps it trivially testable and
-// safe to call from server actions or the AI tool layer.
+// Everything here is pure and deterministic — the only clock reads are the
+// default arguments of `getLocalDate`/`getCurrentPhase` — which keeps it
+// trivially testable and safe to call from server actions or the AI tool layer.
 
 export type PhaseKey = "adapt" | "burn" | "sharpen" | "peak" | "taper";
 
@@ -40,26 +40,33 @@ export type Severity = "hard" | "soft" | "phase" | "safety";
 export type SessionRisk = "low" | "medium" | "high";
 
 /**
- * The canonical session types the plan works in. Run days carry an effort
- * (easy → race); the rest are non-run days. Callers that receive loosely-typed
- * strings (AI tool output, form input) should normalise/validate at the
- * boundary — internally `normalizeType` still tolerates casing.
+ * The canonical session-type vocabulary the plan works in — the single source
+ * of truth. Run days carry an effort (easy → race); the rest are non-run days.
+ * Everything downstream derives from this one list: {@link SessionType} is its
+ * element type, and the chat route's `z.enum(SESSION_TYPES)` tool schema reuses
+ * the array verbatim so the model, the validator and the UI can never drift.
+ * Callers that receive loosely-typed strings (AI tool output, form input)
+ * should normalise/validate at the boundary — internally `normalizeType` still
+ * tolerates casing.
  */
-export type SessionType =
-  | "easy"
-  | "recovery"
-  | "tempo"
-  | "intervals"
-  | "fartlek"
-  | "speed"
-  | "long"
-  | "race"
-  | "rest"
-  | "strength"
-  | "cross"
-  | "off"
-  | "mobility"
-  | "yoga";
+export const SESSION_TYPES = [
+  "easy",
+  "recovery",
+  "tempo",
+  "intervals",
+  "fartlek",
+  "speed",
+  "long",
+  "race",
+  "rest",
+  "strength",
+  "cross",
+  "off",
+  "mobility",
+  "yoga",
+] as const;
+
+export type SessionType = (typeof SESSION_TYPES)[number];
 
 export interface Constraint {
   id: string;
@@ -227,13 +234,41 @@ export function getPhase(phase: PhaseKey): PhaseRules {
   return PHASES[phase];
 }
 
+/** The user's home timezone — the plan and the athlete both live in Denmark. */
+export const APP_TIMEZONE = "Europe/Copenhagen";
+
+/**
+ * Today's calendar day in Denmark, regardless of the server's timezone (E2).
+ *
+ * Vercel Functions run in UTC, so a bare `new Date()` reads the *UTC* calendar
+ * day — on a boundary evening that's already tomorrow for the athlete (e.g.
+ * 23:30 UTC = 01:30 the next day in summer CEST), which would flip the phase,
+ * the week's Monday and the day's slot one day early/late. This returns a Date
+ * whose *local* Y/M/D — and therefore `getDay()` — are the Danish calendar day,
+ * so every "what day is it" read agrees no matter where the code runs.
+ *
+ * Time-of-day is dropped (set to local midnight): callers use this only to
+ * decide the day, never to measure gaps. For elapsed-time math keep the real
+ * `new Date()` instant.
+ */
+export function getLocalDate(now: Date = new Date()): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return new Date(value("year"), value("month") - 1, value("day"));
+}
+
 /**
  * The training phase a date falls in. Dates before the build clamp to `adapt`.
  * After the peak block ends, the final {@link TAPER_WINDOW_DAYS} days before the
  * race are the `taper`; once the race has passed we hold at `peak`. The dated
  * blocks take precedence, so the taper only ever covers the post-peak run-in.
  */
-export function getCurrentPhase(date: Date = new Date()): PhaseKey {
+export function getCurrentPhase(date: Date = getLocalDate()): PhaseKey {
   const day = dayNumber(date);
   for (const key of PHASE_ORDER) {
     const phase = PHASES[key];

@@ -29,8 +29,9 @@ import { getModelCandidates, isAIConfigured } from "@/lib/ai/provider";
 import { auth } from "@/lib/auth";
 import {
   getCurrentPhase,
+  getLocalDate,
   getWeekPlan,
-  type SessionType,
+  SESSION_TYPES,
   serializeValidationResult,
   validateWorkout,
   type WorkoutContext,
@@ -74,6 +75,14 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /** Upper bound on model round-trips in the tool loop. */
 const MAX_STEPS = 8;
+
+/**
+ * Per-candidate stream timeout (issue #71 E3). Guards against a model that
+ * accepts the request then stalls without streaming: the abort lets the router
+ * fall through to the next candidate (or the scripted floor) instead of holding
+ * the request open to the 60 s `maxDuration`. A fresh signal per candidate.
+ */
+const PROVIDER_TIMEOUT_MS = 12_000;
 
 /** Cap on messages sent to the model (persisted history + this turn). */
 const MAX_CONTEXT_MESSAGES = 50;
@@ -136,23 +145,6 @@ Regler:
 // Agent tools — thin, validated adapters over the coach engine (the SSOT)
 // ---------------------------------------------------------------------------
 
-const SESSION_TYPES = [
-  "easy",
-  "recovery",
-  "tempo",
-  "intervals",
-  "fartlek",
-  "speed",
-  "long",
-  "race",
-  "rest",
-  "strength",
-  "cross",
-  "off",
-  "mobility",
-  "yoga",
-] as const satisfies readonly SessionType[];
-
 const GOAL_KEYS = ["c25k", "marathon", "zone2", "efficient"] as const;
 
 const isoDate = z.string().describe("ISO 8601 date string");
@@ -184,6 +176,10 @@ function toSnapshot(
 }
 
 function buildCoachTools(userId: string, now: Date) {
+  // E2: resolve "the current phase" from the athlete's Danish calendar day, not
+  // the server's UTC one. `now` stays the real instant for the recommender's
+  // recovery math; only the day-of read goes through `getLocalDate`.
+  const today = getLocalDate(now);
   return {
     recommendWorkout: tool({
       description:
@@ -268,7 +264,7 @@ function buildCoachTools(userId: string, now: Date) {
         monday: isoDate.optional().describe("The Monday the week starts on"),
       }),
       execute: async ({ phase, monday }) =>
-        getWeekPlan(phase ?? getCurrentPhase(now), monday ? new Date(monday) : undefined),
+        getWeekPlan(phase ?? getCurrentPhase(today), monday ? new Date(monday) : undefined),
     }),
 
     validateWorkout: tool({
@@ -292,7 +288,7 @@ function buildCoachTools(userId: string, now: Date) {
           ...input,
           plannedDate: new Date(input.plannedDate),
           lastRunDate: input.lastRunDate ? new Date(input.lastRunDate) : undefined,
-          phase: input.phase ?? getCurrentPhase(now),
+          phase: input.phase ?? getCurrentPhase(today),
         };
         return serializeValidationResult(validateWorkout(context));
       },
@@ -378,6 +374,7 @@ export async function POST(req: NextRequest) {
             messages,
             tools,
             stopWhen: stepCountIs(MAX_STEPS),
+            abortSignal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
           });
           for await (const delta of result.textStream) {
             if (delta.length === 0) continue;
@@ -386,9 +383,9 @@ export async function POST(req: NextRequest) {
           }
           break;
         } catch {
-          // Already streamed part of this model's output → cannot safely retry.
+          // Timed out (E3) or errored. Already streamed part of this model's
+          // output → cannot safely retry; otherwise fall through to the next.
           if (emitted > 0) break;
-          // Otherwise fall through to the next candidate.
         }
       }
 
