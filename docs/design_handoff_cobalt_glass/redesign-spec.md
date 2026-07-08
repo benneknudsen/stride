@@ -113,7 +113,7 @@ loops, translate ±30px + scale 1.06). `pointer-events: none`.
 | Komponent | Ændring | Detaljer |
 |---|---|---|
 | **Logo** | NYT | Løber-glyf: rødt cirkel-hoved + krop/ben i ét streg-forløb + 2 arme (55 % opacity). I nav: 34×34px brik, gradient `--cobalt-light`→`--cobalt-dark`, radius 11px, glyf i sølv. SVG'er i `assets/` |
-| **Nav-bar** | NYT | Glas-pill (radius 20px, glass-tokens), sticky-agtig øverst. Links: Hjem (aktiv = kobolt pill m. sølv tekst), Activities, Coach (med 12px rød AI-gnist-stjerne foran), Plan. Højre: Sync-knap + "BENJAMIN" (mono) + 32px avatar-cirkel |
+| **Nav-bar** | NYT | Glas-pill (radius 20px, glass-tokens), sticky-agtig øverst. Links: Hjem (aktiv = kobolt pill m. sølv tekst), Aktiviteter, Coach (med 12px rød AI-gnist-stjerne foran), Plan. Højre: Sync-knap + "BENJAMIN" (mono) + 32px avatar-cirkel |
 | **Sync-knap** | NYT | 3 states: `Sync now` (kobolt pill, hvid refresh-ikon) → `SYNCER…` (outline pill, pulserende rød prik, mono) → `SYNCED` (outline pill, grøn prik, grøn tekst). Simuleret 1,8s |
 | **Hero** | NYT | Venstre: rød mono-label ("UGE 27 · MARATHONPLAN") + serif-italic hilsen i 2 linjer. Højre: kæmpe km-tal med count-up-animation (1,2s ease-out cubic) + mono-underlabel |
 | **Plan-strip** | NYT | Slank glas-række: logo-tile + "CPH Marathon · mål 3:45" + progress-bar (71 %, kobolt→rød gradient i enden) + "74 DAGE" (rød mono) + "Se plan →" outline-knap |
@@ -131,7 +131,7 @@ loops, translate ±30px + scale 1.06). `pointer-events: none`.
 | **Activities-side** | NYT | Måneds-totaler (km/ture/timer med samme count-up + pulserende 0-state), filter-chips (Alle/Rolig/Moderat/Hård — aktiv = kobolt pill), aktivitetsrækker som glas-kort med hover |
 | **Coach-side** | NYT | Chat-UI: coach-bobler (hvid glas, radius 18/18/18/6) + bruger-bobler (kobolt, 18/18/6/18), typing-indikator (3 pulserende prikker), quick-prompt chips, input-pill + rund send-knap. Højre kolonne: Ugens fokus (kobolt), Form-status, Træningsbelastning (14 søjler) |
 | **Plan-side** | NYT | Fase-tidslinje (Base ✓ / Build · nu / Peak / Taper / Race), ugekalender 7 kolonner (i dag = kobolt border, AI-anbefalet pas = kobolt flade m. gnist, hviledag = dashed), kommende uger-liste, rødt Race day-kort (måltid/race-pace/AI-estimat) |
-| **Mobil** | NYT | Alt stacket i 1 kolonne. Bund-tab-bar i glas (Hjem/Activities/Coach/Plan med ikoner, aktiv = fuld opacity). Kompakt topbar med logo + sync. Indhold starter under iOS statusbar. Samme loading-mønster |
+| **Mobil** | NYT | Alt stacket i 1 kolonne. Bund-tab-bar i glas (Hjem/Aktiviteter/Coach/Plan med ikoner, aktiv = fuld opacity). Kompakt topbar med logo + sync. Indhold starter under iOS statusbar. Samme loading-mønster |
 
 ---
 

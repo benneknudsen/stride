@@ -4,7 +4,7 @@
 // or fixture-derived, keeping server render and client hydration in agreement.
 
 import { type DemoActivity, demoActivities } from "@/lib/demo/data";
-import { formatPace, getWeeklyVolume } from "@/lib/metrics";
+import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
 
 const DAY_MS = 86_400_000;
 
@@ -256,7 +256,7 @@ export function buildHomeView(now: Date = new Date()): HomeView {
       hr: latest.averageHeartrate,
       spm: Math.round(latest.averageCadence * 2),
       elevation: latest.totalElevationGain,
-      durationLabel: paceSecondsToClock(latest.movingTime / (latest.distance / 1000)),
+      durationLabel: formatDuration(latest.movingTime),
       zone: latestZone,
       dayLabel: relativeDayLabel(latest.startDate, now),
       clock: clock(latest.startDate),

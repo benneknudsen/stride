@@ -47,7 +47,7 @@ Du skal implementere et komplet redesign af Stride (Next.js running-dashboard) k
 
 ## Vigtige regler
 
-- Navigationen hedder **Hjem** (ikke Dashboard), Activities, Coach, Plan.
+- Navigationen hedder **Hjem** (ikke Dashboard), Aktiviteter, Coach, Plan.
 - Zone-koder ("Z2", "Z4") må ALDRIG vises — brug klartekst + IntensityMeter (spec sektion 2).
 - Instrument Serif bruges ALTID italic og KUN til heroes, widget-overskrifter og citater — aldrig brødtekst.
 - Mono-labels er ALTID uppercase med letter-spacing ≥0.14em.
