@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { BackgroundBlobs } from "@/components/cobalt/BackgroundBlobs";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
 import { NavBar } from "@/components/cobalt/NavBar";
+import { ROUTES } from "@/lib/routes";
 
 // Shell wrapper that only renders if authenticated OR on /demo.
 // This is needed because Next.js layout can't easily read pathname from
@@ -13,7 +14,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   // /demo is public — always render shell
-  if (pathname === "/demo") {
+  if (pathname === ROUTES.DEMO) {
     return (
       <div className="relative min-h-screen bg-silver font-cg-sans text-cobalt">
         <BackgroundBlobs />
