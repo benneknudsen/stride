@@ -444,8 +444,9 @@ function isAdiosPro(shoe?: string): boolean {
   return shoe?.toLowerCase().includes("adios") ?? false;
 }
 
+// Klemmes til ≥ 0: et ur foran serverens UTC må aldrig give et negativt gap.
 function hoursBetween(a: Date, b: Date): number {
-  return Math.abs(a.getTime() - b.getTime()) / 3_600_000;
+  return Math.max(0, (a.getTime() - b.getTime()) / 3_600_000);
 }
 
 // ── Constraints ─────────────────────────────────────────────────────────────
@@ -453,7 +454,7 @@ function hoursBetween(a: Date, b: Date): number {
 /** Puls — Zone 2 ceiling. Base phases must not exceed Zone 2. */
 const zone2HrCeiling: Constraint = {
   id: "zone2-hr-ceiling",
-  description: `Base phases cap effort at Zone 2 (≤ ${ZONE2_CEILING_BPM} bpm, absolute — not %HRmax).`,
+  description: `Basefaser holder indsatsen på maks Zone 2 (≤ ${ZONE2_CEILING_BPM} bpm, absolut — ikke %HRmax).`,
   severity: "hard",
   category: "heart-rate",
   evaluate(context) {
@@ -462,9 +463,9 @@ const zone2HrCeiling: Constraint = {
     return {
       constraintId: "zone2-hr-ceiling",
       severity: "hard",
-      message: `Planned Zone ${context.plannedZone} exceeds the Zone 2 ceiling for the ${context.phase} base phase (keep HR ≤ ${ZONE2_CEILING_BPM} bpm).`,
+      message: `Planlagt Zone ${context.plannedZone} overskrider Zone 2-loftet for ${context.phase}-basefasen (hold pulsen ≤ ${ZONE2_CEILING_BPM} bpm).`,
       suggestion:
-        "Drop to an easy Zone 2 effort, or move the quality work to the sharpen/peak block.",
+        "Gå ned til en rolig Zone 2-indsats, eller flyt kvalitetsarbejdet til sharpen/peak-blokken.",
     };
   },
 };
@@ -475,7 +476,7 @@ const zone2HrCeiling: Constraint = {
  */
 const recoveryWindow: Constraint = {
   id: "recovery-window",
-  description: `At least ${MIN_RECOVERY_HOURS} h before quality sessions, ${EASY_MIN_RECOVERY_HOURS} h before easy runs.`,
+  description: `Mindst ${MIN_RECOVERY_HOURS} timer før kvalitetspas, ${EASY_MIN_RECOVERY_HOURS} timer før rolige ture.`,
   severity: "hard",
   category: "recovery",
   evaluate(context) {
@@ -487,8 +488,8 @@ const recoveryWindow: Constraint = {
     return {
       constraintId: "recovery-window",
       severity: "hard",
-      message: `Only ${Math.round(gap)} h since the last run — below the ${required} h recovery minimum for this session.`,
-      suggestion: `Push this run back so at least ${required} h have passed.`,
+      message: `For kort tid siden hårdt pas — kun ${Math.round(gap)} timer siden sidste løbetur, under minimumet på ${required} timers restitution for dette pas.`,
+      suggestion: `Udskyd turen, så der er gået mindst ${required} timer — planlæg hviledag eller let løb.`,
     };
   },
 };
@@ -496,7 +497,7 @@ const recoveryWindow: Constraint = {
 /** Skadesforebyggelse — never squat / leg-press on a run day. */
 const noStrengthOnRunDays: Constraint = {
   id: "no-strength-on-run-days",
-  description: "Never squat / leg-press on a run day.",
+  description: "Aldrig squat / benpres på en løbedag.",
   severity: "hard",
   category: "injury-prevention",
   evaluate(context) {
@@ -505,8 +506,8 @@ const noStrengthOnRunDays: Constraint = {
     return {
       constraintId: "no-strength-on-run-days",
       severity: "hard",
-      message: "Leg strength (squats / leg press) is scheduled on a run day.",
-      suggestion: "Move heavy leg work to a rest day to protect the run.",
+      message: "Benstyrke (squat / benpres) er planlagt på en løbedag.",
+      suggestion: "Flyt tung bentræning til en hviledag for at beskytte løbeturen.",
     };
   },
 };
@@ -514,7 +515,7 @@ const noStrengthOnRunDays: Constraint = {
 /** Sko — the Adios Pro 4 is for speed / intervals only. */
 const adiosProSpeedOnly: Constraint = {
   id: "adios-pro-speed-only",
-  description: "Adios Pro 4 only for speed / interval sessions.",
+  description: "Adios Pro 4 kun til fart- / intervalpas.",
   severity: "hard",
   category: "footwear",
   evaluate(context) {
@@ -524,8 +525,8 @@ const adiosProSpeedOnly: Constraint = {
     return {
       constraintId: "adios-pro-speed-only",
       severity: "hard",
-      message: `Adios Pro 4 is a race/speed shoe — not for a ${context.plannedType} run.`,
-      suggestion: "Wear the Vomero (or another trainer) for easy and long days.",
+      message: `Adios Pro 4 er en konkurrence-/fartsko — ikke til en ${context.plannedType}-tur.`,
+      suggestion: "Brug andre sko — Vomero (eller en anden træningssko) til rolige og lange dage.",
     };
   },
 };
@@ -539,7 +540,7 @@ const adiosProSpeedOnly: Constraint = {
  */
 const longRunCap: Constraint = {
   id: "long-run-cap",
-  description: "Long run capped at 16 km (adapt/burn) / 18 km (sharpen/peak).",
+  description: "Lang tur begrænset til 16 km (adapt/burn) / 18 km (sharpen/peak).",
   severity: "hard",
   category: "long-run",
   evaluate(context) {
@@ -550,8 +551,8 @@ const longRunCap: Constraint = {
     return {
       constraintId: "long-run-cap",
       severity: "hard",
-      message: `Long run of ${context.plannedDistanceKm} km exceeds the ${cap} km cap for the ${context.phase} phase.`,
-      suggestion: `Trim the long run to ${cap} km or less.`,
+      message: `Lang tur på ${context.plannedDistanceKm} km overskrider loftet på ${cap} km for ${context.phase}-fasen.`,
+      suggestion: `Kort den lange tur ned til ${cap} km eller mindre.`,
     };
   },
 };
@@ -559,7 +560,7 @@ const longRunCap: Constraint = {
 /** Fodbold — no hard running the day after a match. */
 const footballRecovery: Constraint = {
   id: "football-recovery",
-  description: "No hard running the day after a football match.",
+  description: "Ingen hård løbetræning dagen efter en fodboldkamp.",
   severity: "soft",
   category: "football",
   evaluate(context) {
@@ -568,8 +569,8 @@ const footballRecovery: Constraint = {
     return {
       constraintId: "football-recovery",
       severity: "soft",
-      message: "Hard session planned the day after football — legs are likely pre-fatigued.",
-      suggestion: "Keep it easy (Zone 2) today, or shift the quality work by a day.",
+      message: "Hårdt pas planlagt dagen efter fodbold — benene er sandsynligvis forbelastede.",
+      suggestion: "Hold det roligt (Zone 2) i dag, eller flyt kvalitetsarbejdet en dag.",
     };
   },
 };
@@ -577,7 +578,7 @@ const footballRecovery: Constraint = {
 /** Basefase — keep ~90% of running in Zone 2 during the adapt/burn base. */
 const basePhaseZone2: Constraint = {
   id: "base-phase-zone2",
-  description: "Base phases want ~90% of running in Zone 2 (adapt/burn only).",
+  description: "Basefaser vil have ~90% af løbet i Zone 2 (kun adapt/burn).",
   severity: "phase",
   category: "base-phase",
   evaluate(context) {
@@ -586,8 +587,8 @@ const basePhaseZone2: Constraint = {
     return {
       constraintId: "base-phase-zone2",
       severity: "phase",
-      message: `A ${context.plannedType} session sits outside the Zone 2 base the ${context.phase} phase is building.`,
-      suggestion: "Save quality work for the sharpen phase; keep the base aerobic.",
+      message: `Et ${context.plannedType}-pas ligger uden for den Zone 2-base, som ${context.phase}-fasen bygger.`,
+      suggestion: "Gem kvalitetsarbejdet til sharpen-fasen; hold basen aerob.",
     };
   },
 };
@@ -595,7 +596,7 @@ const basePhaseZone2: Constraint = {
 /** Distance-øgning — weekly volume should grow no more than 10%. */
 const weeklyProgression: Constraint = {
   id: "weekly-distance-progression",
-  description: "Weekly distance should grow no more than 10%.",
+  description: "Ugentlig distance bør højst vokse 10%.",
   severity: "safety",
   category: "progression",
   evaluate(context) {
@@ -608,8 +609,8 @@ const weeklyProgression: Constraint = {
     return {
       constraintId: "weekly-distance-progression",
       severity: "safety",
-      message: `Weekly volume is up ${pct}% (${previousWeekDistanceKm} → ${weeklyDistanceKm} km) — over the 10% safe limit.`,
-      suggestion: `Cap this week near ${Math.round(previousWeekDistanceKm * MAX_WEEKLY_INCREASE_RATIO)} km.`,
+      message: `Ugentlig volumen er steget ${pct}% (${previousWeekDistanceKm} → ${weeklyDistanceKm} km) — over den sikre grænse på 10%.`,
+      suggestion: `Begræns denne uge til omkring ${Math.round(previousWeekDistanceKm * MAX_WEEKLY_INCREASE_RATIO)} km.`,
     };
   },
 };
@@ -621,7 +622,7 @@ const weeklyProgression: Constraint = {
  */
 const highRiskSession: Constraint = {
   id: "high-risk-session",
-  description: "A high-risk session should stay easy (no quality effort).",
+  description: "Et højrisiko-pas skal holdes roligt (ingen kvalitetsindsats).",
   severity: "soft",
   category: "risk",
   evaluate(context) {
@@ -630,8 +631,8 @@ const highRiskSession: Constraint = {
     return {
       constraintId: "high-risk-session",
       severity: "soft",
-      message: "A hard effort is planned on a session flagged high-risk.",
-      suggestion: "Keep it easy (Zone 2) today, or defer the quality work.",
+      message: "Hårdt pas planlagt på en session markeret som højrisiko.",
+      suggestion: "Hold det roligt (Zone 2) i dag, eller udskyd kvalitetsarbejdet.",
     };
   },
 };
