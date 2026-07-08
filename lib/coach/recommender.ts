@@ -19,12 +19,14 @@
 import {
   EASY_MIN_RECOVERY_HOURS,
   getCurrentPhase,
+  getLocalDate,
   getPhase,
   getWeekPlan,
   MIN_RECOVERY_HOURS,
   PHASES,
   type PlannedSession,
   type SessionRisk,
+  type SessionType,
   validateWorkout,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
@@ -48,8 +50,16 @@ export interface WorkoutInput {
   risk?: SessionRisk;
 }
 
+/**
+ * The subset of the engine's {@link SessionType} vocabulary the recommender can
+ * ever prescribe (issue #71 A2). Deriving it via `Extract` keeps the two in
+ * lockstep — renaming or dropping one of these in the engine breaks here at
+ * compile time rather than drifting silently.
+ */
+export type RecommendedType = Extract<SessionType, "rest" | "easy" | "tempo" | "long">;
+
 export interface WorkoutRecommendation {
-  type: "rest" | "easy" | "tempo" | "long";
+  type: RecommendedType;
   distanceKm: number;
   paceRange: { min: string; max: string };
   heartRateCap: number;
@@ -117,13 +127,17 @@ export function recommendWorkout(
   input: WorkoutInput,
   now: Date = new Date()
 ): WorkoutRecommendation {
-  const phase = getCurrentPhase(now);
+  // E2: "which day is it" must read the athlete's Danish calendar day, not the
+  // server's UTC one — otherwise the phase, the week's Monday and the slot below
+  // flip a day early on a boundary evening. Elapsed-time math keeps `now`.
+  const today = getLocalDate(now);
+  const phase = getCurrentPhase(today);
   const rules = getPhase(phase);
-  const weekStrip = getWeekPlan(phase, mondayOfWeek(now));
+  const weekStrip = getWeekPlan(phase, mondayOfWeek(today));
   const reason: string[] = [];
 
   // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
-  const slot = weekStrip[(now.getDay() + 6) % 7];
+  const slot = weekStrip[(today.getDay() + 6) % 7];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
     return restCard(reason, weekStrip);

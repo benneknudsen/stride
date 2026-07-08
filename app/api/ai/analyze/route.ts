@@ -70,6 +70,15 @@ const MAX_BLOCKS = 8;
 const RATE_LIMIT_MAX = 15;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
+/**
+ * Per-candidate stream timeout (issue #71 E3). If a model accepts the request
+ * but then stalls without streaming, this aborts it so the router falls through
+ * to the next candidate (or the heuristic floor) instead of burning the whole
+ * `maxDuration`. Two candidates × 12 s stays inside the 30 s budget. A fresh
+ * signal is minted per candidate so each gets its own clean window.
+ */
+const PROVIDER_TIMEOUT_MS = 12_000;
+
 const NDJSON_HEADERS = {
   "Content-Type": "application/x-ndjson; charset=utf-8",
   "Cache-Control": "no-store",
@@ -173,6 +182,7 @@ export async function POST(req: NextRequest) {
             schema: analysisBlockSchema,
             system: ANALYSIS_SYSTEM_PROMPT,
             prompt,
+            abortSignal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
           });
           for await (const block of result.elementStream) {
             emit(block);
@@ -181,9 +191,9 @@ export async function POST(req: NextRequest) {
           usedModel = id;
           break;
         } catch {
-          // Already streamed part of this model's output → cannot safely retry.
+          // Timed out (E3) or errored. Already streamed part of this model's
+          // output → cannot safely retry; otherwise fall through to the next.
           if (collected.length > 0) break;
-          // Otherwise fall through to the next candidate.
         }
       }
 
@@ -193,9 +203,13 @@ export async function POST(req: NextRequest) {
         usedModel = null;
       }
 
-      controller.close();
-
-      // Persist a clean model result for inputHash dedup (best-effort).
+      // Persist a clean model result for inputHash dedup (best-effort). Awaited
+      // BEFORE closing the stream (issue #71 E5): on Vercel the function can be
+      // frozen the instant the response ends, which would truncate a persist
+      // awaited *after* `controller.close()`. Writing while the stream is still
+      // open keeps the request alive until the insert lands — the same ordering
+      // the chat route uses. Caching is an optimisation, so failures never
+      // surface to the client.
       if (userId && usedModel && collected.length > 0) {
         try {
           await insertAnalysis({
@@ -209,6 +223,8 @@ export async function POST(req: NextRequest) {
           // Caching is an optimisation; never fail the request over it.
         }
       }
+
+      controller.close();
     },
   });
 
