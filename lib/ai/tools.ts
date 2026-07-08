@@ -12,7 +12,6 @@
  * renderer.
  */
 
-import { tool } from "ai";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -111,42 +110,6 @@ export const coachInsightSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// Tool registry — what the model is offered
-// ---------------------------------------------------------------------------
-
-/**
- * The toolset offered to the model. Kept as real `tool()` definitions so the
- * same typed schemas can also drive a `streamText` tool-calling flow; the
- * streaming analysis endpoint mirrors them as a discriminated union (below) so
- * each generated array element is one validated tool invocation.
- */
-export const analysisTools = {
-  insightCard: tool({
-    description: "Surface a single grounded insight about the athlete's recent training.",
-    inputSchema: insightCardSchema,
-  }),
-  trendCallout: tool({
-    description: "Highlight a directional trend (volume, pace, heart rate) over recent weeks.",
-    inputSchema: trendCalloutSchema,
-  }),
-  workoutRecommendation: tool({
-    description: "Recommend a specific next workout tailored to the athlete's current form.",
-    inputSchema: workoutRecommendationSchema,
-  }),
-  metricComparison: tool({
-    description: "Compare one metric across two time periods, current vs previous.",
-    inputSchema: metricComparisonSchema,
-  }),
-  coachInsight: tool({
-    description:
-      "Deliver a coach message — insight, warning, or milestone — backed by a progression metric.",
-    inputSchema: coachInsightSchema,
-  }),
-} as const;
-
-export type AnalysisToolName = keyof typeof analysisTools;
-
-// ---------------------------------------------------------------------------
 // Streamed block — a discriminated union over the tool inputs
 // ---------------------------------------------------------------------------
 
@@ -164,6 +127,9 @@ export const analysisBlockSchema = z.discriminatedUnion("tool", [
 ]);
 
 export type AnalysisBlock = z.infer<typeof analysisBlockSchema>;
+
+/** The tool names the union covers — the persisted `name` discriminant. */
+export type AnalysisToolName = AnalysisBlock["tool"];
 
 /** Narrow a block to the `insightCard` variant (and friends), for the renderer. */
 export type AnalysisBlockOf<T extends AnalysisToolName> = Extract<AnalysisBlock, { tool: T }>;

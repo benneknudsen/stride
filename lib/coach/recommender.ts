@@ -83,8 +83,9 @@ type PaceRange = { min: string; max: string };
 
 const HOUR_MS = 3_600_000;
 
+// Klemmes til ≥ 0: et ur foran serverens UTC må aldrig give et negativt gap.
 function hoursSince(from: Date, now: Date): number {
-  return (now.getTime() - from.getTime()) / HOUR_MS;
+  return Math.max(0, (now.getTime() - from.getTime()) / HOUR_MS);
 }
 
 /** The Monday of the week `date` falls in, at the same time of day. */

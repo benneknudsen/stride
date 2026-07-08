@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
+import { ROUTES } from "@/lib/routes";
 
 // "AI Coach" widget (5/12, cobalt variant): the runner glyph + mono label, a
 // serif-italic coaching quote in guillemets, and two pill actions (silver solid
@@ -20,18 +22,18 @@ export function AiCoachCard({ quote }: { quote: string }) {
       <p className="m-0 font-cg-serif text-[22px] italic leading-[1.28] text-silver">»{quote}«</p>
 
       <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
+        <Link
+          href={ROUTES.COACH}
           className="rounded-pill bg-silver px-[18px] py-[9px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-white"
         >
           Spørg coach
-        </button>
-        <button
-          type="button"
+        </Link>
+        <Link
+          href={ROUTES.PLAN}
           className="rounded-pill border border-silver/50 px-[18px] py-[9px] text-[12.5px] font-medium text-silver transition-colors hover:bg-silver/12"
         >
           Ugens plan
-        </button>
+        </Link>
       </div>
     </GlassCard>
   );
