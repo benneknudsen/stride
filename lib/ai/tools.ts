@@ -28,6 +28,10 @@ export type TrendDirection = z.infer<typeof trendDirectionSchema>;
 export const coachInsightTypeSchema = z.enum(["insight", "warning", "milestone"]);
 export type CoachInsightType = z.infer<typeof coachInsightTypeSchema>;
 
+/** Session risk level (issue #76 B2) — mirrors the engine's `SessionRisk`. */
+export const sessionRiskSchema = z.enum(["low", "medium", "high"]);
+export type SessionRisk = z.infer<typeof sessionRiskSchema>;
+
 /** One progression metric rendered inside a coach insight — a labelled value with a trend arrow. */
 export const progressionPointSchema = z.object({
   label: z.string().describe("Metric name, e.g. 'Load ratio' or '4-week volume'"),
@@ -78,6 +82,9 @@ export const workoutRecommendationSchema = z.object({
     .max(60)
     .optional()
     .describe("Optional total session distance in km (must be a realistic 0–60 km)"),
+  risk: sessionRiskSchema
+    .optional()
+    .describe("Optional risk read for the session: low, medium, or high"),
 });
 
 /** A head-to-head comparison of one metric across two periods. */

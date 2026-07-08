@@ -35,6 +35,7 @@ import {
 } from "@/lib/ai/tools";
 import { auth } from "@/lib/auth";
 import { getCachedAnalysis, insertAnalysis } from "@/lib/db/queries";
+import { rateLimit } from "@/lib/rate-limit";
 import type { AnalysisToolCall } from "@/types/domain";
 
 export const runtime = "nodejs";
@@ -64,6 +65,10 @@ const requestSchema = z.object({
  * response size or token spend.
  */
 const MAX_BLOCKS = 8;
+
+/** Per-user analyze rate limit: 15 live-AI requests per 60 seconds. */
+const RATE_LIMIT_MAX = 15;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 const NDJSON_HEADERS = {
   "Content-Type": "application/x-ndjson; charset=utf-8",
@@ -129,6 +134,20 @@ export async function POST(req: NextRequest) {
   // Live AI key configured → require authentication to prevent cost abuse.
   if (!userId) {
     return Response.json({ error: "authentication_required" }, { status: 401 });
+  }
+
+  // Per-user rate limit on the live-AI path (cache hits above never reach here),
+  // mirroring the chat route: 429 with a `retry-after` when the window is full.
+  const limit = rateLimit(`analyze:${userId}`, {
+    max: RATE_LIMIT_MAX,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+  });
+  if (!limit.allowed) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
+    return Response.json(
+      { error: "rate_limited" },
+      { status: 429, headers: { "retry-after": String(retryAfterSeconds) } }
+    );
   }
 
   const prompt = buildAnalysisPrompt(input);

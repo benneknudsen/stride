@@ -75,15 +75,24 @@ describe("getCurrentPhase — phase windows", () => {
     expect(getCurrentPhase(new Date(2025, 11, 31))).toBe("adapt"); // prior year
   });
 
-  it("holds at peak through race week and beyond", () => {
-    expect(getCurrentPhase(new Date(2026, 8, 15))).toBe("peak"); // day after peak block
-    expect(getCurrentPhase(RACE_DATE)).toBe("peak"); // 20 Sep race day
+  it("tapers through race week, then holds at peak after the race", () => {
+    expect(getCurrentPhase(new Date(2026, 8, 15))).toBe("taper"); // day after peak block
+    expect(getCurrentPhase(RACE_DATE)).toBe("taper"); // 20 Sep race day
     expect(getCurrentPhase(new Date(2026, 9, 1))).toBe("peak"); // 1 Oct, post-race
+  });
+
+  it("only tapers in the final <21 days once the peak block is over", () => {
+    // Inside the peak block the dated block wins, even within 21 days of the race.
+    expect(getCurrentPhase(new Date(2026, 8, 1))).toBe("peak"); // 1 Sep — peak block
+    expect(getCurrentPhase(new Date(2026, 8, 14))).toBe("peak"); // last peak day
+    // The moment the block ends, the run-in becomes a taper.
+    expect(getCurrentPhase(new Date(2026, 8, 15))).toBe("taper"); // 15 Sep
+    expect(getCurrentPhase(new Date(2026, 8, 19))).toBe("taper"); // day before race
   });
 
   it("keeps ordering correct for dates well after the peak block", () => {
     // Exercises the day-ordering key across month- and year-rollovers past peak.
-    expect(getCurrentPhase(new Date(2026, 8, 15, 0, 1))).toBe("peak"); // 15 Sep, just after end
+    expect(getCurrentPhase(new Date(2026, 8, 15, 0, 1))).toBe("taper"); // 15 Sep, taper run-in
     expect(getCurrentPhase(new Date(2026, 11, 31))).toBe("peak"); // 31 Dec 2026
     expect(getCurrentPhase(new Date(2027, 0, 1))).toBe("peak"); // 1 Jan 2027 — year rollover
     expect(getCurrentPhase(new Date(2030, 5, 15))).toBe("peak"); // far future
@@ -235,6 +244,58 @@ describe("getWeekPlan", () => {
         ).not.toContain("recovery-window");
       }
     }
+  });
+});
+
+describe("getWeekPlan — taper & race week (B4)", () => {
+  it("keeps a general taper week to at most 3 easy Zone-2 days, no hard efforts", () => {
+    const monday = new Date(2026, 8, 7); // Mon 7 Sep — taper shape, race not in-week
+    const week = getWeekPlan("taper", monday);
+    const runs = week.filter((s) => s.type !== "rest");
+    expect(runs.length).toBeLessThanOrEqual(3);
+    expect(runs.every((s) => s.type === "easy" && s.zone === 2)).toBe(true);
+    expect(week.some((s) => s.type === "tempo" || s.type === "long")).toBe(false);
+  });
+
+  it("caps every taper session at ~60% of a normal week's distance", () => {
+    const week = getWeekPlan("taper", new Date(2026, 8, 7));
+    for (const session of week) {
+      if (session.distanceKm != null) {
+        expect(session.distanceKm).toBeLessThanOrEqual(getPhase("taper").maxDistanceKm);
+      }
+    }
+  });
+
+  it("lays out race week: race day, a short shakeout the day before, a rest day before that", () => {
+    const monday = new Date(2026, 8, 14); // Mon 14 Sep — race (Sun 20 Sep) falls in this week
+    const week = getWeekPlan("taper", monday);
+    const race = week.find((s) => s.type === "race");
+    expect(race?.weekday).toBe("sun");
+    expect(week[5].type).toBe("easy"); // Saturday shakeout
+    expect(week[5].distanceKm).toBeLessThanOrEqual(2);
+    expect(week[4].type).toBe("rest"); // Friday — rest before race
+    const runDaysExclRace = week.filter((s) => s.type !== "rest" && s.type !== "race");
+    expect(runDaysExclRace).toHaveLength(2);
+  });
+});
+
+describe("validateWorkout — soft: high-risk session (B2)", () => {
+  it("warns when a high-risk session carries a hard effort", () => {
+    const result = validateWorkout(ctx({ phase: "sharpen", plannedType: "tempo", risk: "high" }));
+    expect(result.valid).toBe(true); // soft — never blocks
+    expect(result.warnings.map((w) => w.constraintId)).toContain("high-risk-session");
+  });
+
+  it("stays quiet on a high-risk easy run", () => {
+    const result = validateWorkout(ctx({ plannedType: "easy", risk: "high" }));
+    expect(result.warnings.map((w) => w.constraintId)).not.toContain("high-risk-session");
+  });
+
+  it("stays quiet when risk is low or unset", () => {
+    const low = validateWorkout(ctx({ phase: "sharpen", plannedType: "tempo", risk: "low" }));
+    const unset = validateWorkout(ctx({ phase: "sharpen", plannedType: "tempo" }));
+    expect(low.warnings.map((w) => w.constraintId)).not.toContain("high-risk-session");
+    expect(unset.warnings.map((w) => w.constraintId)).not.toContain("high-risk-session");
   });
 });
 
