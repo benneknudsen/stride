@@ -14,7 +14,7 @@
 // default argument of `getCurrentPhase` — which keeps it trivially testable and
 // safe to call from server actions or the AI tool layer.
 
-export type PhaseKey = "adapt" | "burn" | "sharpen" | "peak";
+export type PhaseKey = "adapt" | "burn" | "sharpen" | "peak" | "taper";
 
 export interface PhaseRules {
   phase: PhaseKey;
@@ -30,6 +30,14 @@ export interface PhaseRules {
 }
 
 export type Severity = "hard" | "soft" | "phase" | "safety";
+
+/**
+ * A caller-supplied risk level for the planned session (issue #76 B2). Distinct
+ * from the load-derived `LoadRisk` band — this is the recommender's own read on
+ * how cautious to be (e.g. after football or during a taper). "high" nudges the
+ * validator toward keeping the session easy.
+ */
+export type SessionRisk = "low" | "medium" | "high";
 
 /**
  * The canonical session types the plan works in. Run days carry an effort
@@ -75,6 +83,8 @@ export interface WorkoutContext {
   phase: PhaseKey;
   weeklyDistanceKm?: number;
   previousWeekDistanceKm?: number;
+  /** Caller's risk read for this session; "high" wants the effort kept easy. */
+  risk?: SessionRisk;
 }
 
 export interface ValidationIssue {
@@ -111,6 +121,21 @@ export const EASY_MIN_RECOVERY_HOURS = 24;
 
 /** Largest safe week-over-week distance growth (10%). */
 export const MAX_WEEKLY_INCREASE_RATIO = 1.1;
+
+/**
+ * The taper window: the final stretch before the race, once the peak block is
+ * over. A date this close to {@link RACE_DATE} (and not past it) is a taper.
+ */
+export const TAPER_WINDOW_DAYS = 21;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Whole calendar days from `date` to `target` (ignoring time-of-day). */
+function daysUntil(date: Date, target: Date): number {
+  const from = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const to = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+  return Math.round((to - from) / DAY_MS);
+}
 
 // ── Phases ──────────────────────────────────────────────────────────────────
 
@@ -169,6 +194,21 @@ export const PHASES: Record<PhaseKey, PhaseRules> = {
     hasLongRun: true,
     longRunMaxKm: 18,
   },
+  // The race run-in after the peak block: volume drops sharply, no hard efforts,
+  // legs stay fresh for race day. Reached via `getCurrentPhase` (the 21-day
+  // rule), not a dated slot in `PHASE_ORDER` — its dates only frame `getPhase`.
+  taper: {
+    phase: "taper",
+    startDate: new Date(2026, 8, 15), // 15 Sep 2026 (day after peak ends)
+    endDate: RACE_DATE, // 20 Sep 2026
+    sessionsPerWeek: 3, // max 3 easy run days
+    zone2Required: false,
+    minDistanceKm: 4,
+    maxDistanceKm: 6, // ~60% of a normal peak-week session
+    hasTempoSession: false, // no hard efforts in the taper
+    hasLongRun: false,
+    longRunMaxKm: 10,
+  },
 };
 
 const PHASE_ORDER: PhaseKey[] = ["adapt", "burn", "sharpen", "peak"];
@@ -188,8 +228,10 @@ export function getPhase(phase: PhaseKey): PhaseRules {
 }
 
 /**
- * The training phase a date falls in. Dates before the build clamp to `adapt`;
- * dates after the peak block (race week and beyond) hold at `peak`.
+ * The training phase a date falls in. Dates before the build clamp to `adapt`.
+ * After the peak block ends, the final {@link TAPER_WINDOW_DAYS} days before the
+ * race are the `taper`; once the race has passed we hold at `peak`. The dated
+ * blocks take precedence, so the taper only ever covers the post-peak run-in.
  */
 export function getCurrentPhase(date: Date = new Date()): PhaseKey {
   const day = dayNumber(date);
@@ -199,7 +241,10 @@ export function getCurrentPhase(date: Date = new Date()): PhaseKey {
       return key;
     }
   }
-  return day < dayNumber(PHASES.adapt.startDate) ? "adapt" : "peak";
+  if (day < dayNumber(PHASES.adapt.startDate)) return "adapt";
+  const daysToRace = daysUntil(date, RACE_DATE);
+  if (daysToRace >= 0 && daysToRace < TAPER_WINDOW_DAYS) return "taper";
+  return "peak";
 }
 
 // ── Week plan ─────────────────────────────────────────────────────────────────
@@ -229,6 +274,7 @@ export interface PlannedSession {
  * boundary (Sunday → next Monday).
  */
 const WEEK_RUN_DAYS: Record<number, readonly Weekday[]> = {
+  3: ["mon", "wed", "sat"],
   4: ["mon", "wed", "fri", "sun"],
   5: ["mon", "wed", "fri", "sat", "sun"],
 };
@@ -248,6 +294,7 @@ function addDays(base: Date, days: number): Date {
  */
 export function getWeekPlan(phase: PhaseKey, startDate?: Date): PlannedSession[] {
   const rules = getPhase(phase);
+  if (phase === "taper") return taperWeekPlan(rules, startDate);
   const runDays = WEEK_RUN_DAYS[rules.sessionsPerWeek] ?? WEEK_RUN_DAYS[4];
   const tempoDay: Weekday | null = rules.hasTempoSession ? "wed" : null;
   const longDay: Weekday | null = rules.hasLongRun ? "sun" : null;
@@ -285,6 +332,77 @@ export function getWeekPlan(phase: PhaseKey, startDate?: Date): PlannedSession[]
       zone: 2,
       distanceKm: rules.minDistanceKm,
       description: "Rolig Z2",
+    };
+  });
+}
+
+/**
+ * The taper week (issue #76 B4). Two shapes:
+ *   - Race week (RACE_DATE falls inside the given Monday→Sunday span): 2 easy
+ *     run days plus race day. A short shakeout the day before the race, a rest
+ *     day the day before that, one short easy run early in the week.
+ *   - Otherwise a general taper week: up to 3 easy Zone-2 days, no hard efforts,
+ *     everything at the phase's reduced `minDistanceKm`.
+ * Without a `startDate` (no calendar context) we can't locate the race, so we
+ * fall back to the general taper shape.
+ */
+function taperWeekPlan(rules: PhaseRules, startDate?: Date): PlannedSession[] {
+  const raceIndex = startDate ? daysUntil(startDate, RACE_DATE) : -1;
+  const isRaceWeek = startDate != null && raceIndex >= 0 && raceIndex <= 6;
+
+  if (isRaceWeek && startDate) {
+    return WEEKDAYS.map((weekday, index) => {
+      const date = addDays(startDate, index);
+      if (index === raceIndex) {
+        return {
+          weekday,
+          date,
+          type: "race",
+          zone: 5,
+          distanceKm: 21.1,
+          description: "Race — Silkeborg Halvmarathon",
+        };
+      }
+      if (index === raceIndex - 1) {
+        return {
+          weekday,
+          date,
+          type: "easy",
+          zone: 2,
+          distanceKm: 2,
+          description: "Let udløb (2 km)",
+        };
+      }
+      if (index === raceIndex - 2) {
+        return { weekday, date, type: "rest", description: "Hvile før løb" };
+      }
+      if (index === 0) {
+        return {
+          weekday,
+          date,
+          type: "easy",
+          zone: 2,
+          distanceKm: rules.minDistanceKm,
+          description: "Kort rolig tur",
+        };
+      }
+      return { weekday, date, type: "rest", description: "Hvile" };
+    });
+  }
+
+  const runDays = WEEK_RUN_DAYS[rules.sessionsPerWeek] ?? WEEK_RUN_DAYS[3];
+  return WEEKDAYS.map((weekday, index) => {
+    const date = startDate ? addDays(startDate, index) : undefined;
+    if (!runDays.includes(weekday)) {
+      return { weekday, date, type: "rest", description: "Hvile" };
+    }
+    return {
+      weekday,
+      date,
+      type: "easy",
+      zone: 2,
+      distanceKm: rules.minDistanceKm,
+      description: "Rolig Z2 (nedtrapning)",
     };
   });
 }
@@ -496,6 +614,28 @@ const weeklyProgression: Constraint = {
   },
 };
 
+/**
+ * Risiko — a session flagged high-risk by the caller should not also be a hard
+ * effort. Soft (advisory): the recommender already downgrades on this signal,
+ * but validating it here keeps the rule explicit and testable (issue #76 B2).
+ */
+const highRiskSession: Constraint = {
+  id: "high-risk-session",
+  description: "A high-risk session should stay easy (no quality effort).",
+  severity: "soft",
+  category: "risk",
+  evaluate(context) {
+    if (context.risk !== "high") return null;
+    if (!isQualityEffort(context)) return null;
+    return {
+      constraintId: "high-risk-session",
+      severity: "soft",
+      message: "A hard effort is planned on a session flagged high-risk.",
+      suggestion: "Keep it easy (Zone 2) today, or defer the quality work.",
+    };
+  },
+};
+
 /** Every constraint, in evaluation order. */
 export const ALL_CONSTRAINTS: Constraint[] = [
   zone2HrCeiling,
@@ -506,6 +646,7 @@ export const ALL_CONSTRAINTS: Constraint[] = [
   footballRecovery,
   basePhaseZone2,
   weeklyProgression,
+  highRiskSession,
 ];
 
 /** Constraints that only apply while a base phase requires Zone 2. */

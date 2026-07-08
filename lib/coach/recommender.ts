@@ -24,6 +24,8 @@ import {
   MIN_RECOVERY_HOURS,
   PHASES,
   type PlannedSession,
+  type SessionRisk,
+  validateWorkout,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
 import type { Goal } from "@/lib/training/goals";
@@ -42,6 +44,8 @@ export interface WorkoutInput {
   footballYesterday: boolean;
   /** Athletes with prior injuries get an extra recovery day between runs. */
   injuryHistory?: boolean;
+  /** Optional caller risk read, threaded into the engine's validation context. */
+  risk?: SessionRisk;
 }
 
 export interface WorkoutRecommendation {
@@ -162,8 +166,10 @@ export function recommendWorkout(
   }
 
   // 4 + 5. Distance from the phase band; progression unlocks the upper end.
-  const readyForMore =
-    input.progression.readyToIncrease === true && input.progression.paceEfficiency !== null;
+  // B6: `readyToIncrease` is null when load data is missing — guard it to false
+  // (not ready) so a null never reads as "unlock the upper distance".
+  const readyToIncrease = input.progression.readyToIncrease ?? false;
+  const readyForMore = readyToIncrease && input.progression.paceEfficiency !== null;
   let distanceKm: number;
   if (type === "long") {
     distanceKm = rules.longRunMaxKm;
@@ -192,11 +198,49 @@ export function recommendWorkout(
     reason.push(`${PAUSE_DAYS}+ dages pause — distancen er sat 20% ned for en sikker genstart.`);
   }
 
-  const paceRange: PaceRange = PACE_RANGES[type];
-  const heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
+  // B5: the phase's `maxDistanceKm` is the upper bound the week strip agrees on.
+  // Clamp band runs (easy/tempo) to it so the card never exceeds the plan; a
+  // ready-to-progress athlete may reach up to 15% beyond it. The long run has
+  // its own `longRunMaxKm` ceiling and is exempt.
+  if (type !== "long") {
+    const upperBound = readyForMore
+      ? Math.round(rules.maxDistanceKm * 1.15 * 10) / 10
+      : rules.maxDistanceKm;
+    distanceKm = Math.min(distanceKm, upperBound);
+  }
 
   // 7. Shoe: the Adios Pro 4 is tempo-only; everything else runs in the Vomero.
-  const shoe: WorkoutRecommendation["shoe"] = type === "tempo" ? "adios-pro-4" : "vomero";
+  let plannedZone = type === "tempo" ? 4 : 2;
+  let shoe: WorkoutRecommendation["shoe"] = type === "tempo" ? "adios-pro-4" : "vomero";
+
+  // B3: validate the assembled recommendation against the rule engine before it
+  // leaves the recommender. The recommendation is built from the same phase
+  // rules the constraints enforce, so this is a defensive last line — but a hard
+  // (blocking) issue means it would break a safety rule, so downgrade to a safe
+  // easy Zone 2 run rather than surface a violating card.
+  const validation = validateWorkout({
+    plannedDate: now,
+    plannedType: type,
+    plannedDistanceKm: distanceKm,
+    plannedZone,
+    shoeType: shoe,
+    lastRunDate: input.lastRun,
+    footballYesterday: input.footballYesterday,
+    phase,
+    risk: input.risk,
+  });
+  if (validation.issues.length > 0) {
+    type = "easy";
+    plannedZone = 2;
+    shoe = "vomero";
+    distanceKm = Math.min(distanceKm, rules.maxDistanceKm);
+    reason.push(
+      `Forslaget brød en hård regel (${validation.issues[0].constraintId}) — nedjusteret til en rolig Zone 2-tur.`
+    );
+  }
+
+  const paceRange: PaceRange = PACE_RANGES[type];
+  const heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
 
   return { type, distanceKm, paceRange, heartRateCap, shoe, reason, weekStrip };
 }

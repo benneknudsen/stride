@@ -5,8 +5,9 @@ import { activities } from "@/drizzle/schema";
 import { auth } from "@/lib/auth";
 import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
+import { rateLimit } from "@/lib/rate-limit";
 import { withTokenRefresh } from "@/lib/strava/client";
-import { mapStravaToDb } from "@/lib/strava/mappers";
+import { mapStravaSummaryToDb } from "@/lib/strava/mappers";
 
 // Full historical sync — fetches all activities page by page
 export async function POST(_req: NextRequest) {
@@ -16,6 +17,17 @@ export async function POST(_req: NextRequest) {
   }
 
   const userId = session.user.id;
+
+  // B7: a full historical sync is expensive — enforce at least one minute
+  // between syncs per user: rateLimit("strava-sync", { max: 1, windowMs: 60_000 }).
+  const limit = rateLimit(`strava-sync:${userId}`, { max: 1, windowMs: 60_000 });
+  if (!limit.allowed) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
+    return NextResponse.json(
+      { ok: false, error: "Sync ran recently — try again shortly." },
+      { status: 429, headers: { "retry-after": String(retryAfterSeconds) } }
+    );
+  }
 
   try {
     const client = await withTokenRefresh(userId);
@@ -27,12 +39,14 @@ export async function POST(_req: NextRequest) {
       const batch = await client.getActivities(page, 100);
       if (batch.length === 0) break;
 
-      // Strava calls stay serial (rate limits); collect rows then insert once.
-      const rows: ReturnType<typeof mapStravaToDb>[] = [];
+      // B7: the list response is a full SummaryActivity — it already carries
+      // every column the dashboard reads, so map it directly instead of a
+      // per-activity getActivity() detail fetch (removes the N+1). One list
+      // call per page; splits/raw detail have no consumer.
+      const rows: ReturnType<typeof mapStravaSummaryToDb>[] = [];
       for (const summary of batch) {
         try {
-          const raw = await client.getActivity(summary.id);
-          rows.push(mapStravaToDb(raw, userId));
+          rows.push(mapStravaSummaryToDb(summary, userId));
         } catch {
           // Skip individual failures — continue with remaining activities
         }

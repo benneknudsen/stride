@@ -1,4 +1,4 @@
-import type { DetailedActivity, Split } from "./types";
+import type { DetailedActivity, Split, SummaryActivity } from "./types";
 
 export type Activity = {
   stravaActivityId: number;
@@ -57,5 +57,35 @@ export function mapStravaToDb(raw: DetailedActivity, userId: string) {
     summaryPolyline: mapped.polyline,
     splits: mapped.splits,
     raw: raw as unknown as Record<string, unknown>,
+  };
+}
+
+/**
+ * Map a `SummaryActivity` straight to a DB row — no per-activity detail fetch
+ * (issue #76 B7). The list endpoint already returns every column the dashboard
+ * reads (distance, times, HR, cadence, polyline), so the historical sync uses
+ * this to avoid the N+1 detail call. `splits` are only on the detailed payload
+ * and have no dashboard consumer, so they're empty here; `raw` keeps the summary
+ * payload for parity. New activities still go through {@link mapStravaToDb} via
+ * the webhook, which does fetch full detail.
+ */
+export function mapStravaSummaryToDb(summary: SummaryActivity, userId: string) {
+  return {
+    userId,
+    stravaActivityId: summary.id,
+    name: summary.name,
+    type: summary.type,
+    startDate: new Date(summary.start_date_local),
+    distance: summary.distance,
+    movingTime: summary.moving_time,
+    elapsedTime: summary.elapsed_time,
+    totalElevationGain: summary.total_elevation_gain,
+    averageSpeed: summary.average_speed ?? null,
+    averageHeartrate: summary.average_heartrate ?? null,
+    maxHeartrate: summary.max_heartrate ?? null,
+    averageCadence: summary.average_cadence ?? null,
+    summaryPolyline: summary.map?.summary_polyline ?? null,
+    splits: [] as Split[],
+    raw: summary as unknown as Record<string, unknown>,
   };
 }

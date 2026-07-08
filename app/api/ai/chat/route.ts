@@ -194,6 +194,10 @@ function buildCoachTools(userId: string, now: Date) {
         progression: progressionInputSchema.optional(),
         footballYesterday: z.boolean().default(false),
         injuryHistory: z.boolean().default(false),
+        risk: z
+          .enum(["low", "medium", "high"])
+          .optional()
+          .describe("Optional risk read for the session, threaded to the rule engine"),
         pauseDays: z
           .number()
           .min(0)
@@ -206,6 +210,7 @@ function buildCoachTools(userId: string, now: Date) {
         progression,
         footballYesterday,
         injuryHistory,
+        risk,
         pauseDays,
       }) => {
         const lastRunDate = lastRun
@@ -219,6 +224,7 @@ function buildCoachTools(userId: string, now: Date) {
             lastRun: lastRunDate,
             footballYesterday,
             injuryHistory,
+            risk,
           },
           now
         );
