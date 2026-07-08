@@ -45,11 +45,7 @@ export default function CoachPage() {
       <div className="relative pt-2">
         <div className="grid grid-cols-12 items-start gap-4">
           <div className="col-span-12 lg:col-span-7">
-            <ChatPanel
-              initialMessages={view.initialMessages}
-              prompts={view.prompts}
-              replies={view.replies}
-            />
+            <ChatPanel initialMessages={view.initialMessages} prompts={view.prompts} />
           </div>
 
           <div className="col-span-12 flex flex-col gap-4 lg:col-span-5">

@@ -4,10 +4,10 @@
 // chat + dashboards render demo and live data. Day-granular bucketing keeps the
 // server render and client hydration in agreement.
 //
-// The chat itself is a scripted demo (initial transcript + cycling canned
-// replies), matching the design reference — there is no chat endpoint yet.
-// A few numbers (activity count, the long run, form %, the 14-day load bars)
-// are derived from the fixtures so the surrounding UI reads as live data.
+// The chat opens with a scripted demo transcript; live answers stream from
+// /api/ai/chat (the ChatPanel owns that flow). A few numbers (activity count,
+// the long run, form %, the 14-day load bars) are derived from the fixtures so
+// the surrounding UI reads as live data.
 
 import { RACE_DATE } from "@/lib/coach/engine";
 import { demoActivities } from "@/lib/demo/data";
@@ -39,8 +39,6 @@ export interface CoachView {
   initialMessages: ChatMessage[];
   /** Quick-prompt chips under the chat. */
   prompts: string[];
-  /** Coach replies, cycled one per user message. */
-  replies: string[];
   /** "Ugens fokus" — the week's headline recommendation (serif quote). */
   focusQuote: string;
   form: {
@@ -92,21 +90,6 @@ function windowAvgHr(now: Date, fromDaysAgo: number, toDaysAgo: number): number 
 /** Whole weeks until the goal race (never negative). */
 function weeksToRace(now: Date): number {
   return Math.max(0, Math.round((RACE_DATE.getTime() - now.getTime()) / (7 * DAY_MS)));
-}
-
-/** Half-marathon estimate from a run's average speed — "t:mm–t:mm" (± 2 min). */
-function estimateHalfMarathonRange(averageSpeed: number): string | null {
-  if (!averageSpeed || averageSpeed <= 0) return null;
-  const HALF_MARATHON_KM = 21.0975;
-  // Race pace runs a touch faster than training pace — a conservative 95%.
-  const estimateSec = (1000 / averageSpeed) * 0.95 * HALF_MARATHON_KM;
-  const fmt = (totalSec: number) => {
-    const totalMin = Math.round(totalSec / 60);
-    const h = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
-    return `${h}:${m.toString().padStart(2, "0")}`;
-  };
-  return `${fmt(estimateSec - 120)}–${fmt(estimateSec + 120)}`;
 }
 
 /** Longest run within the last `days`, or null when the window is empty. */
@@ -175,18 +158,6 @@ export function buildCoachView(now: Date = new Date()): CoachView {
   const lastWeek = getWeeklyVolume(demoActivities, 1);
   const trendRatio = lastWeek === 0 ? 1 : thisWeek / lastWeek;
 
-  const volDeltaPct = Math.round((trendRatio - 1) * 100);
-  const volLine =
-    volDeltaPct >= 0 ? `${volDeltaPct} % over sidste uge` : `${-volDeltaPct} % under sidste uge`;
-  const halfEstimate = estimateHalfMarathonRange(longRun.averageSpeed);
-
-  const replies = [
-    `Godt spørgsmål. Ud fra dine seneste ${demoActivities.length} ture ligger ugens volumen ${volLine}, og restitutionen er på ${pct} % — så jeg vil holde fast i torsdagens progressive pas og ellers prioritere rolige kilometer resten af ugen.`,
-    "Din uge ser balanceret ud med hovedvægten på rolig snak-fart og resten fordelt på moderat og hårdt. Vil du have, at jeg justerer søndagens lange tur, hvis vejret bliver varmt?",
-    halfEstimate
-      ? `Baseret på din nuværende form estimerer jeg en halvmarathontid på ${halfEstimate}. Silkeborg Halvmarathon om ${raceWeeks} uger er realistisk, hvis volumen holder.`
-      : `Silkeborg Halvmarathon er om ${raceWeeks} uger — hold volumen stabil, så tager vi en formvurdering, når der er flere ture i bogen.`,
-  ];
   const [trend, trendTone] =
     trendRatio > 1.05
       ? (["STIGENDE", "cobalt"] as const)
@@ -213,7 +184,6 @@ export function buildCoachView(now: Date = new Date()): CoachView {
     activityCount: demoActivities.length,
     initialMessages,
     prompts,
-    replies,
     focusQuote:
       "Progressiv 10 km torsdag — start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
     form: { pct, note, trend, trendTone },

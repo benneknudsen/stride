@@ -3,57 +3,116 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "@/components/cobalt/coach/MessageBubble";
 import type { ChatMessage, CoachView } from "@/lib/cobalt/coach";
+import type { ChatMessage as ApiChatMessage, ChatReply } from "@/types/chat";
 
 // Left column: the chat UI. Owns its own transcript, draft and typing state.
-// Sending a message appends the user bubble, shows the 3-dot typing indicator,
-// then appends the next cycled coach reply after ~1.4s. Quick-prompt chips send
-// canned questions; Enter or the round send button sends the draft.
+// Sending a message (typed, or via a quick-prompt chip) appends the user
+// bubble, shows the 3-dot typing indicator and streams the coach's answer from
+// /api/ai/chat — NDJSON, one `ChatReply` fragment per line, concatenated into
+// a single coach bubble when the stream ends. On failure an error bubble with
+// a "Prøv igen" button re-sends the same transcript.
 export function ChatPanel({
   initialMessages,
   prompts,
-  replies,
 }: {
   initialMessages: CoachView["initialMessages"];
   prompts: CoachView["prompts"];
-  replies: CoachView["replies"];
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
-  const replyIx = useRef(0);
+  const [failed, setFailed] = useState(false);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const replyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(
-    () => () => {
-      if (replyTimer.current) clearTimeout(replyTimer.current);
-    },
-    []
-  );
+  // Abort an in-flight stream when the panel unmounts.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   // Keep the newest message in view as the transcript grows.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing are the scroll triggers, not read in the body
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing/failed are the scroll triggers, not read in the body
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, typing]);
+  }, [messages, typing, failed]);
+
+  /** Panel transcript → the role/content shape the chat route expects. */
+  const toApiMessages = (transcript: ChatMessage[]): ApiChatMessage[] =>
+    transcript.map((m) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.text,
+    }));
+
+  /** One NDJSON line → its `content` fragment ("" for blanks and junk). */
+  const parseLine = (line: string): string => {
+    const trimmed = line.trim();
+    if (!trimmed) return "";
+    try {
+      const reply = JSON.parse(trimmed) as ChatReply;
+      return typeof reply.content === "string" ? reply.content : "";
+    } catch {
+      return "";
+    }
+  };
+
+  /** POST the transcript, accumulate the stream, land it as one coach bubble. */
+  const streamReply = async (transcript: ChatMessage[]) => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setFailed(false);
+    setTyping(true);
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: toApiMessages(transcript) }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`Request failed: ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let answer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let newline = buffer.indexOf("\n");
+        while (newline >= 0) {
+          answer += parseLine(buffer.slice(0, newline));
+          buffer = buffer.slice(newline + 1);
+          newline = buffer.indexOf("\n");
+        }
+      }
+      answer += parseLine(buffer);
+      if (!answer.trim()) throw new Error("empty_reply");
+
+      idRef.current += 1;
+      setMessages((prev) => [...prev, { id: `c${idRef.current}`, role: "coach", text: answer }]);
+      setTyping(false);
+    } catch {
+      // Unmounted mid-stream — never touch state after abort.
+      if (controller.signal.aborted) return;
+      setTyping(false);
+      setFailed(true);
+    }
+  };
 
   const send = (raw?: string) => {
     const text = (raw ?? draft).trim();
     if (!text || typing) return;
     idRef.current += 1;
-    const userMsg: ChatMessage = { id: `u${idRef.current}`, role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    const next: ChatMessage[] = [...messages, { id: `u${idRef.current}`, role: "user", text }];
+    setMessages(next);
     setDraft("");
-    setTyping(true);
-    const reply = replies[replyIx.current % replies.length];
-    replyIx.current += 1;
-    replyTimer.current = setTimeout(() => {
-      idRef.current += 1;
-      setMessages((prev) => [...prev, { id: `c${idRef.current}`, role: "coach", text: reply }]);
-      setTyping(false);
-    }, 1400);
+    void streamReply(next);
+  };
+
+  // The failed transcript already ends with the user's message — re-send as is.
+  const retry = () => {
+    if (typing) return;
+    void streamReply(messages);
   };
 
   return (
@@ -76,6 +135,21 @@ export function ChatPanel({
                   style={{ animationDelay: `${delay}s` }}
                 />
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {failed ? (
+          <div className="flex justify-start">
+            <div className="flex max-w-[82%] flex-col items-start gap-2.5 rounded-[18px_18px_18px_6px] border border-red/30 bg-white/60 px-[18px] py-[14px] text-[13.5px] leading-relaxed text-ink">
+              Coachen kunne ikke svare lige nu. Tjek din forbindelse og prøv igen.
+              <button
+                type="button"
+                onClick={retry}
+                className="rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
+              >
+                Prøv igen
+              </button>
             </div>
           </div>
         ) : null}
