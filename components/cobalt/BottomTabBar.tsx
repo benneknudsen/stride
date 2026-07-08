@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 // Mobile-only bottom navigation: a floating glass pill fixed to the bottom of the
@@ -15,7 +16,7 @@ const red = "var(--color-red)";
 const TABS: { label: string; href: string; icon: ReactNode }[] = [
   {
     label: "Hjem",
-    href: "/",
+    href: ROUTES.HOME,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3.5" y="3.5" width="7" height="7" rx="2" fill={cobalt} />
@@ -27,7 +28,7 @@ const TABS: { label: string; href: string; icon: ReactNode }[] = [
   },
   {
     label: "Aktiviteter",
-    href: "/aktiviteter",
+    href: ROUTES.AKTIVITETER,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path
@@ -43,7 +44,7 @@ const TABS: { label: string; href: string; icon: ReactNode }[] = [
   },
   {
     label: "Coach",
-    href: "/dashboard/coach",
+    href: ROUTES.DASHBOARD_COACH,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z" fill={red} />
@@ -52,7 +53,7 @@ const TABS: { label: string; href: string; icon: ReactNode }[] = [
   },
   {
     label: "Plan",
-    href: "/plan",
+    href: ROUTES.PLAN,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3.5" y="4.5" width="17" height="16" rx="3" stroke={cobalt} strokeWidth="2" />

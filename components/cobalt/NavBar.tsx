@@ -6,16 +6,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/cobalt/Logo";
 import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
 import { Wordmark } from "@/components/cobalt/Wordmark";
+import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 // Glass-pill navigation. Active route = cobalt pill with silver text. Coach
 // carries the red AI spark. The sync flow is self-contained (idle → syncing →
 // synced) so the bar works on any page; pass `onSync` to hook the real API.
 const LINKS = [
-  { label: "Hjem", href: "/" },
-  { label: "Aktiviteter", href: "/aktiviteter" },
-  { label: "Coach", href: "/dashboard/coach", spark: true },
-  { label: "Plan", href: "/plan" },
+  { label: "Hjem", href: ROUTES.HOME },
+  { label: "Aktiviteter", href: ROUTES.AKTIVITETER },
+  { label: "Coach", href: ROUTES.DASHBOARD_COACH, spark: true },
+  { label: "Plan", href: ROUTES.PLAN },
 ];
 
 export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: () => void }) {
@@ -41,7 +42,7 @@ export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: (
 
   return (
     <nav className="cg-glass mt-[18px] flex items-center justify-between gap-3 rounded-card px-4 py-2.5 md:gap-[18px] md:px-[22px] md:py-[13px]">
-      <Link href="/" className="flex items-center gap-3">
+      <Link href={ROUTES.HOME} className="flex items-center gap-3">
         <Logo />
         <Wordmark />
       </Link>

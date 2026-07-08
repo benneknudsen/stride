@@ -4,13 +4,14 @@ import { LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { ROUTES } from "@/lib/routes";
 
 export function SignOutButton() {
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
     startTransition(async () => {
-      await signOut({ callbackUrl: "/login" });
+      await signOut({ callbackUrl: ROUTES.LOGIN });
     });
   }
 

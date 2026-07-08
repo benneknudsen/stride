@@ -14,6 +14,7 @@ import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
 import { buildHomeView, greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
+import { ROUTES } from "@/lib/routes";
 
 function Bento({ span, delay, children }: { span: string; delay: number; children: ReactNode }) {
   return (
@@ -54,7 +55,7 @@ export default function DemoPage() {
           🏃 <strong className="text-cobalt">Demo-tilstand</strong> — data er fiktiv.
         </span>
         <a
-          href="/login"
+          href={ROUTES.LOGIN}
           className="rounded-card bg-cobalt px-4 py-1.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
         >
           Log ind

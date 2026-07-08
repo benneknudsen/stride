@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import NextAuth from "next-auth";
 import authConfig from "@/auth.config";
 import { buildCsp } from "@/lib/csp";
+import { ROUTES } from "@/lib/routes";
 
 // Build an edge-safe auth instance from the config that excludes nodemailer and
 // the Drizzle adapter. The full instance lives in lib/auth.ts (Node runtime).
@@ -27,17 +28,23 @@ export default auth((req) => {
   const isAuthed = !!req.auth;
 
   // Authenticated users have no reason to see the login page.
-  if (isAuthed && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", req.nextUrl));
+  if (isAuthed && pathname === ROUTES.LOGIN) {
+    return NextResponse.redirect(new URL(ROUTES.HOME, req.nextUrl));
   }
 
   // Protect all app routes (root /, /aktiviteter, /coach, /dashboard/*, /plan).
-  const APP_ROUTES = ["/", "/aktiviteter", "/coach", "/dashboard", "/plan"];
+  const APP_ROUTES: string[] = [
+    ROUTES.HOME,
+    ROUTES.AKTIVITETER,
+    ROUTES.COACH,
+    ROUTES.DASHBOARD,
+    ROUTES.PLAN,
+  ];
   const isProtected = APP_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
   if (!isAuthed && isProtected) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
+    return NextResponse.redirect(new URL(ROUTES.LOGIN, req.nextUrl));
   }
 
   // CSP is only consumed on the response; nothing reads it off the request, so
