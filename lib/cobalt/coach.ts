@@ -1,14 +1,20 @@
 // Cobalt Glass — Coach view-model.
-// Pure derivation (no React) from the demo fixture activities, mirroring
-// lib/cobalt/hjem.ts and lib/cobalt/aktiviteter.ts, so the same presentational
-// chat + dashboards render demo and live data. Day-granular bucketing keeps the
-// server render and client hydration in agreement.
+// Pure derivation (no React) from activity data, mirroring lib/cobalt/hjem.ts
+// and lib/cobalt/aktiviteter.ts, so the same presentational chat + dashboards
+// render demo and live data. Day-granular bucketing keeps the server render
+// and client hydration in agreement.
 //
-// The chat opens with a scripted demo transcript; live answers stream from
-// /api/ai/chat (the ChatPanel owns that flow). A few numbers (activity count,
-// the long run, form %, the 14-day load bars) are derived from the fixtures so
-// the surrounding UI reads as live data.
+// Two builders share the CoachView shape:
+//   - buildCoachView()      — the demo fallback: scripted transcript + fixture
+//                             numbers for unauthenticated visitors.
+//   - buildLiveCoachView()  — the authenticated path: focus, form and load are
+//                             derived from the coach dashboard (recommender +
+//                             progression engine) instead of scripted copy.
+//
+// The chat opens with welcome messages; live answers stream from /api/ai/chat
+// (the ChatPanel owns that flow).
 
+import type { CoachDashboardData } from "@/lib/coach/dashboard";
 import { RACE_DATE } from "@/lib/coach/engine";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
@@ -61,25 +67,42 @@ export interface CoachView {
   };
 }
 
+/** The activity fields the view-model reads — demo fixtures and DB rows both fit. */
+export interface CoachActivityLike {
+  startDate: Date;
+  /** Distance in meters. */
+  distance: number;
+  averageSpeed: number;
+  averageHeartrate: number;
+}
+
+/** The three quick-prompt chips under the chat — same in demo and live. */
+const COACH_PROMPTS = ["Analysér min uge", "Foreslå næste pas", "Er jeg klar til halvmarathon?"];
+
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
 /** Kilometres run on the calendar day `daysAgo` days before `now`. */
-function dailyKm(now: Date, daysAgo: number): number {
+function dailyKm(activities: CoachActivityLike[], now: Date, daysAgo: number): number {
   const target = startOfDay(new Date(now.getTime() - daysAgo * DAY_MS));
   let km = 0;
-  for (const a of demoActivities) {
+  for (const a of activities) {
     if (startOfDay(a.startDate) === target) km += a.distance / 1000;
   }
   return km;
 }
 
 /** Average heart rate across runs in the day-window (from, to] days ago, or null. */
-function windowAvgHr(now: Date, fromDaysAgo: number, toDaysAgo: number): number | null {
+function windowAvgHr(
+  activities: CoachActivityLike[],
+  now: Date,
+  fromDaysAgo: number,
+  toDaysAgo: number
+): number | null {
   const start = now.getTime() - toDaysAgo * DAY_MS;
   const end = now.getTime() - fromDaysAgo * DAY_MS;
-  const samples = demoActivities
+  const samples = activities
     .filter((a) => a.startDate.getTime() > start && a.startDate.getTime() <= end)
     .map((a) => a.averageHeartrate)
     .filter((hr) => hr > 0);
@@ -93,29 +116,87 @@ function weeksToRace(now: Date): number {
 }
 
 /** Longest run within the last `days`, or null when the window is empty. */
-function longestInWindow(now: Date, days: number) {
+function longestInWindow(activities: CoachActivityLike[], now: Date, days: number) {
   const from = now.getTime() - days * DAY_MS;
-  let best: (typeof demoActivities)[number] | null = null;
-  for (const a of demoActivities) {
+  let best: CoachActivityLike | null = null;
+  for (const a of activities) {
     if (a.startDate.getTime() < from) continue;
     if (!best || a.distance > best.distance) best = a;
   }
   return best;
 }
 
+// ── Training load (shared by demo + live) ───────────────────────────────────
+
+/**
+ * 14 daily bars of decayed acute load (each day = today + 6 prior days,
+ * 0.8-decayed) so every day carries a value and the shape reads like a rolling
+ * load, not raw km.
+ */
+function buildLoadBars(activities: CoachActivityLike[], now: Date): LoadBar[] {
+  const raw: number[] = [];
+  for (let d = 13; d >= 0; d--) {
+    let load = 0;
+    for (let k = 0; k < 7; k++) load += dailyKm(activities, now, d + k) * 0.8 ** k;
+    raw.push(load);
+  }
+  const maxLoad = Math.max(...raw, 1);
+  return raw.map((load, i) => ({
+    id: `d${i}`,
+    fraction: 0.18 + (load / maxLoad) * 0.82,
+    accent: i === raw.length - 1,
+  }));
+}
+
+/** Acute (7-day) ÷ chronic (28-day) daily-km ratio, or null without a base. */
+function acuteChronicRatio(activities: CoachActivityLike[], now: Date): number | null {
+  let acuteKm = 0;
+  let chronicKm = 0;
+  for (let d = 0; d < 28; d++) {
+    const km = dailyKm(activities, now, d);
+    if (d < 7) acuteKm += km;
+    chronicKm += km;
+  }
+  const chronicDaily = chronicKm / 28;
+  return chronicDaily > 0 ? acuteKm / 7 / chronicDaily : null;
+}
+
+/** Status chip values for the training-load card, mono uppercase. */
+export type LoadStatus = "AFKOBLING" | "OPTIMAL" | "SPÆNDING" | "RISIKO";
+
+/**
+ * Classify the acute:chronic ratio into the load-status chip (B8 fix — the chip
+ * used to be hardcoded "OPTIMAL"). Null (no chronic base yet) reads as optimal.
+ */
+export function loadStatusFromRatio(ratio: number | null): LoadStatus {
+  if (ratio === null) return "OPTIMAL";
+  if (ratio < 0.8) return "AFKOBLING";
+  if (ratio <= 1.3) return "OPTIMAL";
+  if (ratio <= 1.5) return "SPÆNDING";
+  return "RISIKO";
+}
+
+/** One-line plain-language read per load status — must never contradict the chip. */
+const LOAD_NOTES: Record<LoadStatus, string> = {
+  AFKOBLING: "Belastningen er faldende — der er plads til at bygge på igen.",
+  OPTIMAL: "Belastningen stiger gradvist — ingen tegn på overtræning.",
+  SPÆNDING: "Belastningen er højere end din base — hold ekstra øje med restitutionen.",
+  RISIKO: "Akut belastning langt over din base — skru ned og prioritér restitution.",
+};
+
 export function buildCoachView(now: Date = new Date()): CoachView {
   const latest = demoActivities[0];
 
   // Long run → message 3, derived from the real fixture so the numbers are live.
-  const longRun = longestInWindow(now, 7) ?? latest;
+  const longRun = longestInWindow(demoActivities, now, 7) ?? latest;
   const longRunKm = (longRun.distance / 1000).toFixed(1).replace(".", ",");
   const longRunPace = formatPace(longRun.averageSpeed);
   const longRunHr = longRun.averageHeartrate;
 
   // Every numeric claim in the transcript is derived from the fixtures — a
   // scripted chat must never assert data the surrounding dashboards contradict.
-  const avgHrLast7 = windowAvgHr(now, 0, 7);
-  const avgHrPrev7 = windowAvgHr(now, 7, 14);
+  const avgHrLast7 = windowAvgHr(demoActivities, now, 0, 7);
+  const avgHrPrev7 = windowAvgHr(demoActivities, now, 7, 14);
   const raceWeeks = weeksToRace(now);
 
   const hrTrendLine =
@@ -141,7 +222,7 @@ export function buildCoachView(now: Date = new Date()): CoachView {
     },
   ];
 
-  const prompts = ["Analysér min uge", "Foreslå næste pas", "Er jeg klar til halvmarathon?"];
+  const prompts = COACH_PROMPTS;
 
   // Form (readiness): same heuristic as the Hjem "Restitution" widget so the
   // two pages agree — lower recent HR reads as fresher legs.
@@ -165,20 +246,9 @@ export function buildCoachView(now: Date = new Date()): CoachView {
         ? (["FALDENDE", "red"] as const)
         : (["STABIL", "cobalt"] as const);
 
-  // 14-day training load: a decayed acute load (today + 6 prior days) so every
-  // day carries a value and the shape reads like a rolling load, not raw km.
-  const raw: number[] = [];
-  for (let d = 13; d >= 0; d--) {
-    let load = 0;
-    for (let k = 0; k < 7; k++) load += dailyKm(now, d + k) * 0.8 ** k;
-    raw.push(load);
-  }
-  const maxLoad = Math.max(...raw, 1);
-  const bars: LoadBar[] = raw.map((load, i) => ({
-    id: `d${i}`,
-    fraction: 0.18 + (load / maxLoad) * 0.82,
-    accent: i === raw.length - 1,
-  }));
+  // Load status from the acute:chronic ratio (B8 fix — no longer hardcoded).
+  const ratio = acuteChronicRatio(demoActivities, now);
+  const status = loadStatusFromRatio(ratio);
 
   return {
     activityCount: demoActivities.length,
@@ -188,9 +258,90 @@ export function buildCoachView(now: Date = new Date()): CoachView {
       "Progressiv 10 km torsdag — start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
     form: { pct, note, trend, trendTone },
     load: {
-      bars,
-      status: "OPTIMAL",
-      note: "Belastningen stiger gradvist — ingen tegn på overtræning.",
+      bars: buildLoadBars(demoActivities, now),
+      status,
+      note: LOAD_NOTES[status],
+    },
+  };
+}
+
+// ── Live view (authenticated) ───────────────────────────────────────────────
+
+/** Danish card labels per recommended run type. */
+const WORKOUT_LABELS = {
+  easy: "Rolig Zone 2-tur",
+  tempo: "Tempotur",
+  long: "Lang tur",
+} as const;
+
+/** The week's headline recommendation as one focus-card sentence. */
+function liveFocusQuote(workout: CoachDashboardData["workout"]): string {
+  if (workout.type === "rest") {
+    return workout.reason[0] ?? "Hviledag — restitution er en del af planen.";
+  }
+  return `${WORKOUT_LABELS[workout.type]} på ${workout.distanceKm} km — hold ${workout.paceRange.min}–${workout.paceRange.max} /km med puls under ${workout.heartRateCap}.`;
+}
+
+/**
+ * The Coach view for an authenticated user: focus, form and load come from the
+ * coach dashboard (recommender + progression engine) instead of scripted demo
+ * copy. The welcome transcript is generated from the same numbers, so the chat
+ * never asserts data the surrounding cards contradict.
+ */
+export function buildLiveCoachView(
+  dashboard: CoachDashboardData,
+  activities: CoachActivityLike[],
+  now: Date = new Date()
+): CoachView {
+  const { workout, loadGauge } = dashboard;
+  const ratio = loadGauge.ratio;
+
+  // Form (readiness) from the progression snapshot's acute:chronic ratio —
+  // readiness peaks when the load sits right on the chronic base (ratio ≈ 1).
+  const pct =
+    ratio === null ? 72 : Math.min(95, Math.max(55, Math.round(95 - Math.abs(ratio - 1) * 45)));
+  const note =
+    pct >= 80
+      ? "Klar til hårdt pas"
+      : pct >= 68
+        ? "Let træning anbefalet"
+        : "Prioritér hvile i dag";
+
+  const [trend, trendTone] =
+    ratio !== null && ratio > 1.05
+      ? (["STIGENDE", "cobalt"] as const)
+      : ratio !== null && ratio < 0.9
+        ? (["FALDENDE", "red"] as const)
+        : (["STABIL", "cobalt"] as const);
+
+  const status = loadStatusFromRatio(ratio);
+  const focusQuote = liveFocusQuote(workout);
+
+  const loadAnswer =
+    ratio === null
+      ? `Du har endnu ikke fire ugers historik, så belastningsbilledet er foreløbigt. ${LOAD_NOTES[status]}`
+      : `Din akut/kronisk-ratio er ${ratio.toFixed(2)} — status ${status}. ${LOAD_NOTES[status]}`;
+
+  const initialMessages: ChatMessage[] = [
+    {
+      id: "m1",
+      role: "coach",
+      text: `Godmorgen Benjamin! Din readiness er ${pct}% — ${note.toLowerCase()}. Ugens anbefaling: ${focusQuote}`,
+    },
+    { id: "m2", role: "user", text: "Hvordan ser min træningsbelastning ud?" },
+    { id: "m3", role: "coach", text: loadAnswer },
+  ];
+
+  return {
+    activityCount: activities.length,
+    initialMessages,
+    prompts: COACH_PROMPTS,
+    focusQuote,
+    form: { pct, note, trend, trendTone },
+    load: {
+      bars: buildLoadBars(activities, now),
+      status,
+      note: LOAD_NOTES[status],
     },
   };
 }
