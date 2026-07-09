@@ -88,9 +88,8 @@ export function BottomTabBar() {
             href={tab.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex min-h-[44px] min-w-[58px] flex-col items-center justify-center gap-[3px] rounded-tile transition-[opacity,transform]",
-              "active:scale-95",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cobalt",
+              "flex min-h-[44px] min-w-[58px] flex-col items-center justify-center gap-[3px] rounded-tile",
+              "cg-interactive transition-[opacity,transform]",
               active ? "opacity-100" : "opacity-55"
             )}
           >

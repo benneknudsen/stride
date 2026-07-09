@@ -297,12 +297,18 @@
 
 /* Shared keyboard-focus + touch-feedback affordance for interactive elements. */
 @utility cg-interactive {
+  transition: transform 150ms ease;
   &:focus-visible {
     outline: 2px solid var(--color-cobalt);
     outline-offset: 2px;
   }
   &:active {
     transform: scale(0.97);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active {
+      transform: none;
+    }
   }
 }
 
