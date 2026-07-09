@@ -1,10 +1,13 @@
 // Cobalt Glass — Aktiviteter (Activities) view-model.
-// Pure derivation (no React) from the demo fixture activities, mirroring
-// lib/cobalt/hjem.ts, so the same presentational rows render demo and live
-// data. Bucketing is day/month-granular, keeping server render and client
-// hydration in agreement.
+// Pure derivation (no React) from activity data, mirroring lib/cobalt/hjem.ts,
+// so the same presentational rows render demo and live data. Bucketing is
+// day/month-granular, keeping server render and client hydration in agreement.
+//
+// buildActivitiesView() defaults to the demo fixtures (the unauthenticated
+// fallback); the server page passes getDashboardActivities rows for signed-in
+// users (issue #84).
 
-import { type ZoneInfo, zoneForHeartRate } from "@/lib/cobalt/hjem";
+import { type HomeActivityLike, type ZoneInfo, zoneForHeartRate } from "@/lib/cobalt/hjem";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace } from "@/lib/metrics";
 
@@ -106,14 +109,26 @@ export interface ActivitiesView {
   rows: ActivityRowView[];
 }
 
-export function buildActivitiesView(now: Date = new Date()): ActivitiesView {
+/** Running activity types: "Run", "TrailRun", "VirtualRun", … */
+function isRun(activity: HomeActivityLike): boolean {
+  return /run/i.test(activity.type);
+}
+
+export function buildActivitiesView(
+  activities: HomeActivityLike[] = demoActivities,
+  now: Date = new Date()
+): ActivitiesView {
+  // Runs only — the totals ("N løb", km, timer) and the intensity filters read
+  // as running stats. Same predicate as lib/coach/dashboard.ts.
+  const runs = activities.filter(isRun);
+
   // "Month totals" window: from the start of the previous calendar month up to
   // now — a natural recent span that reads as e.g. "Juni – Juli".
   const windowStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
-  const inWindow = demoActivities.filter((a) => a.startDate.getTime() >= windowStart);
+  const inWindow = runs.filter((a) => a.startDate.getTime() >= windowStart);
 
   const rows: ActivityRowView[] = inWindow.map((a, i) => {
-    const zone = zoneForHeartRate(a.averageHeartrate);
+    const zone = zoneForHeartRate(a.averageHeartrate ?? 0);
     return {
       id: a.id,
       name: a.name,
@@ -124,13 +139,15 @@ export function buildActivitiesView(now: Date = new Date()): ActivitiesView {
       km: a.distance / 1000,
       paceLabel: formatPace(a.averageSpeed),
       paceTone: zone.tone,
-      hr: a.averageHeartrate,
+      hr: Math.round(a.averageHeartrate ?? 0),
     };
   });
 
+  // Live data can leave the window empty (all rows older than last month) —
+  // fall back to the current month so the header never reads "undefined".
   const months = inWindow.map((a) => a.startDate.getMonth());
-  const minMonth = Math.min(...months);
-  const maxMonth = Math.max(...months);
+  const minMonth = months.length > 0 ? Math.min(...months) : now.getMonth();
+  const maxMonth = months.length > 0 ? Math.max(...months) : now.getMonth();
   const periodLabel =
     minMonth === maxMonth
       ? DA_MONTHS_FULL[minMonth]

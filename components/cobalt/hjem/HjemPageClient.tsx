@@ -13,10 +13,10 @@ import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
-import { buildHomeView, greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
-import { demoActivities } from "@/lib/demo/data";
-import { ROUTES } from "@/lib/routes";
+import { greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
 
+// Widget wrapper applying the staggered fadeUp entrance. `span` is the 12-col
+// grid span; `delay` staggers each widget's reveal.
 function Bento({ span, delay, children }: { span: string; delay: number; children: ReactNode }) {
   return (
     <div
@@ -28,55 +28,50 @@ function Bento({ span, delay, children }: { span: string; delay: number; childre
   );
 }
 
-export default function DemoPage() {
-  const [view, setView] = useState<HomeView | null>(null);
-  const [greeting, setGreeting] = useState("");
-  const [ready, setReady] = useState(false);
+// Hjem (Dashboard) — the Cobalt Glass bento. Owns the client-only loading
+// choreography the server page can't: for the first ~2s the page shows nothing
+// but a centered RunnerLoader; when it lifts, the whole view (hero + widgets)
+// appears at once with the hero km counting up and every widget animation
+// running. The view itself is built server-side (demo or live) and arrives as
+// a plain-JSON prop; the greeting stays client-side so it follows the
+// visitor's clock, not the server's.
+export function HjemPageClient({ view }: { view: HomeView }) {
+  const [loading, setLoading] = useState(true);
+  const [greeting] = useState(() => greetingForHour(new Date().getHours()));
 
   useEffect(() => {
-    const now = new Date();
-    setView(buildHomeView(demoActivities, now));
-    setGreeting(greetingForHour(now.getHours()));
-    setTimeout(() => setReady(true), 2000);
+    const timer = setTimeout(() => setLoading(false), 2000);
+    return () => clearTimeout(timer);
   }, []);
 
-  if (!view) {
+  const started = !loading;
+
+  // Loading: only the loader is on screen — no data leaks through.
+  if (loading) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5">
-        <RunnerLoader size={70} label="HENTER DEMO DATA…" />
-      </div>
+      <main className="flex min-h-[60vh] items-center justify-center">
+        <RunnerLoader label="HENTER DINE DATA…" />
+      </main>
     );
   }
 
   return (
-    <>
-      {/* Demo banner */}
-      <div className="mb-6 flex items-center justify-between rounded-card border border-cobalt/10 bg-white/60 px-5 py-3 shadow-glass backdrop-blur-xl">
-        <span className="text-[13px] text-ink/70">
-          🏃 <strong className="text-cobalt">Demo-tilstand</strong> — data er fiktiv.
-        </span>
-        <a
-          href={ROUTES.LOGIN}
-          className="cg-interactive rounded-card bg-cobalt px-4 py-1.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          Log ind
-        </a>
-      </div>
-
+    <main>
       <Hero
         weekNumber={view.weekNumber}
         weeklyKm={view.weeklyKm}
         greeting={greeting}
-        started={ready}
+        started={started}
       />
 
-      <div className="relative pt-4">
+      <div className="pt-4">
         <div className="grid grid-cols-12 gap-4">
           <Bento span="col-span-12" delay={0.05}>
-            <PlanStrip {...view.plan} started={ready} />
+            <PlanStrip {...view.plan} started={started} />
           </Bento>
+
           <Bento span="col-span-12 lg:col-span-6" delay={0.12}>
-            <LatestActivityCard latest={view.latest} started={ready} />
+            <LatestActivityCard latest={view.latest} started={started} />
           </Bento>
           <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.18}>
             <RouteCard
@@ -90,18 +85,20 @@ export default function DemoPage() {
               paceLabel={view.avgPaceLabel}
               fraction={view.avgPaceFraction}
               deltaLabel={view.avgPaceDeltaLabel}
-              started={ready}
+              started={started}
             />
           </Bento>
+
           <Bento span="col-span-12 sm:col-span-6 lg:col-span-4" delay={0.3}>
-            <VolumeCard bars={view.volumeBars} started={ready} />
+            <VolumeCard bars={view.volumeBars} started={started} />
           </Bento>
           <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.36}>
-            <RecoveryCard pct={view.recoveryPct} note={view.recoveryNote} started={ready} />
+            <RecoveryCard pct={view.recoveryPct} note={view.recoveryNote} started={started} />
           </Bento>
           <Bento span="col-span-12 lg:col-span-5" delay={0.42}>
             <AiCoachCard quote={view.coachQuote} />
           </Bento>
+
           <Bento span="col-span-12 lg:col-span-7" delay={0.48}>
             <RecentRunsCard runs={view.recentRuns} />
           </Bento>
@@ -110,6 +107,6 @@ export default function DemoPage() {
           </Bento>
         </div>
       </div>
-    </>
+    </main>
   );
 }
