@@ -1,74 +1,24 @@
-"use client";
+import { AktiviteterPageClient } from "@/components/cobalt/aktiviteter/AktiviteterPageClient";
+import { auth } from "@/lib/auth";
+import { buildActivitiesView } from "@/lib/cobalt/aktiviteter";
+import { getDashboardActivities } from "@/lib/db/queries";
 
-import { useEffect, useMemo, useState } from "react";
-import { ActivitiesHeader } from "@/components/cobalt/aktiviteter/ActivitiesHeader";
-import { ActivityRow } from "@/components/cobalt/aktiviteter/ActivityRow";
-import { FilterChips } from "@/components/cobalt/aktiviteter/FilterChips";
-import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
-import { type ActivityFilter, buildActivitiesView } from "@/lib/cobalt/aktiviteter";
+// Aktiviteter (issue #84) — a Server Component that builds the view-model per
+// request: authenticated users get live data (getDashboardActivities),
+// visitors — and signed-in users with no synced runs yet — get the demo
+// fixtures. Mirrors app/(app)/coach/page.tsx. The client wrapper owns the
+// loading overlay + filter state.
+//
+// force-dynamic: the month window and row meta labels are relative to the
+// clock and the session, so every request computes fresh data.
+export const dynamic = "force-dynamic";
 
-// Aktiviteter (Activities) — the Cobalt Glass list page. Nav + header stay
-// interactive while one overlay covers the widget area (chips + list) for ~2s;
-// when it lifts, the month totals count up and each row fades up in sequence.
-export default function AktiviteterPage() {
-  const view = useMemo(() => buildActivitiesView(), []);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<ActivityFilter>("alle");
+export default async function AktiviteterPage() {
+  const session = await auth();
+  const userId = session?.user?.id;
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2000);
-    return () => clearTimeout(timer);
-  }, []);
+  const activities = userId ? await getDashboardActivities(userId) : [];
+  const view = activities.length > 0 ? buildActivitiesView(activities) : buildActivitiesView();
 
-  const started = !loading;
-  const rows = filter === "alle" ? view.rows : view.rows.filter((r) => r.category === filter);
-
-  return (
-    <main>
-      <ActivitiesHeader
-        periodLabel={view.periodLabel}
-        totalKm={view.totalKm}
-        totalRuns={view.totalRuns}
-        totalSeconds={view.totalSeconds}
-        started={started}
-      />
-
-      {/* Widget area: covered by one loading overlay; nav + header stay clickable. */}
-      <div className="relative pt-2">
-        <div className="pt-[10px] pb-4 [animation:cg-fade-up_0.6s_0.1s_ease_both] motion-reduce:[animation:none]">
-          <FilterChips active={filter} onChange={setFilter} />
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {rows.map((row, i) => (
-            <div
-              key={row.id}
-              className="[animation:cg-fade-up_0.5s_ease_both] motion-reduce:[animation:none]"
-              style={{ animationDelay: `${Math.min(i * 0.05, 0.4)}s` }}
-            >
-              <ActivityRow row={row} />
-            </div>
-          ))}
-
-          {rows.length === 0 ? (
-            <div className="rounded-card border border-dashed border-cobalt/25 bg-white/35 p-10 text-center text-[14px] text-ink">
-              Ingen ture matcher filteret.
-            </div>
-          ) : null}
-        </div>
-
-        <p className="mt-[18px] px-2 text-[12px] text-ink [animation:cg-fade-up_0.6s_0.2s_ease_both] motion-reduce:[animation:none]">
-          Intensitet måles ud fra din puls:{" "}
-          <strong className="font-semibold text-cobalt">rolig er snak-fart</strong>, moderat er
-          behageligt hårdt,{" "}
-          <strong className="font-semibold text-red">
-            hårdt til maks er tempo- og intervalarbejde
-          </strong>
-          .
-        </p>
-
-        <LoadingOverlay show={loading} label="HENTER DINE TURE…" />
-      </div>
-    </main>
-  );
+  return <AktiviteterPageClient view={view} />;
 }

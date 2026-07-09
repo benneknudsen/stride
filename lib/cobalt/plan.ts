@@ -4,8 +4,13 @@
 // from the shared home view so the countdown stays in sync across pages. The plan
 // *prescription* — phase timeline, this week's sessions, the upcoming block and
 // the race targets — is fixed marathon-plan content, matching the design.
+//
+// buildPlanView() defaults to the demo fixtures (the unauthenticated fallback);
+// the server page passes getDashboardActivities rows for signed-in users
+// (issue #84), so the live parts derive from real training data.
 
-import { buildHomeView, RACE_DATE } from "@/lib/cobalt/hjem";
+import { buildHomeView, type HomeActivityLike, RACE_DATE } from "@/lib/cobalt/hjem";
+import { demoActivities } from "@/lib/demo/data";
 
 const DA_WEEKDAYS = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
 const DA_MONTHS_SHORT = [
@@ -108,8 +113,11 @@ export interface PlanView {
   };
 }
 
-export function buildPlanView(now: Date = new Date()): PlanView {
-  const home = buildHomeView(now);
+export function buildPlanView(
+  activities: HomeActivityLike[] = demoActivities,
+  now: Date = new Date()
+): PlanView {
+  const home = buildHomeView(activities, now);
   const weekOfPlan = home.plan.weekOfPlan;
   const totalWeeks = home.plan.totalWeeks;
   const daysToRace = home.plan.daysToRace;
