@@ -13,7 +13,7 @@ export function FocusCard({ quote }: { quote: string }) {
       <p className="m-0 font-cg-serif text-[21px] italic leading-[1.35] text-silver">»{quote}«</p>
       <Link
         href={ROUTES.PLAN}
-        className="mt-4 inline-block rounded-pill bg-silver px-5 py-2.5 text-[13px] font-semibold text-cobalt transition-colors hover:bg-white"
+        className="cg-interactive mt-4 inline-block rounded-pill bg-silver px-5 py-2.5 text-[13px] font-semibold text-cobalt transition-colors hover:bg-white"
       >
         Se i planen →
       </Link>

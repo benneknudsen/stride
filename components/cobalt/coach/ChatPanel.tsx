@@ -146,7 +146,7 @@ export function ChatPanel({
               <button
                 type="button"
                 onClick={retry}
-                className="rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
+                className="cg-interactive rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
               >
                 Prøv igen
               </button>
@@ -162,7 +162,7 @@ export function ChatPanel({
             key={prompt}
             type="button"
             onClick={() => send(prompt)}
-            className="rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
+            className="cg-interactive rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
           >
             {prompt}
           </button>
@@ -179,13 +179,13 @@ export function ChatPanel({
           }}
           placeholder="Skriv til din coach…"
           aria-label="Skriv til din coach"
-          className="min-w-0 flex-1 rounded-pill border border-white/90 bg-white/65 px-5 py-[13px] font-cg-sans text-[14.5px] text-cobalt outline-none placeholder:text-ink/70 focus:border-cobalt/40"
+          className="min-w-0 flex-1 rounded-pill border border-white/90 bg-white/65 px-5 py-[13px] font-cg-sans text-[16px] text-cobalt outline-none placeholder:text-ink/70 focus:border-cobalt/40 sm:text-[14px]"
         />
         <button
           type="button"
           onClick={() => send()}
           aria-label="Send besked"
-          className="flex size-[46px] flex-none items-center justify-center rounded-full bg-cobalt text-silver transition-colors hover:bg-cobalt-light"
+          className="cg-interactive flex size-[46px] flex-none items-center justify-center rounded-full bg-cobalt text-silver transition-colors hover:bg-cobalt-light"
         >
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path

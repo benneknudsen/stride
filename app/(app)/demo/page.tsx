@@ -56,7 +56,7 @@ export default function DemoPage() {
         </span>
         <a
           href={ROUTES.LOGIN}
-          className="rounded-card bg-cobalt px-4 py-1.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+          className="cg-interactive rounded-card bg-cobalt px-4 py-1.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
         >
           Log ind
         </a>
@@ -92,13 +92,13 @@ export default function DemoPage() {
               started={ready}
             />
           </Bento>
-          <Bento span="col-span-12 sm:col-span-4" delay={0.3}>
+          <Bento span="col-span-12 sm:col-span-6 lg:col-span-4" delay={0.3}>
             <VolumeCard bars={view.volumeBars} started={ready} />
           </Bento>
-          <Bento span="col-span-12 sm:col-span-3" delay={0.36}>
+          <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.36}>
             <RecoveryCard pct={view.recoveryPct} note={view.recoveryNote} started={ready} />
           </Bento>
-          <Bento span="col-span-12 sm:col-span-5" delay={0.42}>
+          <Bento span="col-span-12 lg:col-span-5" delay={0.42}>
             <AiCoachCard quote={view.coachQuote} />
           </Bento>
           <Bento span="col-span-12 lg:col-span-7" delay={0.48}>

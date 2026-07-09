@@ -21,7 +21,7 @@ export function WeekStrip({ days }: { days: WeekStripDay[] }) {
       <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink">
         Ugens plan
       </span>
-      <div className="mt-3 grid grid-cols-7 gap-1.5">
+      <div className="mt-3 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-7 sm:overflow-visible">
         {days.map((day) => {
           const isRest = day.type === "rest";
           return (
@@ -30,7 +30,7 @@ export function WeekStrip({ days }: { days: WeekStripDay[] }) {
               aria-current={day.isToday ? "date" : undefined}
               title={day.description}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-tile px-1 py-2.5 text-center",
+                "flex w-[76px] shrink-0 flex-col items-center gap-1 rounded-tile px-1 py-2.5 text-center sm:w-auto",
                 day.isNext ? "bg-red text-onred" : isRest ? "text-ink/50" : "text-cobalt",
                 day.isToday && !day.isNext && "ring-2 ring-cobalt"
               )}

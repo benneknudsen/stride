@@ -201,7 +201,7 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
           type="button"
           onClick={regenerate}
           disabled={status === "streaming"}
-          className="rounded-pill border border-cobalt/25 px-[14px] py-[6px] text-[11.5px] font-medium text-cobalt transition-colors hover:bg-cobalt/8 disabled:cursor-default disabled:opacity-50"
+          className="cg-interactive rounded-pill border border-cobalt/25 px-[14px] py-[6px] text-[11.5px] font-medium text-cobalt transition-colors hover:bg-cobalt/8 disabled:cursor-default disabled:opacity-50"
         >
           {status === "streaming" ? "Analyserer…" : "Genanalyser"}
         </button>

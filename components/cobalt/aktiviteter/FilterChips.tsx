@@ -31,7 +31,7 @@ export function FilterChips({
             onClick={() => onChange(f.key)}
             aria-pressed={isActive}
             className={cn(
-              "shrink-0 rounded-pill px-[18px] py-2 font-cg-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
+              "cg-interactive shrink-0 rounded-pill px-[18px] py-2 font-cg-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
               isActive
                 ? "border border-cobalt bg-cobalt text-silver"
                 : "cg-glass text-ink hover:text-cobalt"

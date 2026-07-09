@@ -40,7 +40,7 @@ export function PhaseTimeline({
 }) {
   return (
     <GlassCard className="rounded-card px-6 py-5">
-      <div className="mb-2.5 flex justify-between font-cg-mono text-[10px] uppercase tracking-[0.14em]">
+      <div className="mb-2.5 flex justify-between font-cg-mono text-[9px] uppercase tracking-[0.06em] sm:text-[10px] sm:tracking-[0.14em]">
         {markers.map((m) => (
           <span key={m.label} className={LABEL_TONE[m.state]}>
             {m.label}

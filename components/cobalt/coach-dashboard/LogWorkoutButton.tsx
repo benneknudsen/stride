@@ -12,7 +12,7 @@ export function LogWorkoutButton({ disabled = false }: { disabled?: boolean }) {
       type="button"
       disabled={disabled || logged}
       onClick={() => setLogged(true)}
-      className="rounded-pill bg-silver px-[18px] py-[9px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60"
+      className="cg-interactive rounded-pill bg-silver px-[18px] py-[9px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60"
     >
       {logged ? "Logført ✓" : "Logfør dette pas"}
     </button>

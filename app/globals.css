@@ -295,6 +295,17 @@
   box-shadow: var(--cg-glass-shadow-cobalt);
 }
 
+/* Shared keyboard-focus + touch-feedback affordance for interactive elements. */
+@utility cg-interactive {
+  &:focus-visible {
+    outline: 2px solid var(--color-cobalt);
+    outline-offset: 2px;
+  }
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
 /* ── Cobalt Glass keyframes (cg- prefixed to stay self-contained) ── */
 @keyframes cg-drift1 {
   0%,

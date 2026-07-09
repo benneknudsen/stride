@@ -63,7 +63,7 @@ export function DataSourcesCard() {
             <button
               type="button"
               onClick={() => setStravaConnected(true)}
-              className="rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+              className="cg-interactive rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
               style={{ background: "var(--color-strava)" }}
             >
               Forbind

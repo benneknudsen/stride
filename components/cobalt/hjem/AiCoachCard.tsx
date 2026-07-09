@@ -24,13 +24,13 @@ export function AiCoachCard({ quote }: { quote: string }) {
       <div className="flex flex-wrap gap-3">
         <Link
           href={ROUTES.COACH}
-          className="rounded-pill bg-silver px-[18px] py-[9px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-white"
+          className="cg-interactive rounded-pill bg-silver px-[18px] py-[9px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-white"
         >
           Spørg coach
         </Link>
         <Link
           href={ROUTES.PLAN}
-          className="rounded-pill border border-silver/50 px-[18px] py-[9px] text-[12.5px] font-medium text-silver transition-colors hover:bg-silver/12"
+          className="cg-interactive rounded-pill border border-silver/50 px-[18px] py-[9px] text-[12.5px] font-medium text-silver transition-colors hover:bg-silver/12"
         >
           Ugens plan
         </Link>

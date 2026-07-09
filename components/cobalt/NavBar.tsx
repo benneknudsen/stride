@@ -56,7 +56,7 @@ export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: (
               href={link.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-1.5 rounded-pill px-[18px] py-[7px] transition-colors",
+                "cg-interactive flex items-center gap-1.5 rounded-pill px-[18px] py-[7px] transition-colors",
                 active ? "bg-cobalt text-silver" : "text-ink hover:text-cobalt"
               )}
             >

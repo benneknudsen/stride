@@ -32,7 +32,7 @@ export function RaceDayCard({ race, daysToRace }: { race: PlanView["race"]; days
         {race.dayLabel}
       </div>
 
-      <div className="mt-[18px] flex gap-[26px]">
+      <div className="mt-[18px] flex flex-wrap gap-[26px]">
         <Stat value={race.goalTime} label="Måltid" />
         <Stat value={race.racePace} label="Race-pace /km" />
         <Stat value={race.aiEstimate} label="AI-estimat" />
