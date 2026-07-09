@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { activities, users } from "@/drizzle/schema";
 import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
+import { revalidateDashboardActivities } from "@/lib/db/queries";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
 
@@ -115,6 +116,7 @@ export async function POST(req: NextRequest) {
         );
     });
     revalidateProgression();
+    revalidateDashboardActivities(user.id);
     return NextResponse.json({ ok: true });
   }
 
@@ -156,6 +158,7 @@ export async function POST(req: NextRequest) {
           });
       });
       revalidateProgression();
+      revalidateDashboardActivities(user.id);
     } catch {
       // Don't fail the webhook — Strava will retry
       return NextResponse.json({ ok: true });

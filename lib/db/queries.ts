@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { cache } from "react";
 import {
   accounts,
@@ -19,6 +20,18 @@ import { db } from "./index";
  */
 const DASHBOARD_WINDOW_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * TTL for the dashboard activities cache (issue #57) — activities rarely
+ * change within a minute, so a short revalidation window absorbs repeat
+ * dashboard loads between requests without serving meaningfully stale data.
+ */
+const DASHBOARD_ACTIVITIES_TTL_SECONDS = 60;
+
+/** Cache tag scoping a user's dashboard-activities cache entries for targeted invalidation. */
+function dashboardActivitiesTag(userId: string): string {
+  return `dashboard-activities:${userId}`;
+}
 
 /**
  * Typed query functions. Every read that returns user-owned data takes a
@@ -161,36 +174,64 @@ export const getActivities = cache(async (userId: string, options: GetActivities
  *
  * Bounded to the last {@link DASHBOARD_WINDOW_DAYS} days by default so the read
  * stays cheap as a user's history grows (issue #63); pass `sinceDays` to widen
- * or narrow the window. Wrapped in React `cache()` for per-request dedup — the
- * six dashboard components that slice this share a single query per render.
+ * or narrow the window.
+ *
+ * Two cache layers, per issue #57: React `cache()` dedupes repeat calls within
+ * a single render (the six dashboard components that slice this share one
+ * query per request), and `unstable_cache` wraps the actual query with a
+ * {@link DASHBOARD_ACTIVITIES_TTL_SECONDS}s TTL so it also survives *across*
+ * requests — activities change rarely enough that a one-minute-stale read is
+ * an acceptable trade for skipping the DB round trip. The TTL cache is tagged
+ * per-user so a sync or webhook write can invalidate just that user's entry
+ * (see {@link revalidateDashboardActivities}).
  */
 export const getDashboardActivities = cache(
   async (userId: string, sinceDays: number = DASHBOARD_WINDOW_DAYS) => {
-    const since = new Date(Date.now() - sinceDays * DAY_MS);
-    try {
-      return await db
-        .select({
-          id: activities.id,
-          name: activities.name,
-          type: activities.type,
-          startDate: activities.startDate,
-          distance: activities.distance,
-          movingTime: activities.movingTime,
-          averageSpeed: activities.averageSpeed,
-          averageHeartrate: activities.averageHeartrate,
-          averageCadence: activities.averageCadence,
-          totalElevationGain: activities.totalElevationGain,
-          hrZones: activities.hrZones,
-        })
-        .from(activities)
-        .where(and(eq(activities.userId, userId), gte(activities.startDate, since)))
-        .orderBy(desc(activities.startDate))
-        .limit(500);
-    } catch {
-      return [];
-    }
+    // Defensive: an empty/undefined userId would otherwise poison the cache key
+    // and query every user's activities-window with a falsy owner filter.
+    if (!userId) return [];
+    return unstable_cache(
+      async () => {
+        const since = new Date(Date.now() - sinceDays * DAY_MS);
+        try {
+          return await db
+            .select({
+              id: activities.id,
+              name: activities.name,
+              type: activities.type,
+              startDate: activities.startDate,
+              distance: activities.distance,
+              movingTime: activities.movingTime,
+              averageSpeed: activities.averageSpeed,
+              averageHeartrate: activities.averageHeartrate,
+              averageCadence: activities.averageCadence,
+              totalElevationGain: activities.totalElevationGain,
+              hrZones: activities.hrZones,
+            })
+            .from(activities)
+            .where(and(eq(activities.userId, userId), gte(activities.startDate, since)))
+            .orderBy(desc(activities.startDate))
+            .limit(500);
+        } catch {
+          return [];
+        }
+      },
+      ["dashboard-activities", userId, String(sinceDays)],
+      { revalidate: DASHBOARD_ACTIVITIES_TTL_SECONDS, tags: [dashboardActivitiesTag(userId)] }
+    )();
   }
 );
+
+/**
+ * Expire a user's dashboard-activities TTL cache immediately. Called by the
+ * Strava webhook and sync routes when that user's activity data changes, so
+ * the 60s cache never serves a dashboard read older than the newest sync —
+ * same `expire: 0` hard-expiry pattern as {@link revalidateProgression} in
+ * `lib/coach/dashboard-data.ts`.
+ */
+export function revalidateDashboardActivities(userId: string): void {
+  revalidateTag(dashboardActivitiesTag(userId), { expire: 0 });
+}
 
 /**
  * A single row from {@link getDashboardActivities} — the projected activity

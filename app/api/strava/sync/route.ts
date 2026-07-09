@@ -5,6 +5,7 @@ import { activities } from "@/drizzle/schema";
 import { auth } from "@/lib/auth";
 import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
+import { revalidateDashboardActivities } from "@/lib/db/queries";
 import { rateLimit } from "@/lib/rate-limit";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaSummaryToDb } from "@/lib/strava/mappers";
@@ -86,6 +87,7 @@ export async function POST(_req: NextRequest) {
 
     if (inserted > 0) {
       revalidateProgression();
+      revalidateDashboardActivities(userId);
     }
 
     return NextResponse.json({ ok: true, inserted });
