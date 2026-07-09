@@ -51,7 +51,7 @@ export function SyncButton({
       type="button"
       onClick={onSync}
       className={cn(
-        "inline-flex items-center gap-2 rounded-pill bg-cobalt px-[18px] py-2 text-[12.5px] font-semibold text-silver transition-colors hover:bg-cobalt-light",
+        "cg-interactive inline-flex items-center gap-2 rounded-pill bg-cobalt px-[18px] py-2 text-[12.5px] font-semibold text-silver transition-colors hover:bg-cobalt-light",
         className
       )}
       style={{ boxShadow: "0 6px 20px rgba(27, 41, 192, 0.25)" }}

@@ -106,7 +106,7 @@ export function WeekCalendar({
 
   return (
     <section>
-      <div className="flex items-baseline justify-between px-2 pt-[26px] pb-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-2 pt-[26px] pb-3">
         <span className="font-cg-serif text-[24px] italic text-cobalt">
           Denne uge — uge {weekOfPlan}
         </span>

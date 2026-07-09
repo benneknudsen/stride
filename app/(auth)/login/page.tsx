@@ -69,12 +69,12 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={busy}
-              className="w-full rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] text-cobalt placeholder:text-ink/40 outline-none transition-colors focus:border-cobalt/40"
+              className="w-full rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[16px] text-cobalt placeholder:text-ink/40 outline-none transition-colors focus:border-cobalt/40 sm:text-[14px]"
             />
             <button
               type="submit"
               disabled={busy || !email}
-              className="flex w-full items-center justify-center gap-2 rounded-card bg-cobalt px-4 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="cg-interactive flex w-full items-center justify-center gap-2 rounded-card bg-cobalt px-4 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {emailLoading ? (
                 <>
@@ -104,7 +104,7 @@ export default function LoginPage() {
           type="button"
           disabled={busy}
           onClick={() => handleOAuth("google")}
-          className="flex w-full items-center justify-center gap-2 rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.03] disabled:opacity-50"
+          className="cg-interactive flex w-full items-center justify-center gap-2 rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.03] disabled:opacity-50"
         >
           {oauthLoading === "google" ? (
             <Loader2 size={16} className="animate-spin" />
@@ -116,7 +116,7 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-[13px] text-ink/60">
           Kigger du bare?{" "}
-          <Link href={ROUTES.DEMO} className="font-semibold text-cobalt hover:underline">
+          <Link href={ROUTES.DEMO} className="cg-interactive font-semibold text-cobalt hover:underline">
             Prøv demoen
           </Link>
         </p>

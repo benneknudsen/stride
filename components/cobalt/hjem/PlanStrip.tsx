@@ -23,7 +23,7 @@ export function PlanStrip({
   return (
     <GlassCard className="flex flex-wrap items-center gap-x-6 gap-y-4 rounded-card px-[22px] py-[16px]">
       <Logo size={40} radius={12} />
-      <div className="min-w-[180px]">
+      <div className="min-w-0">
         <div className="font-cg-display text-[16px] font-bold tracking-[-0.02em] text-cobalt">
           Marathonplan · CPH Marathon
         </div>
@@ -32,7 +32,7 @@ export function PlanStrip({
         </div>
       </div>
 
-      <div className="flex min-w-[200px] flex-1 items-center gap-4">
+      <div className="flex min-w-0 flex-1 items-center gap-4">
         <span className="hidden font-cg-mono text-[10px] uppercase tracking-[0.16em] text-ink sm:inline">
           Uge {weekOfPlan} af {totalWeeks}
         </span>
@@ -57,7 +57,7 @@ export function PlanStrip({
 
       <button
         type="button"
-        className="rounded-pill border px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
+        className="cg-interactive rounded-pill border px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
         style={{ borderColor: "rgba(27, 41, 192, 0.3)" }}
       >
         Se plan →
