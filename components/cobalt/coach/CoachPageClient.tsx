@@ -24,14 +24,14 @@ function Panel({ delay, children }: { delay: number; children: ReactNode }) {
 
 // The Cobalt Glass coach layout. Owns the client-only loading choreography the
 // server page can't: nav + header stay interactive while one overlay covers the
-// two-column area (chat + dashboards) for ~2s; when it lifts, the form bar and
+// two-column area (chat + dashboards) for a beat; when it lifts, the form bar and
 // 14-day load bars animate in. The view itself is built server-side (demo or
 // live) and arrives as a plain-JSON prop.
 export function CoachPageClient({ view }: { view: CoachView }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2000);
+    const timer = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
 

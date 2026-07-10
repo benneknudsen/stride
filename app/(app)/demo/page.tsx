@@ -37,7 +37,8 @@ export default function DemoPage() {
     const now = new Date();
     setView(buildHomeView(demoActivities, now));
     setGreeting(greetingForHour(now.getHours()));
-    setTimeout(() => setReady(true), 2000);
+    const timer = setTimeout(() => setReady(true), 300);
+    return () => clearTimeout(timer);
   }, []);
 
   if (!view) {
