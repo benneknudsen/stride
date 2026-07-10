@@ -12,7 +12,7 @@ import { RecentRunsCard } from "@/components/cobalt/hjem/RecentRunsCard";
 import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
-import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
+import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
 import { greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
 
 // Widget wrapper applying the staggered fadeUp entrance. `span` is the 12-col
@@ -29,31 +29,22 @@ function Bento({ span, delay, children }: { span: string; delay: number; childre
 }
 
 // Hjem (Dashboard) — the Cobalt Glass bento. Owns the client-only loading
-// choreography the server page can't: for the first ~2s the page shows nothing
-// but a centered RunnerLoader; when it lifts, the whole view (hero + widgets)
-// appears at once with the hero km counting up and every widget animation
-// running. The view itself is built server-side (demo or live) and arrives as
-// a plain-JSON prop; the greeting stays client-side so it follows the
-// visitor's clock, not the server's.
+// choreography the server page can't: hero + nav stay visible (the hero km
+// pulses at "0,0") while one overlay covers the widget grid for a beat; when
+// it lifts, the km counts up and every widget animation runs. The view itself
+// is built server-side (demo or live) and arrives as a plain-JSON prop; the
+// greeting stays client-side so it follows the visitor's clock, not the
+// server's.
 export function HjemPageClient({ view }: { view: HomeView }) {
   const [loading, setLoading] = useState(true);
   const [greeting] = useState(() => greetingForHour(new Date().getHours()));
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2000);
+    const timer = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
 
   const started = !loading;
-
-  // Loading: only the loader is on screen — no data leaks through.
-  if (loading) {
-    return (
-      <main className="flex min-h-[60vh] items-center justify-center">
-        <RunnerLoader label="HENTER DINE DATA…" />
-      </main>
-    );
-  }
 
   return (
     <main>
@@ -64,7 +55,8 @@ export function HjemPageClient({ view }: { view: HomeView }) {
         started={started}
       />
 
-      <div className="pt-4">
+      {/* Widget grid: covered by one loading overlay; nav + hero stay visible. */}
+      <div className="relative pt-4">
         <div className="grid grid-cols-12 gap-4">
           <Bento span="col-span-12" delay={0.05}>
             <PlanStrip {...view.plan} started={started} />
@@ -106,6 +98,8 @@ export function HjemPageClient({ view }: { view: HomeView }) {
             <DataSourcesCard />
           </Bento>
         </div>
+
+        <LoadingOverlay show={loading} label="HENTER DINE DATA…" />
       </div>
     </main>
   );

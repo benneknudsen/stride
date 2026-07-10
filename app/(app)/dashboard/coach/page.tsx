@@ -7,6 +7,7 @@ import { WeekStrip } from "@/components/cobalt/coach-dashboard/WeekStrip";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
 import { GlassCard } from "@/components/cobalt/GlassCard";
+import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
 import { demoActivities } from "@/lib/demo/data";
@@ -43,9 +44,14 @@ function SectionHeading({ index, title, hint }: { index: string; title: string; 
   );
 }
 
-/** A frosted placeholder that holds each section's height while it streams in. */
-function SectionSkeleton({ height }: { height: number }) {
-  return <GlassCard className="animate-pulse" style={{ height }} aria-hidden="true" />;
+/** A frosted placeholder holding each section's height while it streams in —
+ *  the centred RunnerLoader, per spec (no skeleton loaders). */
+function SectionLoader({ height }: { height: number }) {
+  return (
+    <GlassCard className="flex items-center justify-center" style={{ height }}>
+      <RunnerLoader />
+    </GlassCard>
+  );
 }
 
 // ── 1. Næste pas (real-time) ────────────────────────────────────────────────
@@ -131,21 +137,21 @@ export default function CoachDashboardPage() {
 
       <section>
         <SectionHeading index="01" title="Næste pas" hint="Realtid" />
-        <Suspense fallback={<SectionSkeleton height={280} />}>
+        <Suspense fallback={<SectionLoader height={280} />}>
           <NextWorkoutSection />
         </Suspense>
       </section>
 
       <section>
         <SectionHeading index="02" title="Progression" hint="Cachet 1 t" />
-        <Suspense fallback={<SectionSkeleton height={520} />}>
+        <Suspense fallback={<SectionLoader height={520} />}>
           <ProgressionSection />
         </Suspense>
       </section>
 
       <section>
         <SectionHeading index="03" title="Coach-feed" hint="AI · streamet" />
-        <Suspense fallback={<SectionSkeleton height={240} />}>
+        <Suspense fallback={<SectionLoader height={240} />}>
           <CoachFeed activities={feedActivities} />
         </Suspense>
       </section>

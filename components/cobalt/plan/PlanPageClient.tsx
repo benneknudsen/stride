@@ -12,14 +12,14 @@ import type { PlanView } from "@/lib/cobalt/plan";
 // Plan — the Cobalt Glass training-plan page. Owns the client-only loading
 // choreography the server page can't: nav + header stay interactive while one
 // overlay covers the plan area (timeline → week calendar → upcoming + race)
-// for ~2s; when it lifts, the header stats count up and the timeline dots pop
+// for a beat; when it lifts, the header stats count up and the timeline dots pop
 // in. The view itself is built server-side (demo or live) and arrives as a
 // plain-JSON prop.
 export function PlanPageClient({ view }: { view: PlanView }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2000);
+    const timer = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
 

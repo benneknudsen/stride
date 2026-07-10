@@ -10,7 +10,7 @@ import type { ActivitiesView, ActivityFilter } from "@/lib/cobalt/aktiviteter";
 // Aktiviteter (Activities) — the Cobalt Glass list page. Owns the client-only
 // loading choreography and filter state the server page can't: nav + header
 // stay interactive while one overlay covers the widget area (chips + list) for
-// ~2s; when it lifts, the month totals count up and each row fades up in
+// a beat; when it lifts, the month totals count up and each row fades up in
 // sequence. The view itself is built server-side (demo or live) and arrives as
 // a plain-JSON prop.
 export function AktiviteterPageClient({ view }: { view: ActivitiesView }) {
@@ -18,7 +18,7 @@ export function AktiviteterPageClient({ view }: { view: ActivitiesView }) {
   const [filter, setFilter] = useState<ActivityFilter>("alle");
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2000);
+    const timer = setTimeout(() => setLoading(false), 300);
     return () => clearTimeout(timer);
   }, []);
 
