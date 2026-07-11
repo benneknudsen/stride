@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
 import { NavBar } from "@/components/cobalt/NavBar";
-import { ROUTES } from "@/lib/routes";
+import { glassTabStyle } from "@/lib/cobalt/nav-glass";
+import { activityRoute, ROUTES } from "@/lib/routes";
 
 // Issue #86 consolidated the two coach routes into ROUTES.COACH. Both navs link
 // there, so the tab marker has to light up on that exact path — and only there.
@@ -44,6 +45,59 @@ describe("coach tab marker on the consolidated route", () => {
     render(<Nav />);
 
     expect(activeLabel()).toContain("Hjem");
+  });
+});
+
+// Issue #100: the four pages are public now, so a visitor walks the same tabs a
+// signed-in user does. Every one of them has to mark itself — and only itself.
+describe("active tab across all four routes (#100)", () => {
+  const NAVS = [
+    ["NavBar", NavBar],
+    ["BottomTabBar", BottomTabBar],
+  ] as const;
+
+  // Hjem is the interesting one: "/" is a prefix of every other path, so a naive
+  // startsWith check would light it up everywhere.
+  const CASES = [
+    [ROUTES.HOME, "Hjem"],
+    [ROUTES.AKTIVITETER, "Aktiviteter"],
+    [ROUTES.COACH, "Coach"],
+    [ROUTES.PLAN, "Plan"],
+    [activityRoute("demo-01"), "Aktiviteter"], // a nested page marks its parent tab
+  ] as const;
+
+  test.each(
+    NAVS.flatMap(([navName, Nav]) =>
+      CASES.map(([path, label]) => [navName, Nav, path, label] as const)
+    )
+  )("%s marks exactly %s#... → %s on %s", (_navName, Nav, path, label) => {
+    pathname.mockReturnValue(path);
+    render(<Nav />);
+
+    expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
+    expect(activeLabel()).toContain(label);
+  });
+});
+
+// The glass has to be an interpolation between two states, not an on/off class:
+// both halves declare the same properties so `transition-all` has something to
+// animate, and the inactive half is fully transparent.
+describe("liquid glass tab style (#100)", () => {
+  test("active carries the glass; inactive carries nothing", () => {
+    const active = glassTabStyle(true);
+    const inactive = glassTabStyle(false);
+
+    expect(active.backdropFilter).toBe("blur(12px)");
+    expect(active.background).toBe("rgba(255,255,255,0.7)");
+    expect(active.boxShadow).toContain("rgba(27,41,192,0.10)");
+
+    expect(inactive.backdropFilter).toBe("none");
+    expect(inactive.background).toBe("rgba(255,255,255,0)");
+    expect(inactive.borderColor).toBe("rgba(255,255,255,0)");
+  });
+
+  test("both states declare the same properties, so the glass can flow", () => {
+    expect(Object.keys(glassTabStyle(false))).toEqual(Object.keys(glassTabStyle(true)));
   });
 });
 

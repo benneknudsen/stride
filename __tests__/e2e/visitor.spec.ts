@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { MOBILE_VIEWPORT, waitForContent } from "./helpers";
 
-// /demo is the one route proxy.ts leaves public, so the point of this suite is
-// that it renders for someone with no session at all — hence the empty storage
+// Issue #100 replaced the old /demo page — and the proxy's auth gate — with demo
+// fallbacks on the four real pages (#84). The point of this suite is that someone
+// with no session at all can browse every one of them, hence the empty storage
 // state, which drops the signed-in cookie the other suites rely on. The viewport
 // is phone-sized because the BottomTabBar is `md:hidden`.
 test.use({
@@ -10,21 +11,27 @@ test.use({
   viewport: MOBILE_VIEWPORT,
 });
 
-test.describe("/demo", () => {
-  test.beforeEach(async ({ page }) => {
+test.describe("browsing without a session", () => {
+  test("the old /demo route redirects to the front page", async ({ page }) => {
     await page.goto("/demo");
+    // The trailing $ matters — every other app path is prefixed by "/".
+    await expect(page).toHaveURL(/localhost:6969\/$/);
+  });
+
+  test("Hjem renders the demo fixtures instead of a login wall", async ({ page }) => {
+    await page.goto("/");
     await waitForContent(page);
-  });
 
-  test("renders the hero", async ({ page }) => {
     await expect(page.getByText(/^Uge \d+ · Marathonplan$/)).toBeVisible();
-    // The greeting is clock-dependent ("Godmorgen." / "Godaften.") and the second
-    // line is the recovery band's sentence, so assert the shape, not the words.
+    // The greeting is clock-dependent ("Godmorgen." / "Godaften."), so assert the
+    // shape, not the words.
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByText("Demo-tilstand")).toBeVisible();
   });
 
-  test("renders every bento card", async ({ page }) => {
+  test("renders every bento card on Hjem", async ({ page }) => {
+    await page.goto("/");
+    await waitForContent(page);
+
     // Most cards announce themselves with a mono <span> header. Scoping to the
     // element matters for "Snit-pace", which is both AvgPaceRing's header and one
     // of LatestActivityCard's metric labels — an unscoped text match hits both.
@@ -44,12 +51,34 @@ test.describe("/demo", () => {
     await expect(page.getByRole("heading", { name: "Datakilder" })).toBeVisible();
   });
 
-  test("shows the BottomTabBar with four tabs", async ({ page }) => {
+  test("Aktiviteter, Coach and Plan are reachable too", async ({ page }) => {
+    await page.goto("/aktiviteter");
+    await waitForContent(page);
+    await expect(page.getByRole("heading", { name: /Alle dine ture/ })).toBeVisible();
+
+    await page.goto("/plan");
+    await waitForContent(page);
+    await expect(page.getByText("Dage til race")).toBeVisible();
+
+    await page.goto("/dashboard/coach");
+    await waitForContent(page);
+    await expect(page.getByRole("heading", { level: 1, name: "Coach" })).toBeVisible();
+  });
+
+  test("shows the BottomTabBar with four tabs, marking the open page", async ({ page }) => {
+    await page.goto("/plan");
+    await waitForContent(page);
+
     const tabBar = page.getByRole("navigation", { name: "Primær navigation" });
     await expect(tabBar).toBeVisible();
 
     const tabs = tabBar.getByRole("link");
     await expect(tabs).toHaveCount(4);
     await expect(tabs).toHaveText(["Hjem", "Aktiviteter", "Coach", "Plan"]);
+
+    await expect(tabBar.getByRole("link", { name: "Plan" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
   });
 });

@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 import { MOBILE_VIEWPORT, waitForContent } from "./helpers";
 
 // The BottomTabBar is `md:hidden`, so this walk only exists below 768px.
-// It runs signed in (the project's default storage state): "/", /aktiviteter and
-// /plan all sit behind proxy.ts, and a visitor clicking these tabs would land on
-// /login rather than the page under test.
+// It runs signed in (the project's default storage state), so the pages under
+// test serve live data. The same walk as a visitor — on the demo fallbacks — is
+// visitor.spec.ts (#100).
 test.use({ viewport: MOBILE_VIEWPORT });
 
 test.describe("BottomTabBar navigation", () => {

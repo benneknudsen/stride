@@ -13,7 +13,8 @@ const IS_DEV = process.env.NODE_ENV === "development";
 /**
  * Request proxy. Two responsibilities:
  *
- *  1. Auth-gate the dashboard (unchanged from the original middleware).
+ *  1. Keep signed-in users off the login page. The app pages themselves are no
+ *     longer gated — see below.
  *  2. Mint a per-request nonce and attach the CSP header. `next.config.ts`
  *     `headers()` can only emit static headers, so a nonce-bearing policy has to
  *     be built here; the request-independent security headers stay there.
@@ -39,16 +40,13 @@ export default auth((req) => {
     return NextResponse.redirect(new URL(ROUTES.HOME, req.nextUrl));
   }
 
-  // Protect all app routes (root /, /aktiviteter, /dashboard/* — which covers the
-  // coach — and /plan). The legacy /coach is not listed: next.config redirects it
-  // to ROUTES.COACH, which lands back under /dashboard and is gated here.
-  const APP_ROUTES: string[] = [ROUTES.HOME, ROUTES.AKTIVITETER, ROUTES.DASHBOARD, ROUTES.PLAN];
-  const isProtected = APP_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  );
-  if (!isAuthed && isProtected) {
-    return NextResponse.redirect(new URL(ROUTES.LOGIN, req.nextUrl));
-  }
+  // The four app pages (/, /aktiviteter, /dashboard/* — which covers the coach —
+  // and /plan) are deliberately *not* auth-gated (issue #100). Every one of them
+  // builds its view-model from the signed-in user's synced runs and falls back to
+  // the demo fixtures when there is no session or nothing synced (issue #84), so a
+  // visitor browsing them sees a working product rather than a login wall. The
+  // per-user data itself is still protected where it is read: `auth()` in each
+  // Server Component and in the /api routes, which this matcher never touches.
 
   const nonce = createNonce();
   const csp = buildCsp(nonce, IS_DEV);
@@ -66,8 +64,8 @@ export default auth((req) => {
 /**
  * Run on document/page requests. Static assets, image optimisation, the favicon
  * and API routes (JSON — no inline scripts) are excluded so the CSP work is
- * spent only where an HTML document with scripts is served. The auth-protected
- * paths (`/`, `/dashboard/*`, `/login`) fall inside this matcher.
+ * spent only where an HTML document with scripts is served. `/login` — the one
+ * path still redirected above — falls inside this matcher.
  */
 export const config = {
   matcher: [

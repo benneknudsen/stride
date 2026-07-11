@@ -9,7 +9,6 @@ export const ROUTES = {
   COACH: "/dashboard/coach",
   PLAN: "/plan",
   DASHBOARD: "/dashboard",
-  DEMO: "/demo",
   // Login-siden ligger i route-gruppen app/(auth)/login → URL'en er /login.
   LOGIN: "/login",
 } as const;
@@ -20,6 +19,14 @@ export const ROUTES = {
  * så bogmærker og delte links stadig virker.
  */
 export const LEGACY_COACH_ROUTE = "/coach";
+
+/**
+ * Den gamle demo-forside. Issue #100 fjernede auth-gaten fra de fire hovedsider —
+ * de har alle demo-fallback (#84) — så en separat demo-rute var en duplikat af
+ * forsiden, og BottomTabBar/NavBar kunne ikke markere en aktiv tab på den. Lever
+ * nu kun som kilde for den permanente redirect til {@link ROUTES.HOME}.
+ */
+export const LEGACY_DEMO_ROUTE = "/demo";
 
 /**
  * Detalje-siden for én aktivitet (issue #92) — `/aktiviteter/<id>`. Id'et kommer

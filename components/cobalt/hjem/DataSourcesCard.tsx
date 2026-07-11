@@ -45,7 +45,7 @@ export function DataSourcesCard({
   signedIn,
 }: {
   stravaConnected: boolean;
-  /** Visitors on /demo can't start an OAuth flow — the callback needs a session. */
+  /** Visitors can't start an OAuth flow — the callback needs a session. */
   signedIn: boolean;
 }) {
   const [pending, startTransition] = useTransition();

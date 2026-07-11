@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 // Mobile-only bottom navigation: a floating glass pill fixed to the bottom of the
 // viewport (hidden from md up, where the top NavBar's links take over). Each tab
-// carries its own icon; the active route reads full-opacity cobalt, the rest sit
-// dimmed. Routes point at the real Cobalt Glass pages (Danish slugs).
+// carries its own icon; the active route sits on its own liquid-glass tile
+// (issue #100), the rest on nothing. Routes point at the real Cobalt Glass pages
+// (Danish slugs) — every one of them is public, so the tabs work for visitors too.
 const cobalt = "var(--color-cobalt)";
 const red = "var(--color-red)";
 
@@ -81,21 +83,27 @@ export function BottomTabBar() {
       }}
     >
       {TABS.map((tab) => {
+        // `${"/"}/` is "//", which no pathname starts with — so the Hjem tab
+        // matches "/" exactly and doesn't light up on every other page.
         const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         return (
           <Link
             key={tab.href}
             href={tab.href}
             aria-current={active ? "page" : undefined}
+            style={glassTabStyle(active)}
             className={cn(
               "flex min-h-[44px] min-w-[58px] flex-col items-center justify-center gap-[3px] rounded-tile",
-              "cg-interactive transition-[opacity,transform]",
-              active ? "opacity-100" : "opacity-55"
+              "cg-interactive border border-solid transition-all duration-300 ease-out",
+              "motion-reduce:transition-none"
             )}
           >
             {tab.icon}
             <span
-              className={cn("text-[9.5px] text-cobalt", active ? "font-semibold" : "font-medium")}
+              className={cn(
+                "text-[9.5px] transition-colors duration-300 ease-out",
+                active ? "font-semibold text-cobalt" : "font-medium text-ink"
+              )}
             >
               {tab.label}
             </span>

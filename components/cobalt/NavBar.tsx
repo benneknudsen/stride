@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/cobalt/Logo";
 import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
 import { Wordmark } from "@/components/cobalt/Wordmark";
+import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
-// Glass-pill navigation. Active route = cobalt pill with silver text. Coach
-// carries the red AI spark. Sync POSTs to /api/strava/sync and drives the button
-// from the response — idle → syncing → synced|error → idle — so it can be run
-// again (#97).
+// Glass-pill navigation. Active route = a raised liquid-glass pill (issue #100,
+// shared with the BottomTabBar) rather than a flat cobalt fill. Coach carries the
+// red AI spark. Sync POSTs to /api/strava/sync and drives the button from the
+// response — idle → syncing → synced|error → idle — so it can be run again (#97).
 const LINKS = [
   { label: "Hjem", href: ROUTES.HOME },
   { label: "Aktiviteter", href: ROUTES.AKTIVITETER },
@@ -28,7 +29,7 @@ export function NavBar({
   activeHref,
   onSync,
 }: {
-  /** Display name of the signed-in user. Absent for visitors (e.g. /demo). */
+  /** Display name of the signed-in user. Absent for visitors. */
   userName?: string;
   activeHref?: string;
   /** Fired when a sync finishes successfully, after the router has refreshed. */
@@ -105,9 +106,11 @@ export function NavBar({
               key={link.href}
               href={link.href}
               aria-current={active ? "page" : undefined}
+              style={glassTabStyle(active)}
               className={cn(
-                "cg-interactive flex items-center gap-1.5 rounded-pill px-[18px] py-2.5 transition-colors",
-                active ? "bg-cobalt text-silver" : "text-ink hover:text-cobalt"
+                "cg-interactive flex items-center gap-1.5 rounded-pill border border-solid px-[18px] py-2.5",
+                "transition-all duration-300 ease-out motion-reduce:transition-none",
+                active ? "font-semibold text-cobalt" : "text-ink hover:text-cobalt"
               )}
             >
               {link.spark ? (
