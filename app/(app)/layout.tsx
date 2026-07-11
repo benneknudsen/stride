@@ -4,10 +4,10 @@ import { NavBar } from "@/components/cobalt/NavBar";
 import { auth } from "@/lib/auth";
 
 // Shared Cobalt Glass shell for every (app) page.
-// Auth is handled by the proxy middleware (proxy.ts) — this layout only
-// provides the visual wrapper. /demo is public because it's not in
-// the middleware's APP_ROUTES list, so `session` is null there and the NavBar
-// renders without an identity chip rather than inventing one.
+// Every page here is public (issue #100): each one falls back to the demo
+// fixtures when there is no session (#84). `session` is simply null for a
+// visitor, so the NavBar renders without an identity chip rather than
+// inventing one.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   const user = session?.user;
