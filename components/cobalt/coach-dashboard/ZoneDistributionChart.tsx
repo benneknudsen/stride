@@ -2,26 +2,15 @@
 
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ZoneWeek } from "@/lib/coach/dashboard";
+import { ZONE_RAMP } from "@/lib/cobalt/zones";
 
 // Zone distribution over time: one stacked bar per week, each showing the
-// rolling-4-week split of training time across HR zones 1–5.
+// rolling-4-week split of training time across HR zones 1–5. The palette and the
+// plain-language labels come from the shared ramp (lib/cobalt/zones.ts), so this
+// chart and the per-activity zone split never drift apart.
 //
-// The zone scale is ordered (recovery → maximal), so the palette is a single
-// sequential cobalt ramp, light → dark, validated for monotone lightness and
-// adjacent-pair CVD separation against the silver surface. White inter-segment
-// strokes stand in for the 2px surface gap; the legend + tooltip carry identity
-// for the low-contrast light steps.
-//
-// Labels are plain language — the zone *codes* ("Z1"…"Z5") are jargon the rest of
-// the app deliberately avoids, and the ramp's light→dark order already conveys
-// the ordering they encoded.
-const ZONE_RAMP: { key: keyof Omit<ZoneWeek, "week">; label: string; color: string }[] = [
-  { key: "z1", label: "Restitution", color: "#ccd3f5" },
-  { key: "z2", label: "Aerob", color: "#9aa6ec" },
-  { key: "z3", label: "Tempo", color: "#6577e0" },
-  { key: "z4", label: "Tærskel", color: "#3c4ed0" },
-  { key: "z5", label: "Max", color: "#131f96" },
-];
+// White inter-segment strokes stand in for the 2px surface gap; the legend +
+// tooltip carry identity for the low-contrast light steps.
 
 export function ZoneDistributionChart({ data }: { data: ZoneWeek[] }) {
   return (

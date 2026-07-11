@@ -14,7 +14,7 @@
     "db:studio": "drizzle-kit studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "echo \"Error: no e2e tests yet\" && exit 1"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.81",
@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

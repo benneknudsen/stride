@@ -164,8 +164,8 @@ export function RaceDateDialog({
             <p className="m-0 text-[12px] leading-snug text-ink">
               Skiftet flytter din aktuelle fase fra{" "}
               <span className="font-semibold text-cobalt">{phaseShift.from}</span> til{" "}
-              <span className="font-semibold text-cobalt">{phaseShift.to}</span> — ugens
-              anbefaling ændrer sig.
+              <span className="font-semibold text-cobalt">{phaseShift.to}</span> — ugens anbefaling
+              ændrer sig.
             </p>
           ) : null}
 

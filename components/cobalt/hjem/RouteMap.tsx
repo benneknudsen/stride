@@ -7,7 +7,14 @@ import "leaflet/dist/leaflet.css";
 // Every interaction handler is disabled — this is a view, not a map UI. The
 // route is a red glow polyline under a thin red stroke, with a cobalt start dot
 // and a red finish dot. Leaflet is imported dynamically so it never touches SSR.
-export function RouteMap({ coords }: { coords: [number, number][] }) {
+export function RouteMap({
+  coords,
+  label = "Rutekort over Søerne",
+}: {
+  coords: [number, number][];
+  /** Accessible name — the activity detail page passes the run's own route. */
+  label?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,6 +43,8 @@ export function RouteMap({ coords }: { coords: [number, number][] }) {
       }).addTo(map);
 
       const latlngs = coords.map(([lat, lng]) => L.latLng(lat, lng));
+      // A route with no points has no polyline, no markers and no bounds to fit.
+      if (latlngs.length === 0) return;
       L.polyline(latlngs, { color: "#ee2418", weight: 9, opacity: 0.22 }).addTo(map);
       L.polyline(latlngs, { color: "#ee2418", weight: 3.5, opacity: 1 }).addTo(map);
       L.circleMarker(latlngs[0], {
@@ -67,7 +76,7 @@ export function RouteMap({ coords }: { coords: [number, number][] }) {
     <div
       ref={ref}
       role="img"
-      aria-label="Rutekort over Søerne"
+      aria-label={label}
       className="absolute inset-0"
       style={{ background: "#e9eae5" }}
     />

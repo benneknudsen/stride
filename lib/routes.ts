@@ -21,4 +21,13 @@ export const ROUTES = {
  */
 export const LEGACY_COACH_ROUTE = "/coach";
 
+/**
+ * Detalje-siden for én aktivitet (issue #92) — `/aktiviteter/<id>`. Id'et kommer
+ * fra databasen (cuid) eller demo-fixtures ("demo-01"), så det er url-sikkert;
+ * `encodeURIComponent` er en billig garanti for at det bliver ved med at være det.
+ */
+export function activityRoute(id: string): string {
+  return `${ROUTES.AKTIVITETER}/${encodeURIComponent(id)}`;
+}
+
 export type RouteKey = keyof typeof ROUTES;

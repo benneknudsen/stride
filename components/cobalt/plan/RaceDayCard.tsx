@@ -26,7 +26,7 @@ export function RaceDayCard({
   onEdit?: () => void;
 }) {
   return (
-    <GlassCard variant="red" className="px-[26px] py-[22px] text-onred">
+    <GlassCard variant="red" className="px-[26px] py-[22px] text-onred" data-testid="race-day-card">
       <div className="mb-3 flex items-start justify-between">
         <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] opacity-85">
           Race day

@@ -39,7 +39,7 @@ export function PhaseTimeline({
   started: boolean;
 }) {
   return (
-    <GlassCard className="rounded-card px-6 py-5">
+    <GlassCard className="rounded-card px-6 py-5" data-testid="phase-timeline">
       <div className="mb-2.5 flex justify-between font-cg-mono text-[9px] uppercase tracking-[0.06em] sm:text-[10px] sm:tracking-[0.14em]">
         {/* Six labels don't fit a 375px row, so below sm each falls back to its
             short form ("Race" rather than "Race 13. sep"). */}
@@ -56,6 +56,7 @@ export function PhaseTimeline({
           {segments.map((seg) => (
             <div
               key={seg.id}
+              data-testid="phase-segment"
               className="rounded-pill"
               style={{ flex: seg.flex, background: SEGMENT_STYLE[seg.fill] }}
             />
