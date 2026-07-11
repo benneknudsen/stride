@@ -40,6 +40,9 @@ export function NavBar({
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // syncState lags a render behind, so two fast clicks would both see "idle".
+  // The ref flips synchronously and is what actually guards the fetch.
+  const syncingRef = useRef(false);
 
   // Drop the pending reset and any in-flight sync when the bar unmounts.
   useEffect(
@@ -56,7 +59,8 @@ export function NavBar({
   }, []);
 
   const handleSync = useCallback(async () => {
-    if (syncState === "syncing") return;
+    if (syncingRef.current) return;
+    syncingRef.current = true;
     if (timerRef.current) clearTimeout(timerRef.current);
 
     const controller = new AbortController();
@@ -79,8 +83,10 @@ export function NavBar({
       // Unmounted mid-sync — never touch state after abort.
       if (controller.signal.aborted) return;
       settle("error");
+    } finally {
+      syncingRef.current = false;
     }
-  }, [onSync, router, settle, syncState]);
+  }, [onSync, router, settle]);
 
   const isActive = (href: string) => current === href || current.startsWith(`${href}/`);
 
