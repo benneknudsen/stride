@@ -9,6 +9,7 @@ import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
+import { SectionHeading } from "@/components/cobalt/SectionHeading";
 import { auth } from "@/lib/auth";
 import type { CoachActivityInput } from "@/lib/coach/dashboard";
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
@@ -52,16 +53,6 @@ function toFeedActivities(activities: CoachPageActivity[]): CoachFeedActivityInp
     averageHeartrate: a.averageHeartrate,
     totalElevationGain: a.totalElevationGain,
   }));
-}
-
-function SectionHeading({ index, title, hint }: { index: string; title: string; hint: string }) {
-  return (
-    <div className="mb-3 flex items-baseline gap-3">
-      <span className="font-cg-mono text-[11px] text-red">{index}</span>
-      <h2 className="m-0 font-cg-display text-[20px] leading-none text-cobalt">{title}</h2>
-      <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">{hint}</span>
-    </div>
-  );
 }
 
 /** A frosted placeholder holding each section's height while it streams in —

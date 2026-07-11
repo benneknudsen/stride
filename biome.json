@@ -38,7 +38,11 @@
       "!**/.vercel",
       "!**/drizzle/migrations",
       "!**/public",
-      "!docs"
+      "!docs",
+      "!test-results",
+      "!playwright-report",
+      "!blob-report",
+      "!**/.auth"
     ]
   }
 }
