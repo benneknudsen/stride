@@ -44,7 +44,7 @@ const TABS: { label: string; href: string; icon: ReactNode }[] = [
   },
   {
     label: "Coach",
-    href: ROUTES.DASHBOARD_COACH,
+    href: ROUTES.COACH,
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z" fill={red} />

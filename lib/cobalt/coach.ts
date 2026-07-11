@@ -67,11 +67,19 @@ export interface CoachView {
   };
 }
 
-/** The activity fields the view-model reads — demo fixtures and DB rows both fit. */
-export interface CoachActivityLike {
+/**
+ * The activity fields the load bars and the header count read — the only fields
+ * the live view needs, so `getDashboardActivities` rows fit unchanged (issue
+ * #86); the DB's nullable averages never come into it.
+ */
+export interface CoachLoadActivityLike {
   startDate: Date;
   /** Distance in meters. */
   distance: number;
+}
+
+/** What the scripted demo transcript reads on top of that — fixtures always carry it. */
+export interface CoachActivityLike extends CoachLoadActivityLike {
   averageSpeed: number;
   averageHeartrate: number;
 }
@@ -84,7 +92,7 @@ function startOfDay(date: Date): number {
 }
 
 /** Kilometres run on the calendar day `daysAgo` days before `now`. */
-function dailyKm(activities: CoachActivityLike[], now: Date, daysAgo: number): number {
+function dailyKm(activities: CoachLoadActivityLike[], now: Date, daysAgo: number): number {
   const target = startOfDay(new Date(now.getTime() - daysAgo * DAY_MS));
   let km = 0;
   for (const a of activities) {
@@ -133,7 +141,7 @@ function longestInWindow(activities: CoachActivityLike[], now: Date, days: numbe
  * 0.8-decayed) so every day carries a value and the shape reads like a rolling
  * load, not raw km.
  */
-function buildLoadBars(activities: CoachActivityLike[], now: Date): LoadBar[] {
+function buildLoadBars(activities: CoachLoadActivityLike[], now: Date): LoadBar[] {
   const raw: number[] = [];
   for (let d = 13; d >= 0; d--) {
     let load = 0;
@@ -149,7 +157,7 @@ function buildLoadBars(activities: CoachActivityLike[], now: Date): LoadBar[] {
 }
 
 /** Acute (7-day) ÷ chronic (28-day) daily-km ratio, or null without a base. */
-function acuteChronicRatio(activities: CoachActivityLike[], now: Date): number | null {
+function acuteChronicRatio(activities: CoachLoadActivityLike[], now: Date): number | null {
   let acuteKm = 0;
   let chronicKm = 0;
   for (let d = 0; d < 28; d++) {
@@ -290,7 +298,7 @@ function liveFocusQuote(workout: CoachDashboardData["workout"]): string {
  */
 export function buildLiveCoachView(
   dashboard: CoachDashboardData,
-  activities: CoachActivityLike[],
+  activities: CoachLoadActivityLike[],
   now: Date = new Date()
 ): CoachView {
   const { workout, loadGauge } = dashboard;

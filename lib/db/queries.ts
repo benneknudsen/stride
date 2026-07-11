@@ -9,7 +9,7 @@ import {
   stravaTokens,
   users,
 } from "../../drizzle/schema";
-import type { AnalysisScope } from "../../types/domain";
+import type { AnalysisScope, HrZone } from "../../types/domain";
 import { db } from "./index";
 
 /**
@@ -226,7 +226,7 @@ export const getDashboardActivities = cache(
       async () => {
         const since = new Date(Date.now() - sinceDays * DAY_MS);
         try {
-          return await db
+          const rows = await db
             .select({
               id: activities.id,
               name: activities.name,
@@ -244,6 +244,11 @@ export const getDashboardActivities = cache(
             .where(and(eq(activities.userId, userId), gte(activities.startDate, since)))
             .orderBy(desc(activities.startDate))
             .limit(500);
+          // `hr_zones` is a jsonb column, which Drizzle types as `unknown`; the
+          // sync writer only ever stores HrZone[]. Narrow it here — the same
+          // explicit-JSON convention as `Activity` in types/domain.ts — so these
+          // rows can feed the coach engine's zone charts (issue #86).
+          return rows.map((row) => ({ ...row, hrZones: row.hrZones as HrZone[] | null }));
         } catch {
           return [];
         }
