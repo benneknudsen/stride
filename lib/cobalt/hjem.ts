@@ -32,6 +32,14 @@ const DA_MONTHS = [
 
 const DA_WEEKDAYS_LONG = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
 
+/**
+ * Where an activity was ingested from. Strava is the only provider the app
+ * syncs (issue #96 — the views used to alternate a fabricated "garmin"/"strava"
+ * badge per row); the union keeps room for a second provider without touching
+ * every call site.
+ */
+export type ActivitySource = "garmin" | "strava";
+
 export interface ZoneInfo {
   /** IntensityMeter level 1–5. */
   level: number;
@@ -132,6 +140,7 @@ export interface LatestActivityView {
   elevation: number;
   durationLabel: string;
   zone: ZoneInfo;
+  source: ActivitySource;
   dayLabel: string;
   clock: string;
   /** Deterministic pace-curve samples (relative 0–1, higher = faster). */
@@ -166,7 +175,7 @@ export interface RecentRunView {
   name: string;
   dateLabel: string;
   zone: ZoneInfo;
-  source: "garmin" | "strava";
+  source: ActivitySource;
   km: number;
   paceLabel: string;
 }
@@ -237,6 +246,12 @@ function isRun(activity: HomeActivityLike): boolean {
   return /run/i.test(activity.type);
 }
 
+/**
+ * Every activity the app holds came in over the Strava sync — the fixtures stand
+ * in for exactly that. Change this the day a second provider is ingested.
+ */
+export const ACTIVITY_SOURCE: ActivitySource = "strava";
+
 export function buildHomeView(
   activities: HomeActivityLike[] = demoActivities,
   now: Date = new Date(),
@@ -296,12 +311,12 @@ export function buildHomeView(
   // render an empty "Seneste ture" card.
   const recentSource = runs.length > 1 ? runs.slice(1, 6) : runs.slice(0, 1);
 
-  const recentRuns: RecentRunView[] = recentSource.map((a, i) => ({
+  const recentRuns: RecentRunView[] = recentSource.map((a) => ({
     id: a.id,
     name: a.name,
     dateLabel: danishDate(a.startDate),
     zone: zoneForHeartRate(a.averageHeartrate ?? 0),
-    source: i % 2 === 0 ? "garmin" : "strava",
+    source: ACTIVITY_SOURCE,
     km: a.distance / 1000,
     paceLabel: formatPace(a.averageSpeed),
   }));
@@ -332,6 +347,7 @@ export function buildHomeView(
       elevation: latest.totalElevationGain,
       durationLabel: formatDuration(latest.movingTime),
       zone: latestZone,
+      source: ACTIVITY_SOURCE,
       dayLabel: relativeDayLabel(latest.startDate, now),
       clock: clock(latest.startDate),
       paceCurve: PACE_CURVE,
