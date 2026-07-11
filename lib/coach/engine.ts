@@ -1,10 +1,12 @@
 // Stride — coach rule engine. The single source of truth for the periodised
-// build toward the Silkeborg Halvmarathon (20 Sep 2026) and the constraint set
-// the AI coach must respect when it proposes or validates a workout.
+// build toward the user's target race and the constraint set the AI coach must
+// respect when it proposes or validates a workout.
 //
 // Two halves:
-//   1. Phases — four dated training blocks (adapt → burn → sharpen → peak),
-//      each with its own session volume, Zone-2 requirement and distance caps.
+//   1. Phases — four training blocks (adapt → burn → sharpen → peak) laid out
+//      relative to the race date (issue #99: the date lives per user in the
+//      DB; `buildPhases(raceDate)` dates the blocks for any race), each with
+//      its own session volume, Zone-2 requirement and distance caps.
 //   2. Constraints — independent, self-guarding rules (hard blocks, soft
 //      warnings, phase guidance, safety limits) evaluated against a single
 //      WorkoutContext. `validateWorkout` runs the active set and sorts the
@@ -92,6 +94,8 @@ export interface WorkoutContext {
   previousWeekDistanceKm?: number;
   /** Caller's risk read for this session; "high" wants the effort kept easy. */
   risk?: SessionRisk;
+  /** The user's race date (issue #99); omitted → {@link DEFAULT_RACE_DATE}. */
+  raceDate?: Date;
 }
 
 export interface ValidationIssue {
@@ -109,8 +113,16 @@ export interface ValidationResult {
 
 // ── Tunable limits ──────────────────────────────────────────────────────────
 
-/** Goal race the whole plan periodises toward — Silkeborg Halvmarathon. */
-export const RACE_DATE = new Date(2026, 8, 20); // 20 Sep 2026
+/**
+ * The demo/fallback race — Silkeborg Halvmarathon, 20 Sep 2026. The engine is
+ * parameterised on the race date (issue #99); this default keeps every
+ * unauthenticated/demo path on the original plan. The only remaining date
+ * literal — user paths thread their own `users.race_date` through instead.
+ */
+export const DEFAULT_RACE_DATE = new Date(2026, 8, 20); // 20 Sep 2026
+
+/** Display name for the demo/fallback race. */
+export const DEFAULT_RACE_NAME = "Silkeborg Halvmarathon";
 
 /** Absolute Zone 2 heart-rate ceiling in bpm — a fixed number, NOT a %HRmax. */
 export const ZONE2_CEILING_BPM = 155;
@@ -131,7 +143,7 @@ export const MAX_WEEKLY_INCREASE_RATIO = 1.1;
 
 /**
  * The taper window: the final stretch before the race, once the peak block is
- * over. A date this close to {@link RACE_DATE} (and not past it) is a taper.
+ * over. A date this close to the race date (and not past it) is a taper.
  */
 export const TAPER_WINDOW_DAYS = 21;
 
@@ -147,16 +159,31 @@ function daysUntil(date: Date, target: Date): number {
 // ── Phases ──────────────────────────────────────────────────────────────────
 
 /**
- * The four dated training blocks. `minDistanceKm`/`maxDistanceKm` bound a
- * regular session; `longRunMaxKm` is the separate weekly long-run ceiling.
- * Sharpen/peak distances past the table's explicit 6–10 km base are sensible
- * defaults — the spec only fixes the long-run caps for those blocks.
+ * Fase-skabelon: [start, slut] i hele dage FØR race-dagen (issue #99). Derived
+ * 1:1 from the original dated 2026 blocks (adapt 22 Jun – 5 Jul, … taper
+ * 15 – 20 Sep against the 20 Sep race), so the default plan is unchanged.
+ * Offsets are held fixed for any race date — a race closer than 90 days simply
+ * starts mid-plan (`getCurrentPhase` picks the block containing today).
  */
-export const PHASES: Record<PhaseKey, PhaseRules> = {
+const PHASE_TEMPLATE: Record<PhaseKey, { startDaysBeforeRace: number; endDaysBeforeRace: number }> =
+  {
+    adapt: { startDaysBeforeRace: 90, endDaysBeforeRace: 77 },
+    burn: { startDaysBeforeRace: 76, endDaysBeforeRace: 49 },
+    sharpen: { startDaysBeforeRace: 48, endDaysBeforeRace: 28 },
+    peak: { startDaysBeforeRace: 27, endDaysBeforeRace: 6 },
+    taper: { startDaysBeforeRace: 5, endDaysBeforeRace: 0 },
+  };
+
+/**
+ * The date-independent half of each phase's rules. `minDistanceKm`/
+ * `maxDistanceKm` bound a regular session; `longRunMaxKm` is the separate
+ * weekly long-run ceiling. Sharpen/peak distances past the table's explicit
+ * 6–10 km base are sensible defaults — the spec only fixes the long-run caps
+ * for those blocks.
+ */
+const PHASE_RULES_TEMPLATE: Record<PhaseKey, Omit<PhaseRules, "startDate" | "endDate">> = {
   adapt: {
     phase: "adapt",
-    startDate: new Date(2026, 5, 22), // 22 Jun 2026
-    endDate: new Date(2026, 6, 5), // 5 Jul 2026
     sessionsPerWeek: 4,
     zone2Required: true,
     minDistanceKm: 6,
@@ -167,8 +194,6 @@ export const PHASES: Record<PhaseKey, PhaseRules> = {
   },
   burn: {
     phase: "burn",
-    startDate: new Date(2026, 6, 6), // 6 Jul 2026
-    endDate: new Date(2026, 7, 2), // 2 Aug 2026
     sessionsPerWeek: 4,
     zone2Required: true,
     minDistanceKm: 8,
@@ -179,8 +204,6 @@ export const PHASES: Record<PhaseKey, PhaseRules> = {
   },
   sharpen: {
     phase: "sharpen",
-    startDate: new Date(2026, 7, 3), // 3 Aug 2026
-    endDate: new Date(2026, 7, 23), // 23 Aug 2026
     sessionsPerWeek: 5, // 4× Z2 + 1× tempo
     zone2Required: false,
     minDistanceKm: 8,
@@ -191,8 +214,6 @@ export const PHASES: Record<PhaseKey, PhaseRules> = {
   },
   peak: {
     phase: "peak",
-    startDate: new Date(2026, 7, 24), // 24 Aug 2026
-    endDate: new Date(2026, 8, 14), // 14 Sep 2026
     sessionsPerWeek: 5, // 4× + long run
     zone2Required: false,
     minDistanceKm: 8,
@@ -203,11 +224,9 @@ export const PHASES: Record<PhaseKey, PhaseRules> = {
   },
   // The race run-in after the peak block: volume drops sharply, no hard efforts,
   // legs stay fresh for race day. Reached via `getCurrentPhase` (the 21-day
-  // rule), not a dated slot in `PHASE_ORDER` — its dates only frame `getPhase`.
+  // rule), not a dated slot in `PHASE_ORDER` — its dates only frame the rules.
   taper: {
     phase: "taper",
-    startDate: new Date(2026, 8, 15), // 15 Sep 2026 (day after peak ends)
-    endDate: RACE_DATE, // 20 Sep 2026
     sessionsPerWeek: 3, // max 3 easy run days
     zone2Required: false,
     minDistanceKm: 4,
@@ -218,7 +237,51 @@ export const PHASES: Record<PhaseKey, PhaseRules> = {
   },
 };
 
+const PHASE_KEYS: PhaseKey[] = ["adapt", "burn", "sharpen", "peak", "taper"];
 const PHASE_ORDER: PhaseKey[] = ["adapt", "burn", "sharpen", "peak"];
+
+// Memo per race day: buildPhases is called on every request across several
+// view-models, and the result only varies with the race's calendar day. Each
+// entry is five small objects, and the key space is one per distinct user race
+// date, so the map stays trivially small.
+const phasesCache = new Map<number, Record<PhaseKey, PhaseRules>>();
+
+/**
+ * Daterede faseregler for en vilkårlig race-dato (issue #99). A pure function
+ * of the race's calendar day: each phase's offsets from {@link PHASE_TEMPLATE}
+ * are subtracted in whole calendar days (local-midnight arithmetic — never
+ * `± N * DAY_MS` on timestamps), so leap days and DST shifts can't displace a
+ * phase boundary. Time-of-day on `raceDate` is ignored.
+ */
+export function buildPhases(raceDate: Date): Record<PhaseKey, PhaseRules> {
+  const day = dayNumber(raceDate);
+  const cached = phasesCache.get(day);
+  if (cached) return cached;
+
+  const raceMidnight = new Date(raceDate.getFullYear(), raceDate.getMonth(), raceDate.getDate());
+  const phases = {} as Record<PhaseKey, PhaseRules>;
+  for (const key of PHASE_KEYS) {
+    const template = PHASE_TEMPLATE[key];
+    phases[key] = {
+      ...PHASE_RULES_TEMPLATE[key],
+      startDate: addDays(raceMidnight, -template.startDaysBeforeRace),
+      endDate: addDays(raceMidnight, -template.endDaysBeforeRace),
+    };
+  }
+  phasesCache.set(day, phases);
+  return phases;
+}
+
+/**
+ * Total plan length in whole weeks (adapt start → race day, inclusive).
+ * Afløser den hardcodede `PLAN_TOTAL_WEEKS = 38` (issue #99) — the offsets are
+ * fixed, so this is 13 for every race date, but deriving it keeps the template
+ * the single owner of the plan's shape.
+ */
+export function planTotalWeeks(raceDate: Date = DEFAULT_RACE_DATE): number {
+  const phases = buildPhases(raceDate);
+  return Math.ceil((daysUntil(phases.adapt.startDate, phases.taper.endDate) + 1) / 7);
+}
 
 /**
  * A monotonic per-day ordering key — strictly increasing with the calendar day
@@ -229,9 +292,9 @@ function dayNumber(d: Date): number {
   return d.getFullYear() * 10000 + d.getMonth() * 100 + d.getDate();
 }
 
-/** The phase rules for a key. */
-export function getPhase(phase: PhaseKey): PhaseRules {
-  return PHASES[phase];
+/** The phase rules for a key, dated against the given race. */
+export function getPhaseRules(phase: PhaseKey, raceDate: Date = DEFAULT_RACE_DATE): PhaseRules {
+  return buildPhases(raceDate)[phase];
 }
 
 /** The user's home timezone — the plan and the athlete both live in Denmark. */
@@ -268,16 +331,20 @@ export function getLocalDate(now: Date = new Date()): Date {
  * race are the `taper`; once the race has passed we hold at `peak`. The dated
  * blocks take precedence, so the taper only ever covers the post-peak run-in.
  */
-export function getCurrentPhase(date: Date = getLocalDate()): PhaseKey {
+export function getCurrentPhase(
+  date: Date = getLocalDate(),
+  raceDate: Date = DEFAULT_RACE_DATE
+): PhaseKey {
+  const phases = buildPhases(raceDate);
   const day = dayNumber(date);
   for (const key of PHASE_ORDER) {
-    const phase = PHASES[key];
+    const phase = phases[key];
     if (day >= dayNumber(phase.startDate) && day <= dayNumber(phase.endDate)) {
       return key;
     }
   }
-  if (day < dayNumber(PHASES.adapt.startDate)) return "adapt";
-  const daysToRace = daysUntil(date, RACE_DATE);
+  if (day < dayNumber(phases.adapt.startDate)) return "adapt";
+  const daysToRace = daysUntil(date, phases.taper.endDate);
   if (daysToRace >= 0 && daysToRace < TAPER_WINDOW_DAYS) return "taper";
   return "peak";
 }
@@ -325,11 +392,18 @@ function addDays(base: Date, days: number): Date {
  * Easy days sit at the phase's `minDistanceKm` in Zone 2; the tempo (sharpen/
  * peak) uses `maxDistanceKm`; the long run (peak) uses `longRunMaxKm`. Pass
  * `startDate` — treated as the week's Monday — to stamp a concrete date on each
- * day. The result never self-violates the constraint set for its phase.
+ * day. `raceDate`/`raceName` anchor the taper's race week (issue #99); the
+ * defaults keep demo callers on the original plan. The result never
+ * self-violates the constraint set for its phase.
  */
-export function getWeekPlan(phase: PhaseKey, startDate?: Date): PlannedSession[] {
-  const rules = getPhase(phase);
-  if (phase === "taper") return taperWeekPlan(rules, startDate);
+export function getWeekPlan(
+  phase: PhaseKey,
+  startDate?: Date,
+  raceDate: Date = DEFAULT_RACE_DATE,
+  raceName: string = DEFAULT_RACE_NAME
+): PlannedSession[] {
+  const rules = getPhaseRules(phase, raceDate);
+  if (phase === "taper") return taperWeekPlan(rules, startDate, raceDate, raceName);
   const runDays = WEEK_RUN_DAYS[rules.sessionsPerWeek] ?? WEEK_RUN_DAYS[4];
   const tempoDay: Weekday | null = rules.hasTempoSession ? "wed" : null;
   const longDay: Weekday | null = rules.hasLongRun ? "sun" : null;
@@ -373,7 +447,7 @@ export function getWeekPlan(phase: PhaseKey, startDate?: Date): PlannedSession[]
 
 /**
  * The taper week (issue #76 B4). Two shapes:
- *   - Race week (RACE_DATE falls inside the given Monday→Sunday span): 2 easy
+ *   - Race week (`raceDate` falls inside the given Monday→Sunday span): 2 easy
  *     run days plus race day. A short shakeout the day before the race, a rest
  *     day the day before that, one short easy run early in the week.
  *   - Otherwise a general taper week: up to 3 easy Zone-2 days, no hard efforts,
@@ -381,8 +455,13 @@ export function getWeekPlan(phase: PhaseKey, startDate?: Date): PlannedSession[]
  * Without a `startDate` (no calendar context) we can't locate the race, so we
  * fall back to the general taper shape.
  */
-function taperWeekPlan(rules: PhaseRules, startDate?: Date): PlannedSession[] {
-  const raceIndex = startDate ? daysUntil(startDate, RACE_DATE) : -1;
+function taperWeekPlan(
+  rules: PhaseRules,
+  startDate: Date | undefined,
+  raceDate: Date,
+  raceName: string
+): PlannedSession[] {
+  const raceIndex = startDate ? daysUntil(startDate, raceDate) : -1;
   const isRaceWeek = startDate != null && raceIndex >= 0 && raceIndex <= 6;
 
   if (isRaceWeek && startDate) {
@@ -395,7 +474,7 @@ function taperWeekPlan(rules: PhaseRules, startDate?: Date): PlannedSession[] {
           type: "race",
           zone: 5,
           distanceKm: 21.1,
-          description: "Race — Silkeborg Halvmarathon",
+          description: `Race — ${raceName}`,
         };
       }
       if (index === raceIndex - 1) {
@@ -493,7 +572,7 @@ const zone2HrCeiling: Constraint = {
   severity: "hard",
   category: "heart-rate",
   evaluate(context) {
-    if (!getPhase(context.phase).zone2Required) return null;
+    if (!getPhaseRules(context.phase, context.raceDate).zone2Required) return null;
     if (context.plannedZone == null || context.plannedZone <= 2) return null;
     return {
       constraintId: "zone2-hr-ceiling",
@@ -581,7 +660,7 @@ const longRunCap: Constraint = {
   evaluate(context) {
     if (normalizeType(context.plannedType) !== "long") return null;
     if (context.plannedDistanceKm == null) return null;
-    const cap = getPhase(context.phase).longRunMaxKm;
+    const cap = getPhaseRules(context.phase, context.raceDate).longRunMaxKm;
     if (context.plannedDistanceKm <= cap) return null;
     return {
       constraintId: "long-run-cap",
@@ -617,7 +696,7 @@ const basePhaseZone2: Constraint = {
   severity: "phase",
   category: "base-phase",
   evaluate(context) {
-    if (!getPhase(context.phase).zone2Required) return null;
+    if (!getPhaseRules(context.phase, context.raceDate).zone2Required) return null;
     if (!isSpeedSession(context.plannedType)) return null;
     return {
       constraintId: "base-phase-zone2",
@@ -690,7 +769,7 @@ const ZONE2_ONLY_CONSTRAINTS = new Set(["zone2-hr-ceiling", "base-phase-zone2"])
 
 /** The constraints in force for a phase (drops the Zone-2 base rules outside adapt/burn). */
 export function getActiveConstraints(phase: PhaseKey): Constraint[] {
-  const zone2Required = getPhase(phase).zone2Required;
+  const zone2Required = getPhaseRules(phase).zone2Required;
   return ALL_CONSTRAINTS.filter((c) => (ZONE2_ONLY_CONSTRAINTS.has(c.id) ? zone2Required : true));
 }
 

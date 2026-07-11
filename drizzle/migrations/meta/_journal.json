@@ -29,6 +29,13 @@
       "when": 1783499151415,
       "tag": "0003_exotic_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783709829698,
+      "tag": "0004_tan_frog_thor",
+      "breakpoints": true
     }
   ]
 }

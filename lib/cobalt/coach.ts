@@ -15,7 +15,7 @@
 // (the ChatPanel owns that flow).
 
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
-import { RACE_DATE } from "@/lib/coach/engine";
+import { DEFAULT_RACE_DATE } from "@/lib/coach/engine";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
 
@@ -110,9 +110,9 @@ function windowAvgHr(
   return Math.round(samples.reduce((sum, hr) => sum + hr, 0) / samples.length);
 }
 
-/** Whole weeks until the goal race (never negative). */
-function weeksToRace(now: Date): number {
-  return Math.max(0, Math.round((RACE_DATE.getTime() - now.getTime()) / (7 * DAY_MS)));
+/** Whole weeks until the goal race (never negative). Demo default per #99. */
+function weeksToRace(now: Date, raceDate: Date = DEFAULT_RACE_DATE): number {
+  return Math.max(0, Math.round((raceDate.getTime() - now.getTime()) / (7 * DAY_MS)));
 }
 
 /** Longest run within the last `days`, or null when the window is empty. */

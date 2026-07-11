@@ -68,6 +68,38 @@ export const getUserById = cache(async (id: string) => {
 });
 
 /**
+ * The user's target race (issue #99): a day-granular date plus an optional
+ * display name. Both fields are null until the user picks a race — callers
+ * fall back to the engine's DEFAULT_RACE_DATE (demo plan) in that case.
+ * Returns null when the user row itself is missing or the read fails.
+ */
+export const getRacePlan = cache(async (userId: string) => {
+  try {
+    const [row] = await db
+      .select({ raceDate: users.raceDate, raceName: users.raceName })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return row ?? null;
+  } catch {
+    return null;
+  }
+});
+
+/** Set (or clear) the user's target race. Write path — intentionally uncached. */
+export async function updateRacePlan(
+  userId: string,
+  input: { raceDate: Date | null; raceName: string | null }
+) {
+  const [user] = await db
+    .update(users)
+    .set({ raceDate: input.raceDate, raceName: input.raceName, updatedAt: new Date() })
+    .where(eq(users.id, userId))
+    .returning({ id: users.id, raceDate: users.raceDate, raceName: users.raceName });
+  return user ?? null;
+}
+
+/**
  * OAuth accounts linked to a user via NextAuth (GitHub, Google, …). Returns the
  * non-sensitive identity columns only — never the stored tokens.
  */

@@ -7,9 +7,18 @@
 //
 // buildPlanView() defaults to the demo fixtures (the unauthenticated fallback);
 // the server page passes getDashboardActivities rows for signed-in users
-// (issue #84), so the live parts derive from real training data.
+// (issue #84), so the live parts derive from real training data. The race is a
+// parameter too (issue #99): phase markers/segments, the countdown and the race
+// card all derive from buildPhases(raceDate), so a user's own race re-anchors
+// the whole page while the defaults keep visitors on the demo plan.
 
-import { buildHomeView, type HomeActivityLike, RACE_DATE } from "@/lib/cobalt/hjem";
+import {
+  buildPhases,
+  DEFAULT_RACE_DATE,
+  DEFAULT_RACE_NAME,
+  type PhaseKey,
+} from "@/lib/coach/engine";
+import { buildHomeView, type HomeActivityLike } from "@/lib/cobalt/hjem";
 import { demoActivities } from "@/lib/demo/data";
 
 const DA_WEEKDAYS = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
@@ -46,7 +55,7 @@ const DA_MONTHS_LONG = [
 export type PlanTone = "cobalt" | "red" | "muted";
 
 export interface PhaseMarker {
-  /** Label, mono uppercase (e.g. "Base", "Build · nu", "Race 13. sep"). */
+  /** Label, mono uppercase (e.g. "Base", "Build · nu", "Race 20. sep"). */
   label: string;
   /** Where the dot sits on the timeline, 0–1 left→right. */
   position: number;
@@ -88,16 +97,20 @@ export interface UpcomingWeek {
 }
 
 export interface PlanView {
-  /** Total plan length (the serif hero: "38 uger."). */
+  /** Total plan length (the serif hero: "13 uger."). */
   totalWeeks: number;
   /** Which week of the plan we're in (header stat + "Denne uge — uge N"). */
   weekOfPlan: number;
   /** Live countdown to race day. */
   daysToRace: number;
   goalLabel: string;
+  /** Header label ("Træningsplan · Silkeborg Halvmarathon"). */
+  planTitle: string;
+  /** True once the race day is behind `now` — drives the "vælg din næste race" CTA. */
+  racePassed: boolean;
   phaseMarkers: PhaseMarker[];
   phaseSegments: PhaseSegment[];
-  /** Short race date for the timeline end ("13. sep"). */
+  /** Short race date for the timeline end ("20. sep"). */
   raceShortDate: string;
   weekPlannedKm: number;
   weekDoneKm: number;
@@ -105,40 +118,92 @@ export interface PlanView {
   upcomingWeeks: UpcomingWeek[];
   race: {
     name: string;
-    /** Full race day line ("Søndag 13. september"). */
+    /** Full race day line ("Søndag 20. september"). */
     dayLabel: string;
+    /** The race date as a `<input type="date">` value ("2026-09-20"). */
+    dateValue: string;
     goalTime: string;
     racePace: string;
     aiEstimate: string;
   };
 }
 
+/** Timeline label per engine phase, mono uppercase in the UI. */
+const PHASE_LABELS: Record<PhaseKey, string> = {
+  adapt: "Adapt",
+  burn: "Burn",
+  sharpen: "Sharpen",
+  peak: "Peak",
+  taper: "Taper",
+};
+
+const PHASE_SEQUENCE: PhaseKey[] = ["adapt", "burn", "sharpen", "peak", "taper"];
+
+const DAY_MS = 86_400_000;
+
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** Whole calendar days from `a` to `b` (local midnights — leap/DST safe). */
+function daysBetween(a: Date, b: Date): number {
+  return Math.round((startOfDay(b) - startOfDay(a)) / DAY_MS);
+}
+
+/** "2026-09-20" — the value a native date input expects, from local Y/M/D. */
+function dateInputValue(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 export function buildPlanView(
   activities: HomeActivityLike[] = demoActivities,
-  now: Date = new Date()
+  now: Date = new Date(),
+  raceDate: Date = DEFAULT_RACE_DATE,
+  raceName: string = DEFAULT_RACE_NAME
 ): PlanView {
-  const home = buildHomeView(activities, now);
+  const home = buildHomeView(activities, now, raceDate, raceName);
   const weekOfPlan = home.plan.weekOfPlan;
   const totalWeeks = home.plan.totalWeeks;
   const daysToRace = home.plan.daysToRace;
 
-  const raceShortDate = `${RACE_DATE.getDate()}. ${DA_MONTHS_SHORT[RACE_DATE.getMonth()]}`;
-  const raceDayLabel = `${DA_WEEKDAYS[RACE_DATE.getDay()]} ${RACE_DATE.getDate()}. ${DA_MONTHS_LONG[RACE_DATE.getMonth()]}`;
+  const raceShortDate = `${raceDate.getDate()}. ${DA_MONTHS_SHORT[raceDate.getMonth()]}`;
+  const raceDayLabel = `${DA_WEEKDAYS[raceDate.getDay()]} ${raceDate.getDate()}. ${DA_MONTHS_LONG[raceDate.getMonth()]}`;
+
+  // Timeline derived from the engine's phase blocks (issue #99, closes #96 pt 1):
+  // each phase's position is its boundary's share of the whole build, and its
+  // state/fill follows where `now` sits — so the timeline can never contradict
+  // the header's weekOfPlan again.
+  const phases = buildPhases(raceDate);
+  const planStart = phases.adapt.startDate;
+  const planDays = daysBetween(planStart, phases.taper.endDate);
+  const nowDay = startOfDay(now);
+
+  const phaseState = (phase: PhaseKey): "done" | "active" | "upcoming" => {
+    if (nowDay > startOfDay(phases[phase].endDate)) return "done";
+    if (nowDay >= startOfDay(phases[phase].startDate)) return "active";
+    return "upcoming";
+  };
 
   const phaseMarkers: PhaseMarker[] = [
-    { label: "Base ✓", position: 0, state: "done" },
-    { label: "Build · nu", position: 14 / 38, state: "active" },
-    { label: "Peak", position: 26 / 38, state: "upcoming" },
-    { label: "Taper", position: 34 / 38, state: "upcoming" },
-    { label: `Race ${raceShortDate}`, position: 1, state: "race" },
+    ...PHASE_SEQUENCE.map((key) => {
+      const state = phaseState(key);
+      const suffix = state === "done" ? " ✓" : state === "active" ? " · nu" : "";
+      return {
+        label: `${PHASE_LABELS[key]}${suffix}`,
+        position: daysBetween(planStart, phases[key].startDate) / planDays,
+        state,
+      };
+    }),
+    { label: `Race ${raceShortDate}`, position: 1, state: "race" as const },
   ];
 
-  const phaseSegments: PhaseSegment[] = [
-    { id: "base", flex: 14, fill: "done" },
-    { id: "build", flex: 12, fill: "active" },
-    { id: "peak", flex: 8, fill: "upcoming" },
-    { id: "taper", flex: 4, fill: "upcoming" },
-  ];
+  const phaseSegments: PhaseSegment[] = PHASE_SEQUENCE.map((key) => ({
+    id: key,
+    flex: daysBetween(phases[key].startDate, phases[key].endDate) + 1,
+    fill: phaseState(key),
+  }));
 
   const days: DayPlan[] = [
     {
@@ -246,6 +311,8 @@ export function buildPlanView(
     weekOfPlan,
     daysToRace,
     goalLabel: home.plan.goalLabel,
+    planTitle: home.plan.planTitle,
+    racePassed: home.plan.racePassed,
     phaseMarkers,
     phaseSegments,
     raceShortDate,
@@ -254,8 +321,9 @@ export function buildPlanView(
     days,
     upcomingWeeks,
     race: {
-      name: "CPH Marathon",
+      name: raceName,
       dayLabel: raceDayLabel,
+      dateValue: dateInputValue(raceDate),
       goalTime: "3:45",
       racePace: "5:20",
       aiEstimate: "3:41",

@@ -10,6 +10,7 @@ export function PlanStrip({
   daysToRace,
   goalLabel,
   raceDateLabel,
+  planTitle,
   started,
 }: {
   weekOfPlan: number;
@@ -18,6 +19,8 @@ export function PlanStrip({
   daysToRace: number;
   goalLabel: string;
   raceDateLabel: string;
+  /** From the view-model (issue #99) — carries the user's race name. */
+  planTitle: string;
   started: boolean;
 }) {
   return (
@@ -25,7 +28,7 @@ export function PlanStrip({
       <Logo size={40} radius={12} />
       <div className="min-w-0">
         <div className="font-cg-display text-[16px] font-bold tracking-[-0.02em] text-cobalt">
-          Marathonplan · CPH Marathon
+          {planTitle}
         </div>
         <div className="text-[12.5px] text-ink">
           {goalLabel} · {raceDateLabel}

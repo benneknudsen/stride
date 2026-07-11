@@ -5,8 +5,11 @@
 //
 // buildHomeView() defaults to the demo fixtures (the unauthenticated fallback);
 // the server page passes getDashboardActivities rows for signed-in users
-// (issue #84), mirroring lib/cobalt/coach.ts.
+// (issue #84), mirroring lib/cobalt/coach.ts. The race is a parameter too
+// (issue #99): the server page passes the user's own race date/name, and the
+// defaults keep visitors on the engine's demo race.
 
+import { DEFAULT_RACE_DATE, DEFAULT_RACE_NAME, planTotalWeeks } from "@/lib/coach/engine";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
 
@@ -27,10 +30,7 @@ const DA_MONTHS = [
   "dec",
 ];
 
-/** CPH Marathon target — fixed race date drives the live plan countdown.
- * Exported so the Plan page (lib/cobalt/plan.ts) derives the same countdown. */
-export const RACE_DATE = new Date(2026, 8, 13, 9, 0, 0, 0); // Sunday 13 Sep 2026
-export const PLAN_TOTAL_WEEKS = 38;
+const DA_WEEKDAYS_LONG = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
 
 export interface ZoneInfo {
   /** IntensityMeter level 1–5. */
@@ -193,6 +193,12 @@ export interface HomeView {
     daysToRace: number;
     goalLabel: string;
     raceDateLabel: string;
+    /** Display name of the target race ("Silkeborg Halvmarathon"). */
+    raceName: string;
+    /** Strip/header title ("Træningsplan · Silkeborg Halvmarathon"). */
+    planTitle: string;
+    /** True once the race day is behind `now` — drives the "vælg din næste race" CTA. */
+    racePassed: boolean;
   };
 }
 
@@ -231,7 +237,9 @@ function isRun(activity: HomeActivityLike): boolean {
 
 export function buildHomeView(
   activities: HomeActivityLike[] = demoActivities,
-  now: Date = new Date()
+  now: Date = new Date(),
+  raceDate: Date = DEFAULT_RACE_DATE,
+  raceName: string = DEFAULT_RACE_NAME
 ): HomeView {
   // Pace, volume and zones are only meaningful over runs — a ride or a swim
   // would skew every one of them. Same predicate as lib/coach/dashboard.ts and
@@ -283,11 +291,14 @@ export function buildHomeView(
     paceLabel: formatPace(a.averageSpeed),
   }));
 
-  const daysToRace = Math.max(0, Math.ceil((RACE_DATE.getTime() - now.getTime()) / DAY_MS));
-  const weekOfPlan = Math.min(
-    PLAN_TOTAL_WEEKS,
-    Math.max(1, PLAN_TOTAL_WEEKS - Math.ceil(daysToRace / 7))
-  );
+  // Day-granular countdown (local midnights, never raw timestamp diffs) so a
+  // boundary evening can't flip the count, and race day itself reads 0.
+  const daysToRace = Math.max(0, Math.round((startOfDay(raceDate) - startOfDay(now)) / DAY_MS));
+  const racePassed = startOfDay(now) > startOfDay(raceDate);
+  const totalWeeks = planTotalWeeks(raceDate);
+  // Race week (0–6 days out) is the plan's final week; each further 7 days is
+  // one week earlier. Pre-plan dates clamp to week 1.
+  const weekOfPlan = Math.min(totalWeeks, Math.max(1, totalWeeks - Math.floor(daysToRace / 7)));
 
   const coachQuote =
     recoveryPct >= 80
@@ -323,11 +334,14 @@ export function buildHomeView(
     recentRuns,
     plan: {
       weekOfPlan,
-      totalWeeks: PLAN_TOTAL_WEEKS,
-      progressPct: Math.round((weekOfPlan / PLAN_TOTAL_WEEKS) * 100),
+      totalWeeks,
+      progressPct: Math.round((weekOfPlan / totalWeeks) * 100),
       daysToRace,
       goalLabel: "Mål under 3:45",
-      raceDateLabel: `Søndag ${danishDate(RACE_DATE)}`,
+      raceDateLabel: `${DA_WEEKDAYS_LONG[raceDate.getDay()]} ${danishDate(raceDate)}`,
+      raceName,
+      planTitle: `Træningsplan · ${raceName}`,
+      racePassed,
     },
   };
 }

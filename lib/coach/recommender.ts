@@ -20,10 +20,9 @@ import {
   EASY_MIN_RECOVERY_HOURS,
   getCurrentPhase,
   getLocalDate,
-  getPhase,
+  getPhaseRules,
   getWeekPlan,
   MIN_RECOVERY_HOURS,
-  PHASES,
   type PlannedSession,
   type SessionRisk,
   type SessionType,
@@ -48,6 +47,8 @@ export interface WorkoutInput {
   injuryHistory?: boolean;
   /** Optional caller risk read, threaded into the engine's validation context. */
   risk?: SessionRisk;
+  /** The user's race date (issue #99); omitted → the engine's demo default. */
+  raceDate?: Date;
 }
 
 /**
@@ -131,9 +132,9 @@ export function recommendWorkout(
   // server's UTC one — otherwise the phase, the week's Monday and the slot below
   // flip a day early on a boundary evening. Elapsed-time math keeps `now`.
   const today = getLocalDate(now);
-  const phase = getCurrentPhase(today);
-  const rules = getPhase(phase);
-  const weekStrip = getWeekPlan(phase, mondayOfWeek(today));
+  const phase = getCurrentPhase(today, input.raceDate);
+  const rules = getPhaseRules(phase, input.raceDate);
+  const weekStrip = getWeekPlan(phase, mondayOfWeek(today), input.raceDate);
   const reason: string[] = [];
 
   // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
@@ -203,7 +204,7 @@ export function recommendWorkout(
 
   // Edge: first runs — without a full history window, hold the adapt minimum.
   if (!input.progression.hasFullWindow) {
-    distanceKm = Math.min(distanceKm, PHASES.adapt.minDistanceKm);
+    distanceKm = Math.min(distanceKm, getPhaseRules("adapt", input.raceDate).minDistanceKm);
     reason.push("Under 4 ugers historik — vi starter forsigtigt på adapt-fasens minimum.");
   }
 
@@ -243,6 +244,7 @@ export function recommendWorkout(
     footballYesterday: input.footballYesterday,
     phase,
     risk: input.risk,
+    raceDate: input.raceDate,
   });
   if (validation.issues.length > 0) {
     type = "easy";
