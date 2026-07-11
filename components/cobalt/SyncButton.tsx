@@ -2,11 +2,11 @@
 
 import { cn } from "@/lib/utils";
 
-export type SyncState = "idle" | "syncing" | "synced";
+export type SyncState = "idle" | "syncing" | "synced" | "error";
 
-// Sync control with three states. Controlled: the parent owns `state` and fires
-// `onSync` on click (the real flow flips state on the API response; the demo
-// nav simulates ~1.8s).
+// Sync control with four states. Controlled: the parent owns `state` and fires
+// `onSync` on click; the parent flips the state on the API response and drops
+// "synced"/"error" back to "idle" so the button stays usable (#97).
 export function SyncButton({
   state,
   onSync,
@@ -43,6 +43,24 @@ export function SyncButton({
         <span className="size-[7px] rounded-full bg-success" />
         SYNCED
       </span>
+    );
+  }
+
+  // A failed sync stays clickable — it's the retry affordance, not a dead label.
+  if (state === "error") {
+    return (
+      <button
+        type="button"
+        onClick={onSync}
+        className={cn(
+          "cg-interactive inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-red transition-colors hover:bg-red/8",
+          className
+        )}
+        style={{ borderColor: "rgba(238, 36, 24, 0.35)" }}
+      >
+        <span className="size-[7px] rounded-full bg-red" />
+        PRØV IGEN
+      </button>
     );
   }
 

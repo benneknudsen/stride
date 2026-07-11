@@ -16,11 +16,14 @@ import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
 import { greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
 
 // Widget wrapper applying the staggered fadeUp entrance. `span` is the 12-col
-// grid span; `delay` staggers each widget's reveal.
+// grid span; `delay` staggers each widget's reveal. The wrapper stretches to its
+// grid cell for free, but the card inside it doesn't — `[&>*]:h-full` pushes that
+// height down to the GlassCard so short widgets fill the row set by the tallest
+// one instead of leaving a hole under themselves (#97).
 function Bento({ span, delay, children }: { span: string; delay: number; children: ReactNode }) {
   return (
     <div
-      className={`${span} [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]`}
+      className={`${span} h-full [&>*]:h-full [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]`}
       style={{ animationDelay: `${delay}s` }}
     >
       {children}
