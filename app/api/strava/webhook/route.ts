@@ -159,9 +159,16 @@ export async function POST(req: NextRequest) {
       });
       revalidateProgression();
       revalidateDashboardActivities(user.id);
-    } catch {
-      // Don't fail the webhook — Strava will retry
-      return NextResponse.json({ ok: true });
+    } catch (error) {
+      // Fail loudly (issue #87). A 2xx tells Strava the event was delivered and
+      // it is never sent again — a transient Strava/DB error would silently drop
+      // the activity forever. A 5xx puts the event back in Strava's retry queue,
+      // which re-delivers with exponential backoff for ~24 hours.
+      console.error(
+        `[strava-webhook] Failed to ingest activity ${stravaActivityId} for user ${user.id}:`,
+        error
+      );
+      return new NextResponse("Internal Server Error", { status: 500 });
     }
   }
 
