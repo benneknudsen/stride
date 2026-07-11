@@ -130,6 +130,47 @@ describe("buildPlanView — phase timeline derived from buildPhases", () => {
   });
 });
 
+describe("buildPlanView — this week's calendar", () => {
+  // 6.–12. juli 2026 is a Monday-to-Sunday week, so index i is weekday i.
+  const WEEK = [6, 7, 8, 9, 10, 11, 12].map((date) => new Date(2026, 6, date, 9, 0));
+  const WEEKDAYS = ["MAN", "TIR", "ONS", "TOR", "FRE", "LØR", "SØN"];
+
+  it.each(
+    WEEK.map((now, i) => [WEEKDAYS[i], now, i] as const)
+  )("marks %s as today — never a hardcoded Wednesday", (dow, now, index) => {
+    const days = buildPlanView(undefined, now, RACE, RACE_NAME).days;
+    expect(days.filter((d) => d.dow.includes("I DAG"))).toHaveLength(1);
+    expect(days[index].dow).toBe(`${dow} · I DAG`);
+    // Friday is a rest day: it reads "I DAG" but stays a rest tile.
+    expect(days[index].kind).toBe(dow === "FRE" ? "rest" : "today");
+  });
+
+  it("completes the days behind us and leaves the rest prescribed", () => {
+    // Thursday: Mon–Wed are behind us, Fri onwards is not.
+    const days = buildPlanView(undefined, WEEK[3], RACE, RACE_NAME).days;
+    expect(days.slice(0, 3).map((d) => d.kind)).toEqual(["done", "done", "done"]);
+    expect(days.slice(4).map((d) => d.kind)).toEqual(["rest", "planned", "planned"]);
+  });
+
+  it("reports a pace for a session that's been run and a target for one that hasn't", () => {
+    // Tuesday's tempo run: a result on Wednesday, a target on Monday.
+    expect(buildPlanView(undefined, WEEK[2], RACE, RACE_NAME).days[1].meta).toBe("4:27 /km");
+    expect(buildPlanView(undefined, WEEK[0], RACE, RACE_NAME).days[1].meta).toBe("MÅL 4:20–4:35");
+  });
+
+  it("counts only completed days into the week's volume", () => {
+    const monday = buildPlanView(undefined, WEEK[0], RACE, RACE_NAME);
+    expect(monday.weekDoneKm).toBe(0);
+    expect(monday.weekPlannedKm).toBe(53); // 5 + 10 + 8 + 6 + 24
+
+    // Sunday: everything but the long run is done (Thursday's AI day and Friday's
+    // rest day carry no distance).
+    const sunday = buildPlanView(undefined, WEEK[6], RACE, RACE_NAME);
+    expect(sunday.weekDoneKm).toBe(29); // 5 + 10 + 8 + 6
+    expect(sunday.weekDoneKm).toBeLessThanOrEqual(sunday.weekPlannedKm);
+  });
+});
+
 describe("buildPlanView — race card & states", () => {
   it("threads the race name, title and date-input value through", () => {
     const view = buildPlanView(undefined, midOf("burn"), RACE, RACE_NAME);

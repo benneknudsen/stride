@@ -7,7 +7,13 @@
 // fallback); the server page passes getDashboardActivities rows for signed-in
 // users (issue #84).
 
-import { type HomeActivityLike, type ZoneInfo, zoneForHeartRate } from "@/lib/cobalt/hjem";
+import {
+  ACTIVITY_SOURCE,
+  type ActivitySource,
+  type HomeActivityLike,
+  type ZoneInfo,
+  zoneForHeartRate,
+} from "@/lib/cobalt/hjem";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace } from "@/lib/metrics";
 
@@ -92,7 +98,7 @@ export interface ActivityRowView {
   metaLabel: string;
   zone: ZoneInfo;
   category: ActivityCategory;
-  source: "garmin" | "strava";
+  source: ActivitySource;
   km: number;
   paceLabel: string;
   /** Pace reads red on hard efforts, cobalt otherwise. */
@@ -127,7 +133,7 @@ export function buildActivitiesView(
   const windowStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
   const inWindow = runs.filter((a) => a.startDate.getTime() >= windowStart);
 
-  const rows: ActivityRowView[] = inWindow.map((a, i) => {
+  const rows: ActivityRowView[] = inWindow.map((a) => {
     const zone = zoneForHeartRate(a.averageHeartrate ?? 0);
     return {
       id: a.id,
@@ -135,7 +141,7 @@ export function buildActivitiesView(
       metaLabel: metaLabel(a.startDate, now, a.movingTime),
       zone,
       category: activityCategory(zone.level),
-      source: i % 2 === 0 ? "garmin" : "strava",
+      source: ACTIVITY_SOURCE,
       km: a.distance / 1000,
       paceLabel: formatPace(a.averageSpeed),
       paceTone: zone.tone,

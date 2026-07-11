@@ -2,8 +2,9 @@
 // Pure derivation (no React), mirroring lib/cobalt/hjem.ts. The live parts of the
 // plan (which training week we're in, days to race, progress, the race date) come
 // from the shared home view so the countdown stays in sync across pages. The plan
-// *prescription* — phase timeline, this week's sessions, the upcoming block and
-// the race targets — is fixed marathon-plan content, matching the design.
+// *prescription* — this week's sessions, the upcoming block and the race targets —
+// is fixed marathon-plan content, matching the design; only which of those days is
+// today, and therefore which are behind us, is derived from `now` (issue #96).
 //
 // buildPlanView() defaults to the demo fixtures (the unauthenticated fallback);
 // the server page passes getDashboardActivities rows for signed-in users
@@ -18,6 +19,7 @@ import {
   DEFAULT_RACE_NAME,
   type PhaseKey,
 } from "@/lib/coach/engine";
+import { formatDanish } from "@/lib/cobalt/format";
 import { buildHomeView, type HomeActivityLike } from "@/lib/cobalt/hjem";
 import { demoActivities } from "@/lib/demo/data";
 
@@ -143,6 +145,114 @@ const PHASE_SEQUENCE: PhaseKey[] = ["adapt", "burn", "sharpen", "peak", "taper"]
 
 const DAY_MS = 86_400_000;
 
+/** One prescribed session, before `now` decides whether it's done or ahead. */
+interface DayTemplate {
+  id: string;
+  /** Weekday label, mono uppercase ("MAN") — "· I DAG" is appended on the day. */
+  dow: string;
+  /** What the day is when it isn't behind us. */
+  plannedKind: Exclude<DayPlan["kind"], "done" | "today">;
+  name: string;
+  /** Prescribed distance in km (omitted on rest/AI days). */
+  km?: number;
+  zoneLabel: string;
+  zoneTone: PlanTone;
+  /** Meta line once the session is behind us — the pace it was run at. */
+  doneMeta?: string;
+  /** Meta line while it's still ahead — the target. */
+  plannedMeta?: string;
+  metaTone: PlanTone;
+}
+
+/** The week's prescription, Monday-first (see `mondayIndex`). */
+const WEEK_TEMPLATE: DayTemplate[] = [
+  {
+    id: "man",
+    dow: "MAN",
+    plannedKind: "planned",
+    name: "Recovery Jog",
+    km: 5,
+    zoneLabel: "Rolig snak-fart",
+    zoneTone: "muted",
+    doneMeta: "6:06 /km",
+    plannedMeta: "MÅL 6:00–6:20",
+    metaTone: "cobalt",
+  },
+  {
+    id: "tir",
+    dow: "TIR",
+    plannedKind: "planned",
+    name: "Tempo Tuesday",
+    km: 10,
+    zoneLabel: "Hårdt tempo",
+    zoneTone: "red",
+    doneMeta: "4:27 /km",
+    plannedMeta: "MÅL 4:20–4:35",
+    metaTone: "red",
+  },
+  {
+    id: "ons",
+    dow: "ONS",
+    plannedKind: "planned",
+    name: "Easy Run",
+    km: 8,
+    zoneLabel: "Rolig snak-fart",
+    zoneTone: "muted",
+    doneMeta: "5:41 /km",
+    plannedMeta: "MÅL 5:30–5:50",
+    metaTone: "cobalt",
+  },
+  {
+    id: "tor",
+    dow: "TOR",
+    plannedKind: "ai",
+    name: "Progressiv 10 km",
+    zoneLabel: "AI-anbefalet kvalitetspas",
+    zoneTone: "muted",
+    doneMeta: "5:20 → 4:25",
+    plannedMeta: "5:20 → 4:25",
+    metaTone: "cobalt",
+  },
+  {
+    id: "fre",
+    dow: "FRE",
+    plannedKind: "rest",
+    name: "Hviledag",
+    zoneLabel: "Restitution + mobilitet",
+    zoneTone: "muted",
+    metaTone: "muted",
+  },
+  {
+    id: "lor",
+    dow: "LØR",
+    plannedKind: "planned",
+    name: "Easy + Strides",
+    km: 6,
+    zoneLabel: "Rolig + 6×20 sek.",
+    zoneTone: "muted",
+    doneMeta: "5:38 /km",
+    plannedMeta: "MÅL 5:30–5:50",
+    metaTone: "cobalt",
+  },
+  {
+    id: "son",
+    dow: "SØN",
+    plannedKind: "planned",
+    name: "Long Run",
+    km: 24,
+    zoneLabel: "Moderat tempo",
+    zoneTone: "muted",
+    doneMeta: "5:34 /km",
+    plannedMeta: "UGENS NØGLEPAS",
+    metaTone: "red",
+  },
+];
+
+/** JS weekday (0 = Sunday) → index into a Monday-first training week. */
+function mondayIndex(jsDay: number): number {
+  return (jsDay + 6) % 7;
+}
+
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
@@ -213,82 +323,43 @@ export function buildPlanView(
     fill: phaseState(key),
   }));
 
-  const days: DayPlan[] = [
-    {
-      id: "man",
-      dow: "MAN",
-      kind: "done",
-      name: "Recovery Jog",
-      distance: "5,0 km",
-      zoneLabel: "Rolig snak-fart",
-      zoneTone: "muted",
-      meta: "6:06 /km",
-      metaTone: "cobalt",
-    },
-    {
-      id: "tir",
-      dow: "TIR",
-      kind: "done",
-      name: "Tempo Tuesday",
-      distance: "10,0 km",
-      zoneLabel: "Hårdt tempo",
-      zoneTone: "red",
-      meta: "4:27 /km",
-      metaTone: "red",
-    },
-    {
-      id: "ons",
-      dow: "ONS · I DAG",
-      kind: "today",
-      name: "Easy Run",
-      distance: "8,0 km",
-      zoneLabel: "Rolig snak-fart",
-      zoneTone: "muted",
-      meta: "MÅL 5:30–5:50",
-      metaTone: "cobalt",
-    },
-    {
-      id: "tor",
-      dow: "TOR",
-      kind: "ai",
-      name: "Progressiv 10 km",
-      zoneLabel: "AI-anbefalet kvalitetspas",
-      zoneTone: "muted",
-      meta: "5:20 → 4:25",
-      metaTone: "cobalt",
-    },
-    {
-      id: "fre",
-      dow: "FRE",
-      kind: "rest",
-      name: "Hviledag",
-      zoneLabel: "Restitution + mobilitet",
-      zoneTone: "muted",
-      metaTone: "muted",
-    },
-    {
-      id: "lor",
-      dow: "LØR",
-      kind: "planned",
-      name: "Easy + Strides",
-      distance: "6,0 km",
-      zoneLabel: "Rolig + 6×20 sek.",
-      zoneTone: "muted",
-      meta: "MÅL 5:30–5:50",
-      metaTone: "cobalt",
-    },
-    {
-      id: "son",
-      dow: "SØN",
-      kind: "planned",
-      name: "Long Run",
-      distance: "24,0 km",
-      zoneLabel: "Moderat tempo",
-      zoneTone: "muted",
-      meta: "UGENS NØGLEPAS",
-      metaTone: "red",
-    },
-  ];
+  // The week's sessions are fixed plan content, but *which* day is today is not
+  // (issue #96): a template day resolves to done/today/planned by comparing its
+  // weekday to `now`. A session in the past reports the pace it was run at; the
+  // same session ahead of us reports its target — so no day can claim a result
+  // it hasn't produced yet.
+  const todayIndex = mondayIndex(now.getDay());
+
+  const days: DayPlan[] = WEEK_TEMPLATE.map((day, index) => {
+    const past = index < todayIndex;
+    const today = index === todayIndex;
+    // A rest day stays a rest day, whether it's behind us or ahead — there is
+    // nothing to complete and nothing to prescribe.
+    const kind: DayPlan["kind"] =
+      day.plannedKind === "rest" ? "rest" : past ? "done" : today ? "today" : day.plannedKind;
+    const meta = past ? day.doneMeta : day.plannedMeta;
+
+    return {
+      id: day.id,
+      dow: today ? `${day.dow} · I DAG` : day.dow,
+      kind,
+      name: day.name,
+      ...(day.km !== undefined ? { distance: `${formatDanish(day.km)} km` } : {}),
+      zoneLabel: day.zoneLabel,
+      zoneTone: day.zoneTone,
+      ...(meta !== undefined ? { meta } : {}),
+      metaTone: day.metaTone,
+    };
+  });
+
+  // Volume follows the same template, so the header can't promise 48 km against
+  // a week that prescribes something else, nor report kilometres as run on a day
+  // that hasn't happened.
+  const weekPlannedKm = WEEK_TEMPLATE.reduce((sum, day) => sum + (day.km ?? 0), 0);
+  const weekDoneKm = WEEK_TEMPLATE.slice(0, todayIndex).reduce(
+    (sum, day) => sum + (day.km ?? 0),
+    0
+  );
 
   const upcomingWeeks: UpcomingWeek[] = [
     {
@@ -324,8 +395,8 @@ export function buildPlanView(
     phaseMarkers,
     phaseSegments,
     raceShortDate,
-    weekPlannedKm: 48,
-    weekDoneKm: 23.2,
+    weekPlannedKm,
+    weekDoneKm,
     days,
     upcomingWeeks,
     race: {

@@ -4,7 +4,7 @@ import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import { formatDanish } from "@/lib/cobalt/format";
 import type { LatestActivityView } from "@/lib/cobalt/hjem";
 
-// The big "Seneste aktivitet" widget (6/12): header (mono label + Garmin badge
+// The big "Seneste aktivitet" widget (6/12): header (mono label + source badge
 // + timestamp), a 30px title with a plain-language zone pill, four key metrics
 // (heart rate in red) and the self-drawing pace curve.
 function Metric({
@@ -47,7 +47,7 @@ export function LatestActivityCard({
           Seneste aktivitet
         </span>
         <div className="flex items-center gap-3">
-          <SourceBadge source="garmin" />
+          <SourceBadge source={latest.source} />
           <span className="font-cg-mono text-[9.5px] uppercase tracking-[0.14em] text-ink">
             {latest.dayLabel} · {latest.clock}
           </span>

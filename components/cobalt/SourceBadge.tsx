@@ -1,18 +1,15 @@
+import type { ActivitySource } from "@/lib/cobalt/hjem";
 import { cn } from "@/lib/utils";
 
-// Data-source badge (Garmin / Strava) — mono uppercase label with a coloured dot.
-const SOURCES = {
+// Data-source badge — mono uppercase label with a coloured dot. Strava is the
+// only source the app ingests today; the badge is driven by the view-model's
+// `source`, never by the call site.
+const SOURCES: Record<ActivitySource, { label: string; dot: string }> = {
   garmin: { label: "GARMIN", dot: "var(--color-garmin)" },
   strava: { label: "STRAVA", dot: "var(--color-strava)" },
-} as const;
+};
 
-export function SourceBadge({
-  source,
-  className,
-}: {
-  source: "garmin" | "strava";
-  className?: string;
-}) {
+export function SourceBadge({ source, className }: { source: ActivitySource; className?: string }) {
   const { label, dot } = SOURCES[source];
   return (
     <span
