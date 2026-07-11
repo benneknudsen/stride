@@ -10,26 +10,38 @@
 // portfolio visitors won't connect Strava (see CLAUDE.md).
 
 import { revalidateTag, unstable_cache } from "next/cache";
-import { buildCoachDashboard, type CoachDashboardData } from "@/lib/coach/dashboard";
+import { buildCoachDashboard, type CoachDashboardData, DASHBOARD_WEEKS } from "@/lib/coach/dashboard";
+import { DEFAULT_RACE_DATE } from "@/lib/coach/engine";
 import { demoActivities } from "@/lib/demo/data";
 
 /** Cache tag on the progression charts — busted when new activity data lands. */
 const PROGRESSION_TAG = "progression";
 
-/** The full dashboard, computed fresh — the real-time workout card path. */
-export function computeCoachDashboard(): CoachDashboardData {
-  return buildCoachDashboard(demoActivities, new Date());
+/**
+ * The full dashboard, computed fresh — the real-time workout card path.
+ * `raceDate` anchors the phases (issue #99); omitted → the demo default.
+ */
+export function computeCoachDashboard(raceDate?: Date): CoachDashboardData {
+  return buildCoachDashboard(demoActivities, new Date(), DASHBOARD_WEEKS, raceDate);
 }
 
-/** The middle section's chart data, cached for an hour. */
-export const getProgressionCharts = unstable_cache(
-  async () => {
-    const { paceSeries, zoneSeries, volumeSeries, loadGauge } = computeCoachDashboard();
-    return { paceSeries, zoneSeries, volumeSeries, loadGauge };
-  },
-  ["coach-dashboard-progression"],
-  { revalidate: 3600, tags: [PROGRESSION_TAG] }
-);
+/**
+ * The middle section's chart data, cached for an hour. The phase (and thus the
+ * workout the charts sit beside) depends on the race date, so it is part of
+ * the cache key — changing the race via `updateRacePlan` both misses this key
+ * and hard-expires the tag (see `actions/race.ts`).
+ */
+export function getProgressionCharts(raceDate?: Date) {
+  const keyDate = (raceDate ?? DEFAULT_RACE_DATE).toISOString();
+  return unstable_cache(
+    async () => {
+      const { paceSeries, zoneSeries, volumeSeries, loadGauge } = computeCoachDashboard(raceDate);
+      return { paceSeries, zoneSeries, volumeSeries, loadGauge };
+    },
+    ["coach-dashboard-progression", keyDate],
+    { revalidate: 3600, tags: [PROGRESSION_TAG] }
+  )();
+}
 
 /**
  * Expire the progression-chart cache immediately. Called by the Strava webhook

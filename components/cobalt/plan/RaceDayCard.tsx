@@ -14,15 +14,36 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 // Race day card — the red goal card. Race name + date, a live days-to-race
 // countdown, and the three target numbers (goal time, race pace, AI estimate).
-export function RaceDayCard({ race, daysToRace }: { race: PlanView["race"]; daysToRace: number }) {
+// `onEdit` (signed-in users, issue #99) adds the "Skift race" affordance that
+// opens the RaceDateDialog.
+export function RaceDayCard({
+  race,
+  daysToRace,
+  onEdit,
+}: {
+  race: PlanView["race"];
+  daysToRace: number;
+  onEdit?: () => void;
+}) {
   return (
     <GlassCard variant="red" className="px-[26px] py-[22px] text-onred">
       <div className="mb-3 flex items-start justify-between">
         <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] opacity-85">
           Race day
         </span>
-        <span className="font-cg-mono text-[11px] font-semibold uppercase tracking-[0.12em]">
-          {daysToRace} dage
+        <span className="flex items-center gap-3">
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="cg-interactive rounded-pill border border-current/40 px-2.5 py-0.5 font-cg-mono text-[9.5px] uppercase tracking-[0.12em] opacity-85 transition-opacity hover:opacity-100"
+            >
+              Skift race
+            </button>
+          ) : null}
+          <span className="font-cg-mono text-[11px] font-semibold uppercase tracking-[0.12em]">
+            {daysToRace} dage
+          </span>
         </span>
       </div>
 

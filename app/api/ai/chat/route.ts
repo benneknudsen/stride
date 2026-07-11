@@ -37,7 +37,7 @@ import {
   type WorkoutContext,
 } from "@/lib/coach/engine";
 import { recommendWorkout } from "@/lib/coach/recommender";
-import { getChatHistory, insertChatMessage } from "@/lib/db/queries";
+import { getChatHistory, getRacePlan, insertChatMessage } from "@/lib/db/queries";
 import { rateLimit } from "@/lib/rate-limit";
 import { GOALS } from "@/lib/training/goals";
 import {
@@ -175,11 +175,21 @@ function toSnapshot(
   };
 }
 
-function buildCoachTools(userId: string, now: Date) {
+function buildCoachTools(
+  userId: string,
+  now: Date,
+  race?: { raceDate: Date | null; raceName: string | null } | null
+) {
   // E2: resolve "the current phase" from the athlete's Danish calendar day, not
   // the server's UTC one. `now` stays the real instant for the recommender's
   // recovery math; only the day-of read goes through `getLocalDate`.
   const today = getLocalDate(now);
+  // Issue #99: the user's race is resolved once by the route and bound into
+  // every tool here — the model never sees the date as a free parameter, so it
+  // can neither guess nor override which race the plan periodises toward.
+  // Null/undefined falls back to the engine's demo defaults.
+  const raceDate = race?.raceDate ?? undefined;
+  const raceName = race?.raceName ?? undefined;
   return {
     recommendWorkout: tool({
       description:
@@ -221,6 +231,7 @@ function buildCoachTools(userId: string, now: Date) {
             footballYesterday,
             injuryHistory,
             risk,
+            raceDate,
           },
           now
         );
@@ -264,7 +275,12 @@ function buildCoachTools(userId: string, now: Date) {
         monday: isoDate.optional().describe("The Monday the week starts on"),
       }),
       execute: async ({ phase, monday }) =>
-        getWeekPlan(phase ?? getCurrentPhase(today), monday ? new Date(monday) : undefined),
+        getWeekPlan(
+          phase ?? getCurrentPhase(today, raceDate),
+          monday ? new Date(monday) : undefined,
+          raceDate,
+          raceName
+        ),
     }),
 
     validateWorkout: tool({
@@ -288,7 +304,8 @@ function buildCoachTools(userId: string, now: Date) {
           ...input,
           plannedDate: new Date(input.plannedDate),
           lastRunDate: input.lastRunDate ? new Date(input.lastRunDate) : undefined,
-          phase: input.phase ?? getCurrentPhase(today),
+          phase: input.phase ?? getCurrentPhase(today, raceDate),
+          raceDate,
         };
         return serializeValidationResult(validateWorkout(context));
       },
@@ -340,7 +357,9 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
-  const tools = buildCoachTools(userId, now);
+  // Issue #99: look the user's race up once and bind it into all four tools.
+  const racePlan = await getRacePlan(userId);
+  const tools = buildCoachTools(userId, now, racePlan);
   const incoming = parsed.data.messages;
   const latest = incoming[incoming.length - 1];
 

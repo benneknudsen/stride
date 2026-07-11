@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProgressionActivityInput } from "../../lib/training/progression";
 import {
   computeProgression,
@@ -338,6 +338,14 @@ describe("getProgression / getCurrentProgression", () => {
   beforeEach(() => {
     vi.mocked(getActivities).mockReset();
     vi.mocked(getActivities).mockResolvedValue(rows as never);
+    // getCurrentProgression reads the real clock; pin it to AS_OF so the
+    // fixtures' acute window can't drift out from under the test over time.
+    vi.useFakeTimers();
+    vi.setSystemTime(AS_OF);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("getProgression queries activities for the user and returns the series", async () => {

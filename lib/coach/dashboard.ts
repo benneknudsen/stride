@@ -220,11 +220,13 @@ export interface CoachDashboardData {
 /**
  * Build the full coach dashboard from an activity history. Plain-JSON output:
  * safe to cache, serialize across the server→client boundary, and diff in tests.
+ * `raceDate` anchors the recommender's phases (issue #99); omitted → demo default.
  */
 export function buildCoachDashboard(
   activities: CoachActivityInput[],
   now: Date,
-  weeks: number = DASHBOARD_WEEKS
+  weeks: number = DASHBOARD_WEEKS,
+  raceDate?: Date
 ): CoachDashboardData {
   const normalized = normalize(activities);
   const snapshots = computeProgression(normalized, weeks, now);
@@ -252,6 +254,7 @@ export function buildCoachDashboard(
       progression: current,
       lastRun: lastRun ?? new Date(now.getTime() - 3 * DAY_MS),
       footballYesterday: false,
+      raceDate,
     },
     now
   );

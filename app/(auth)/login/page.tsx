@@ -116,7 +116,10 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-[13px] text-ink/60">
           Kigger du bare?{" "}
-          <Link href={ROUTES.DEMO} className="cg-interactive font-semibold text-cobalt hover:underline">
+          <Link
+            href={ROUTES.DEMO}
+            className="cg-interactive font-semibold text-cobalt hover:underline"
+          >
             Prøv demoen
           </Link>
         </p>

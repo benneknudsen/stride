@@ -7,17 +7,29 @@ import {
   buildWeekStrip,
   buildZoneSeries,
   type CoachActivityInput,
+  DASHBOARD_WEEKS,
   LOAD_RISK_LABELS,
 } from "@/lib/coach/dashboard";
-import { getWeekPlan } from "@/lib/coach/engine";
+import { buildPhases, getWeekPlan } from "@/lib/coach/engine";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
-// Burn phase (6 Jul – 2 Aug 2026): Wed is an easy day, Tue a rest day.
-const BURN_WEDNESDAY = new Date(2026, 6, 15, 8, 0);
-const BURN_TUESDAY = new Date(2026, 6, 14, 8, 0);
+// The dashboard is parameterised on the race date (issue #99): anchors derive
+// from this pinned race via the engine's phase blocks, never from calendar
+// literals. In the burn phase, Wed is an easy day and Tue a rest day.
+const TEST_RACE_DATE = new Date(2026, 8, 20);
+
+/** First date with the given JS weekday (0 = Sun) inside a phase, at 08:00. */
+function anchorIn(phase: "burn", jsWeekday: number): Date {
+  const d = new Date(buildPhases(TEST_RACE_DATE)[phase].startDate);
+  while (d.getDay() !== jsWeekday) d.setDate(d.getDate() + 1);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 8, 0);
+}
+
+const BURN_WEDNESDAY = anchorIn("burn", 3);
+const BURN_TUESDAY = anchorIn("burn", 2);
 
 /** A run `daysAgo` days before `asOf`; hrZones omitted like demo fixtures. */
 function run(
@@ -167,33 +179,33 @@ describe("buildLoadGauge", () => {
 
 describe("buildWeekStrip", () => {
   it("returns seven days keyed mon → sun", () => {
-    const strip = buildWeekStrip(getWeekPlan("burn"), BURN_WEDNESDAY);
+    const strip = buildWeekStrip(getWeekPlan("burn", undefined, TEST_RACE_DATE), BURN_WEDNESDAY);
     expect(strip.map((d) => d.weekday)).toEqual(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
   });
 
   it("marks today from the given date", () => {
-    const strip = buildWeekStrip(getWeekPlan("burn"), BURN_WEDNESDAY);
+    const strip = buildWeekStrip(getWeekPlan("burn", undefined, TEST_RACE_DATE), BURN_WEDNESDAY);
     expect(strip[2].isToday).toBe(true);
     expect(strip.filter((d) => d.isToday)).toHaveLength(1);
   });
 
   it("marks today as the next session when today is a run day", () => {
     // Burn Wednesday is an easy run day.
-    const strip = buildWeekStrip(getWeekPlan("burn"), BURN_WEDNESDAY);
+    const strip = buildWeekStrip(getWeekPlan("burn", undefined, TEST_RACE_DATE), BURN_WEDNESDAY);
     expect(strip[2].isNext).toBe(true);
     expect(strip.filter((d) => d.isNext)).toHaveLength(1);
   });
 
   it("points next at the following run day when today is a rest day", () => {
     // Burn Tuesday is a rest day; Wednesday is the next run.
-    const strip = buildWeekStrip(getWeekPlan("burn"), BURN_TUESDAY);
+    const strip = buildWeekStrip(getWeekPlan("burn", undefined, TEST_RACE_DATE), BURN_TUESDAY);
     expect(strip[1].isToday).toBe(true);
     expect(strip[1].isNext).toBe(false);
     expect(strip[2].isNext).toBe(true);
   });
 
   it("marks no next session when only rest days remain this week", () => {
-    const allRest = getWeekPlan("burn").map((day) => ({
+    const allRest = getWeekPlan("burn", undefined, TEST_RACE_DATE).map((day) => ({
       ...day,
       type: "rest" as const,
       description: "Hvile",
@@ -205,7 +217,12 @@ describe("buildWeekStrip", () => {
 
 describe("buildCoachDashboard", () => {
   it("assembles workout card, week strip and all three progression series", () => {
-    const dashboard = buildCoachDashboard(steadyHistory(BURN_WEDNESDAY), BURN_WEDNESDAY);
+    const dashboard = buildCoachDashboard(
+      steadyHistory(BURN_WEDNESDAY),
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
     expect(dashboard.workout.type).toBeDefined();
     expect(dashboard.workout.reason.length).toBeGreaterThan(0);
     expect(dashboard.weekStrip).toHaveLength(7);
@@ -218,12 +235,17 @@ describe("buildCoachDashboard", () => {
   it("derives lastRun from the newest run so a fresh run forces a rest card", () => {
     const asOf = BURN_WEDNESDAY;
     const activities = [...steadyHistory(asOf), run(asOf, 0.5)]; // 12 h ago
-    const dashboard = buildCoachDashboard(activities, asOf);
+    const dashboard = buildCoachDashboard(activities, asOf, DASHBOARD_WEEKS, TEST_RACE_DATE);
     expect(dashboard.workout.type).toBe("rest");
   });
 
   it("is JSON-serializable (no Date instances or undefined gaps)", () => {
-    const dashboard = buildCoachDashboard(steadyHistory(BURN_WEDNESDAY), BURN_WEDNESDAY);
+    const dashboard = buildCoachDashboard(
+      steadyHistory(BURN_WEDNESDAY),
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
     const roundTrip = JSON.parse(JSON.stringify(dashboard));
     expect(roundTrip).toEqual(dashboard);
   });

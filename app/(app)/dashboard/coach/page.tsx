@@ -8,8 +8,10 @@ import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
+import { auth } from "@/lib/auth";
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
+import { getRacePlan } from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
 
 // Coach dashboard (issue #34) — the unified trainer view at /dashboard/coach.
@@ -55,8 +57,8 @@ function SectionLoader({ height }: { height: number }) {
 }
 
 // ── 1. Næste pas (real-time) ────────────────────────────────────────────────
-async function NextWorkoutSection() {
-  const { workout, weekStrip } = computeCoachDashboard();
+async function NextWorkoutSection({ raceDate }: { raceDate?: Date }) {
+  const { workout, weekStrip } = computeCoachDashboard(raceDate);
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 lg:col-span-7">
@@ -70,8 +72,8 @@ async function NextWorkoutSection() {
 }
 
 // ── 2. Progression (cached 1 h) ─────────────────────────────────────────────
-async function ProgressionSection() {
-  const { paceSeries, zoneSeries, volumeSeries, loadGauge } = await getProgressionCharts();
+async function ProgressionSection({ raceDate }: { raceDate?: Date }) {
+  const { paceSeries, zoneSeries, volumeSeries, loadGauge } = await getProgressionCharts(raceDate);
   return (
     <div className="grid grid-cols-12 gap-4">
       <ChartCard
@@ -124,7 +126,14 @@ function ChartCard({
   );
 }
 
-export default function CoachDashboardPage() {
+export default async function CoachDashboardPage() {
+  // Issue #99: anchor the recommender and the cached charts to the user's own
+  // race; visitors (and users without a chosen race) stay on the demo default.
+  const session = await auth();
+  const userId = session?.user?.id;
+  const racePlan = userId ? await getRacePlan(userId) : null;
+  const raceDate = racePlan?.raceDate ?? undefined;
+
   return (
     <main className="flex flex-col gap-8 pt-4 pb-4">
       <header className="flex flex-col gap-1">
@@ -138,14 +147,14 @@ export default function CoachDashboardPage() {
       <section>
         <SectionHeading index="01" title="Næste pas" hint="Realtid" />
         <Suspense fallback={<SectionLoader height={280} />}>
-          <NextWorkoutSection />
+          <NextWorkoutSection raceDate={raceDate} />
         </Suspense>
       </section>
 
       <section>
         <SectionHeading index="02" title="Progression" hint="Cachet 1 t" />
         <Suspense fallback={<SectionLoader height={520} />}>
-          <ProgressionSection />
+          <ProgressionSection raceDate={raceDate} />
         </Suspense>
       </section>
 

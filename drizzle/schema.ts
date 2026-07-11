@@ -1,6 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import {
   bigint,
+  date,
   doublePrecision,
   index,
   integer,
@@ -57,6 +58,10 @@ export const users = pgTable(
     image: text("image"),
     /** Strava athlete id (numeric, stored as bigint for headroom). */
     stravaAthleteId: bigint("strava_athlete_id", { mode: "number" }),
+    /** Målrace-dato (dag-granulær, ingen tz). Null = ingen race valgt → demo-fallback. */
+    raceDate: date("race_date", { mode: "date" }),
+    /** Valgfrit racenavn til UI ("Silkeborg Halvmarathon"). */
+    raceName: text("race_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
