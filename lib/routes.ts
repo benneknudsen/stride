@@ -4,13 +4,21 @@
 export const ROUTES = {
   HOME: "/",
   AKTIVITETER: "/aktiviteter",
-  COACH: "/coach",
+  // Issue #86: coachen havde to overlappende ruter. Den her er den eneste —
+  // NavBar og BottomTabBar peger på den, så tab-markøren rammer rigtigt.
+  COACH: "/dashboard/coach",
   PLAN: "/plan",
   DASHBOARD: "/dashboard",
-  DASHBOARD_COACH: "/dashboard/coach",
   DEMO: "/demo",
   // Login-siden ligger i route-gruppen app/(auth)/login → URL'en er /login.
   LOGIN: "/login",
 } as const;
+
+/**
+ * Den gamle coach-rute. Ingen interne links peger her længere; den lever kun som
+ * kilde for den permanente redirect til {@link ROUTES.COACH} (next.config.ts),
+ * så bogmærker og delte links stadig virker.
+ */
+export const LEGACY_COACH_ROUTE = "/coach";
 
 export type RouteKey = keyof typeof ROUTES;

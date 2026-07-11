@@ -32,14 +32,10 @@ export default auth((req) => {
     return NextResponse.redirect(new URL(ROUTES.HOME, req.nextUrl));
   }
 
-  // Protect all app routes (root /, /aktiviteter, /coach, /dashboard/*, /plan).
-  const APP_ROUTES: string[] = [
-    ROUTES.HOME,
-    ROUTES.AKTIVITETER,
-    ROUTES.COACH,
-    ROUTES.DASHBOARD,
-    ROUTES.PLAN,
-  ];
+  // Protect all app routes (root /, /aktiviteter, /dashboard/* — which covers the
+  // coach — and /plan). The legacy /coach is not listed: next.config redirects it
+  // to ROUTES.COACH, which lands back under /dashboard and is gated here.
+  const APP_ROUTES: string[] = [ROUTES.HOME, ROUTES.AKTIVITETER, ROUTES.DASHBOARD, ROUTES.PLAN];
   const isProtected = APP_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
