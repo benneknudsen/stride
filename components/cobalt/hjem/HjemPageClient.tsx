@@ -35,7 +35,17 @@ function Bento({ span, delay, children }: { span: string; delay: number; childre
 // is built server-side (demo or live) and arrives as a plain-JSON prop; the
 // greeting stays client-side so it follows the visitor's clock, not the
 // server's.
-export function HjemPageClient({ view }: { view: HomeView }) {
+export function HjemPageClient({
+  view,
+  userName,
+  stravaConnected,
+  signedIn,
+}: {
+  view: HomeView;
+  userName?: string;
+  stravaConnected: boolean;
+  signedIn: boolean;
+}) {
   const [loading, setLoading] = useState(true);
   const [greeting] = useState(() => greetingForHour(new Date().getHours()));
 
@@ -52,6 +62,8 @@ export function HjemPageClient({ view }: { view: HomeView }) {
         weekNumber={view.weekNumber}
         weeklyKm={view.weeklyKm}
         greeting={greeting}
+        note={view.heroNote}
+        userName={userName}
         started={started}
       />
 
@@ -91,11 +103,13 @@ export function HjemPageClient({ view }: { view: HomeView }) {
             <AiCoachCard quote={view.coachQuote} />
           </Bento>
 
-          <Bento span="col-span-12 lg:col-span-7" delay={0.48}>
-            <RecentRunsCard runs={view.recentRuns} />
-          </Bento>
+          {view.recentRuns.length > 0 ? (
+            <Bento span="col-span-12 lg:col-span-7" delay={0.48}>
+              <RecentRunsCard runs={view.recentRuns} />
+            </Bento>
+          ) : null}
           <Bento span="col-span-12 lg:col-span-5" delay={0.54}>
-            <DataSourcesCard />
+            <DataSourcesCard stravaConnected={stravaConnected} signedIn={signedIn} />
           </Bento>
         </div>
 

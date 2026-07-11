@@ -68,6 +68,7 @@ export default function DemoPage() {
         weekNumber={view.weekNumber}
         weeklyKm={view.weeklyKm}
         greeting={greeting}
+        note={view.heroNote}
         started={ready}
       />
 
@@ -103,11 +104,13 @@ export default function DemoPage() {
           <Bento span="col-span-12 lg:col-span-5" delay={0.42}>
             <AiCoachCard quote={view.coachQuote} />
           </Bento>
-          <Bento span="col-span-12 lg:col-span-7" delay={0.48}>
-            <RecentRunsCard runs={view.recentRuns} />
-          </Bento>
+          {view.recentRuns.length > 0 ? (
+            <Bento span="col-span-12 lg:col-span-7" delay={0.48}>
+              <RecentRunsCard runs={view.recentRuns} />
+            </Bento>
+          ) : null}
           <Bento span="col-span-12 lg:col-span-5" delay={0.54}>
-            <DataSourcesCard />
+            <DataSourcesCard stravaConnected={false} signedIn={false} />
           </Bento>
         </div>
       </div>

@@ -41,9 +41,12 @@ export function PhaseTimeline({
   return (
     <GlassCard className="rounded-card px-6 py-5">
       <div className="mb-2.5 flex justify-between font-cg-mono text-[9px] uppercase tracking-[0.06em] sm:text-[10px] sm:tracking-[0.14em]">
+        {/* Six labels don't fit a 375px row, so below sm each falls back to its
+            short form ("Race" rather than "Race 13. sep"). */}
         {markers.map((m) => (
           <span key={m.label} className={LABEL_TONE[m.state]}>
-            {m.label}
+            <span className="sm:hidden">{m.shortLabel}</span>
+            <span className="hidden sm:inline">{m.label}</span>
           </span>
         ))}
       </div>

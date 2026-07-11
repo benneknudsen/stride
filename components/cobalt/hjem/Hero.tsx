@@ -3,15 +3,24 @@ import { CountUpNumber } from "@/components/cobalt/CountUpNumber";
 // Hero band: red mono week-label + two-line serif-italic greeting on the left,
 // the giant weekly-km count-up on the right. Sits on the silver paper (no glass)
 // so the drifting blobs bleed through behind it.
+//
+// `note` is the recovery band's sentence (lib/cobalt/hjem.ts) — the same band the
+// RecoveryCard reads, so the greeting can't promise a hard session while the card
+// below prescribes rest.
 export function Hero({
   weekNumber,
   weeklyKm,
   greeting,
+  note,
+  userName,
   started,
 }: {
   weekNumber: number;
   weeklyKm: number;
   greeting: string;
+  note: string;
+  /** Absent for visitors — the greeting then stands alone, unaddressed. */
+  userName?: string;
   started: boolean;
 }) {
   return (
@@ -21,9 +30,9 @@ export function Hero({
           Uge {weekNumber} · Marathonplan
         </div>
         <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
-          {greeting}, Benjamin.
+          {userName ? `${greeting}, ${userName}.` : `${greeting}.`}
           <br />
-          Kroppen er klar i dag.
+          {note}
         </h1>
       </div>
       <CountUpNumber
