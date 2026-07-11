@@ -54,7 +54,7 @@ export function AktiviteterPageClient({ view }: { view: ActivitiesView }) {
 
           {rows.length === 0 ? (
             <div className="rounded-card border border-dashed border-cobalt/25 bg-white/35 p-10 text-center text-[14px] text-ink">
-              Ingen ture matcher filteret.
+              {filter === "alle" ? "Ingen ture endnu." : "Ingen ture matcher filteret."}
             </div>
           ) : null}
         </div>

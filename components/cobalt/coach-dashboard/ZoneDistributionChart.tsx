@@ -11,12 +11,16 @@ import type { ZoneWeek } from "@/lib/coach/dashboard";
 // adjacent-pair CVD separation against the silver surface. White inter-segment
 // strokes stand in for the 2px surface gap; the legend + tooltip carry identity
 // for the low-contrast light steps.
+//
+// Labels are plain language — the zone *codes* ("Z1"…"Z5") are jargon the rest of
+// the app deliberately avoids, and the ramp's light→dark order already conveys
+// the ordering they encoded.
 const ZONE_RAMP: { key: keyof Omit<ZoneWeek, "week">; label: string; color: string }[] = [
-  { key: "z1", label: "Z1 Restitution", color: "#ccd3f5" },
-  { key: "z2", label: "Z2 Aerob", color: "#9aa6ec" },
-  { key: "z3", label: "Z3 Tempo", color: "#6577e0" },
-  { key: "z4", label: "Z4 Tærskel", color: "#3c4ed0" },
-  { key: "z5", label: "Z5 Max", color: "#131f96" },
+  { key: "z1", label: "Restitution", color: "#ccd3f5" },
+  { key: "z2", label: "Aerob", color: "#9aa6ec" },
+  { key: "z3", label: "Tempo", color: "#6577e0" },
+  { key: "z4", label: "Tærskel", color: "#3c4ed0" },
+  { key: "z5", label: "Max", color: "#131f96" },
 ];
 
 export function ZoneDistributionChart({ data }: { data: ZoneWeek[] }) {

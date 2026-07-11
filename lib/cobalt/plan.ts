@@ -57,6 +57,8 @@ export type PlanTone = "cobalt" | "red" | "muted";
 export interface PhaseMarker {
   /** Label, mono uppercase (e.g. "Base", "Build · nu", "Race 20. sep"). */
   label: string;
+  /** Same label trimmed for narrow viewports (e.g. "Race" — six labels fit 375px). */
+  shortLabel: string;
   /** Where the dot sits on the timeline, 0–1 left→right. */
   position: number;
   state: "done" | "active" | "upcoming" | "race";
@@ -192,11 +194,17 @@ export function buildPlanView(
       const suffix = state === "done" ? " ✓" : state === "active" ? " · nu" : "";
       return {
         label: `${PHASE_LABELS[key]}${suffix}`,
+        shortLabel: PHASE_LABELS[key],
         position: daysBetween(planStart, phases[key].startDate) / planDays,
         state,
       };
     }),
-    { label: `Race ${raceShortDate}`, position: 1, state: "race" as const },
+    {
+      label: `Race ${raceShortDate}`,
+      shortLabel: "Race",
+      position: 1,
+      state: "race" as const,
+    },
   ];
 
   const phaseSegments: PhaseSegment[] = PHASE_SEQUENCE.map((key) => ({

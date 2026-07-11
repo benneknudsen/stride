@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { connectStrava } from "@/actions/strava";
 import { GlassCard } from "@/components/cobalt/GlassCard";
+import { ROUTES } from "@/lib/routes";
 
-// "Datakilder" widget (5/12): Garmin row (connected, green dot) + Strava row
-// with a connect-flow (orange button → connected). A plain-language zone legend
-// sits at the bottom — no "Z2"/"Z4" codes anywhere.
+// "Datakilder" widget (5/12): the Strava row, reflecting the user's real
+// connection state (issue #98 — it used to hardcode a "Garmin Forbundet" row for
+// an integration that doesn't exist, and faked the connect with local state).
+// Strava is the only source the app actually ingests; the button runs the real
+// PKCE OAuth flow. A plain-language zone legend sits at the bottom — no
+// "Z2"/"Z4" codes anywhere.
 const ZONE_LEGEND = [
   { label: "Rolig snak-fart", color: "var(--color-cobalt)" },
   { label: "Moderat tempo", color: "rgba(27,41,192,0.6)" },
@@ -35,8 +40,28 @@ function SourceRow({
   );
 }
 
-export function DataSourcesCard() {
-  const [stravaConnected, setStravaConnected] = useState(false);
+export function DataSourcesCard({
+  stravaConnected,
+  signedIn,
+}: {
+  stravaConnected: boolean;
+  /** Visitors on /demo can't start an OAuth flow — the callback needs a session. */
+  signedIn: boolean;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [failed, setFailed] = useState(false);
+
+  const handleConnect = () => {
+    setFailed(false);
+    startTransition(async () => {
+      try {
+        const { url } = await connectStrava();
+        window.location.assign(url);
+      } catch {
+        setFailed(true);
+      }
+    });
+  };
 
   return (
     <GlassCard className="flex flex-col rounded-widget p-[26px]">
@@ -45,12 +70,6 @@ export function DataSourcesCard() {
       </h2>
 
       <div className="flex flex-col gap-2.5">
-        <SourceRow name="Garmin Connect" dotColor="var(--color-success)">
-          <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-success-ink">
-            Forbundet
-          </span>
-        </SourceRow>
-
         <SourceRow
           name="Strava"
           dotColor={stravaConnected ? "var(--color-success)" : "var(--color-strava)"}
@@ -59,17 +78,32 @@ export function DataSourcesCard() {
             <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-success-ink">
               Forbundet
             </span>
-          ) : (
+          ) : signedIn ? (
             <button
               type="button"
-              onClick={() => setStravaConnected(true)}
+              onClick={handleConnect}
+              disabled={pending}
+              className="cg-interactive rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+              style={{ background: "var(--color-strava)" }}
+            >
+              {pending ? "Forbinder…" : "Forbind"}
+            </button>
+          ) : (
+            <a
+              href={ROUTES.LOGIN}
               className="cg-interactive rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
               style={{ background: "var(--color-strava)" }}
             >
-              Forbind
-            </button>
+              Log ind for at forbinde
+            </a>
           )}
         </SourceRow>
+
+        {failed ? (
+          <p className="m-0 px-3 text-[12px] text-red">
+            Kunne ikke starte forbindelsen. Prøv igen.
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-5 border-t pt-4" style={{ borderColor: "rgba(27,41,192,0.1)" }}>

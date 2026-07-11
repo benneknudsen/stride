@@ -143,15 +143,20 @@ export function buildActivitiesView(
     };
   });
 
-  // Live data can leave the window empty (all rows older than last month) —
+  // Order months chronologically, not by month number: across a year boundary
+  // the window holds December (11) and January (0), and comparing the raw month
+  // index would render "Januar – December" instead of "December – Januar".
+  // Live data can also leave the window empty (all rows older than last month) —
   // fall back to the current month so the header never reads "undefined".
-  const months = inWindow.map((a) => a.startDate.getMonth());
-  const minMonth = months.length > 0 ? Math.min(...months) : now.getMonth();
-  const maxMonth = months.length > 0 ? Math.max(...months) : now.getMonth();
+  const ordinals = inWindow.map((a) => a.startDate.getFullYear() * 12 + a.startDate.getMonth());
+  const nowOrdinal = now.getFullYear() * 12 + now.getMonth();
+  const minOrdinal = ordinals.length > 0 ? Math.min(...ordinals) : nowOrdinal;
+  const maxOrdinal = ordinals.length > 0 ? Math.max(...ordinals) : nowOrdinal;
+  const monthName = (ordinal: number) => DA_MONTHS_FULL[ordinal % 12];
   const periodLabel =
-    minMonth === maxMonth
-      ? DA_MONTHS_FULL[minMonth]
-      : `${DA_MONTHS_FULL[minMonth]} – ${DA_MONTHS_FULL[maxMonth]}`;
+    minOrdinal === maxOrdinal
+      ? monthName(minOrdinal)
+      : `${monthName(minOrdinal)} – ${monthName(maxOrdinal)}`;
 
   return {
     periodLabel,

@@ -19,7 +19,16 @@ const LINKS = [
   { label: "Plan", href: ROUTES.PLAN },
 ];
 
-export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: () => void }) {
+export function NavBar({
+  userName,
+  activeHref,
+  onSync,
+}: {
+  /** Display name of the signed-in user. Absent for visitors (e.g. /demo). */
+  userName?: string;
+  activeHref?: string;
+  onSync?: () => void;
+}) {
   const pathname = usePathname();
   const current = activeHref ?? pathname ?? "/";
   const [syncState, setSyncState] = useState<SyncState>("idle");
@@ -56,7 +65,7 @@ export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: (
               href={link.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "cg-interactive flex items-center gap-1.5 rounded-pill px-[18px] py-[7px] transition-colors",
+                "cg-interactive flex items-center gap-1.5 rounded-pill px-[18px] py-2.5 transition-colors",
                 active ? "bg-cobalt text-silver" : "text-ink hover:text-cobalt"
               )}
             >
@@ -76,12 +85,16 @@ export function NavBar({ activeHref, onSync }: { activeHref?: string; onSync?: (
 
       <div className="flex items-center gap-3">
         <SyncButton state={syncState} onSync={handleSync} />
-        <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
-          BENJAMIN
-        </span>
-        <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
-          B
-        </span>
+        {userName ? (
+          <>
+            <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
+              {userName.toUpperCase()}
+            </span>
+            <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
+              {userName.slice(0, 1).toUpperCase()}
+            </span>
+          </>
+        ) : null}
       </div>
     </nav>
   );

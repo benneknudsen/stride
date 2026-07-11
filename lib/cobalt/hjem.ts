@@ -184,6 +184,8 @@ export interface HomeView {
   volumeBars: { id: string; km: number }[];
   recoveryPct: number;
   recoveryNote: string;
+  /** The hero's second line — same recovery band as `recoveryNote`, as a sentence. */
+  heroNote: string;
   coachQuote: string;
   recentRuns: RecentRunView[];
   plan: {
@@ -274,14 +276,27 @@ export function buildHomeView(
     .reverse();
 
   const recoveryPct = Math.min(95, Math.max(60, Math.round(150 - latestHr * 0.45)));
-  const recoveryNote =
-    recoveryPct >= 80
-      ? "Klar til hårdt pas"
-      : recoveryPct >= 68
-        ? "Let træning anbefalet"
-        : "Prioritér hvile i dag";
+  // One recovery band feeds three surfaces — the RecoveryCard note, the hero's
+  // second line and the coach quote — so the hero can never claim the body is
+  // ready while the card next to it prescribes rest.
+  const recoveryBand = recoveryPct >= 80 ? "ready" : recoveryPct >= 68 ? "easy" : "rest";
+  const recoveryNote = {
+    ready: "Klar til hårdt pas",
+    easy: "Let træning anbefalet",
+    rest: "Prioritér hvile i dag",
+  }[recoveryBand];
+  const heroNote = {
+    ready: "Kroppen er klar i dag.",
+    easy: "Hold tempoet roligt i dag.",
+    rest: "Kroppen har brug for hvile.",
+  }[recoveryBand];
 
-  const recentRuns: RecentRunView[] = runs.slice(1, 6).map((a, i) => ({
+  // The latest run owns its own card, so the list starts at the second run —
+  // unless that's the only run there is, in which case show it here rather than
+  // render an empty "Seneste ture" card.
+  const recentSource = runs.length > 1 ? runs.slice(1, 6) : runs.slice(0, 1);
+
+  const recentRuns: RecentRunView[] = recentSource.map((a, i) => ({
     id: a.id,
     name: a.name,
     dateLabel: danishDate(a.startDate),
@@ -301,7 +316,7 @@ export function buildHomeView(
   const weekOfPlan = Math.min(totalWeeks, Math.max(1, totalWeeks - Math.floor(daysToRace / 7)));
 
   const coachQuote =
-    recoveryPct >= 80
+    recoveryBand === "ready"
       ? "Restitutionen ser stærk ud. Kør ugens tempopas som planlagt — kroppen er klar."
       : "Hold intensiteten nede i dag. En rolig snak-fart bygger form uden at koste restitution.";
 
@@ -330,6 +345,7 @@ export function buildHomeView(
     volumeBars,
     recoveryPct,
     recoveryNote,
+    heroNote,
     coachQuote,
     recentRuns,
     plan: {
