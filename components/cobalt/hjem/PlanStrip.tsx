@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { Logo } from "@/components/cobalt/Logo";
+import { ROUTES } from "@/lib/routes";
 
 // Slim glass row spanning the full width: logo tile + plan title/goal, a
-// cobalt→red progress bar, the red days-to-race counter and a "Se plan" button.
+// cobalt→red progress bar, the red days-to-race counter and a "Se plan" link
+// through to /plan.
 export function PlanStrip({
   weekOfPlan,
   totalWeeks,
@@ -58,13 +61,13 @@ export function PlanStrip({
         {daysToRace} dage til race
       </span>
 
-      <button
-        type="button"
-        className="cg-interactive rounded-pill border px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
+      <Link
+        href={ROUTES.PLAN}
+        className="cg-interactive inline-flex min-h-[44px] items-center rounded-pill border px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
         style={{ borderColor: "rgba(27, 41, 192, 0.3)" }}
       >
         Se plan →
-      </button>
+      </Link>
     </GlassCard>
   );
 }

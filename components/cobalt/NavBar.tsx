@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/cobalt/Logo";
 import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
@@ -10,14 +10,18 @@ import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 // Glass-pill navigation. Active route = cobalt pill with silver text. Coach
-// carries the red AI spark. The sync flow is self-contained (idle → syncing →
-// synced) so the bar works on any page; pass `onSync` to hook the real API.
+// carries the red AI spark. Sync POSTs to /api/strava/sync and drives the button
+// from the response — idle → syncing → synced|error → idle — so it can be run
+// again (#97).
 const LINKS = [
   { label: "Hjem", href: ROUTES.HOME },
   { label: "Aktiviteter", href: ROUTES.AKTIVITETER },
   { label: "Coach", href: ROUTES.COACH, spark: true },
   { label: "Plan", href: ROUTES.PLAN },
 ];
+
+/** How long the terminal state shows before the button returns to "Sync now". */
+const RESET_DELAY_MS = { synced: 2500, error: 4000 } as const;
 
 export function NavBar({
   userName,
@@ -27,25 +31,56 @@ export function NavBar({
   /** Display name of the signed-in user. Absent for visitors (e.g. /demo). */
   userName?: string;
   activeHref?: string;
+  /** Fired when a sync finishes successfully, after the router has refreshed. */
   onSync?: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const current = activeHref ?? pathname ?? "/";
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
+  // Drop the pending reset and any in-flight sync when the bar unmounts.
   useEffect(
     () => () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      abortRef.current?.abort();
     },
     []
   );
 
-  const handleSync = useCallback(() => {
-    onSync?.();
+  const settle = useCallback((state: "synced" | "error") => {
+    setSyncState(state);
+    timerRef.current = setTimeout(() => setSyncState("idle"), RESET_DELAY_MS[state]);
+  }, []);
+
+  const handleSync = useCallback(async () => {
+    if (syncState === "syncing") return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSyncState("syncing");
-    timerRef.current = setTimeout(() => setSyncState("synced"), 1800);
-  }, [onSync]);
+
+    try {
+      const res = await fetch("/api/strava/sync", {
+        method: "POST",
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+
+      // The synced runs live in server-rendered pages — pull them in.
+      router.refresh();
+      onSync?.();
+      settle("synced");
+    } catch {
+      // Unmounted mid-sync — never touch state after abort.
+      if (controller.signal.aborted) return;
+      settle("error");
+    }
+  }, [onSync, router, settle, syncState]);
 
   const isActive = (href: string) => current === href || current.startsWith(`${href}/`);
 

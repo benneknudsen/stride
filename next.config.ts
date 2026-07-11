@@ -4,10 +4,9 @@ import type { NextConfig } from "next";
 import { LEGACY_COACH_ROUTE, ROUTES } from "./lib/routes";
 
 /**
- * The Content-Security-Policy is set in `proxy.ts` (per-request so it runs on
- * every HTML response). The CSP is static (no per-request nonce — Next.js RSC
- * runtime doesn't stamp inline scripts with nonces during client navigation).
- * The headers below are request-independent, so they stay static.
+ * The Content-Security-Policy is set in `proxy.ts`, not here: it carries a
+ * per-request nonce, and `headers()` below can only emit static values. The
+ * headers below are request-independent, so they stay static.
  */
 
 /** Applied to every response — see issue #46. */

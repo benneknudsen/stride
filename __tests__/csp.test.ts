@@ -1,20 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { buildCsp } from "@/lib/csp";
+import { buildCsp, createNonce } from "@/lib/csp";
 
-const scriptSrc = (csp: string) => csp.split("; ").find((d) => d.startsWith("script-src")) ?? "";
-const styleSrc = (csp: string) => csp.split("; ").find((d) => d.startsWith("style-src")) ?? "";
-const connectSrc = (csp: string) => csp.split("; ").find((d) => d.startsWith("connect-src")) ?? "";
+// The regex Next.js itself uses to pull the nonce back out of the header. If our
+// nonce doesn't match it, Next silently renders scripts without a nonce and
+// 'strict-dynamic' blocks every one of them (issue #89).
+const CSP_NONCE_SOURCE_REGEX = /^'nonce-([A-Za-z0-9+/_-]+={0,2})'$/;
 
-describe("buildCsp", () => {
-  it("uses unsafe-inline in script-src (RSC navigation compat)", () => {
-    const csp = buildCsp("abc123", false);
-    expect(scriptSrc(csp)).toContain("'unsafe-inline'");
-    expect(scriptSrc(csp)).not.toContain("'nonce-'");
-    expect(scriptSrc(csp)).not.toContain("'strict-dynamic'");
+const directive = (csp: string, name: string) =>
+  csp.split("; ").find((d) => d.startsWith(name)) ?? "";
+const scriptSrc = (csp: string) => directive(csp, "script-src");
+const styleSrc = (csp: string) => directive(csp, "style-src");
+const connectSrc = (csp: string) => directive(csp, "connect-src");
+
+/** Mirrors Next.js' `getScriptNonceFromHeader`. */
+const nonceFromCsp = (csp: string): string | undefined => {
+  for (const source of scriptSrc(csp).split(/\s+/).slice(1)) {
+    const match = source.trim().match(CSP_NONCE_SOURCE_REGEX);
+    if (match) return match[1];
+  }
+};
+
+describe("createNonce", () => {
+  it("emits a nonce Next.js can parse back out of the header", () => {
+    const nonce = createNonce();
+    expect(nonceFromCsp(buildCsp(nonce, false))).toBe(nonce);
   });
 
-  it("allows unsafe-inline scripts for RSC navigation compatibility", () => {
-    expect(scriptSrc(buildCsp("n", false))).toContain("'unsafe-inline'");
+  it("is unique per call — a reused nonce would defeat the point", () => {
+    expect(createNonce()).not.toBe(createNonce());
+  });
+});
+
+describe("buildCsp", () => {
+  it("trusts scripts via the nonce, not unsafe-inline", () => {
+    const script = scriptSrc(buildCsp("abc123", false));
+    expect(script).toContain("'nonce-abc123'");
+    expect(script).toContain("'strict-dynamic'");
+    expect(script).not.toContain("'unsafe-inline'");
   });
 
   it("keeps unsafe-inline for styles so Recharts/Leaflet/Tailwind still render", () => {
@@ -40,7 +62,7 @@ describe("buildCsp", () => {
 
   it("retains the baseline directives", () => {
     const csp = buildCsp("n", false);
-    for (const directive of [
+    for (const d of [
       "default-src 'self'",
       "frame-ancestors 'none'",
       "object-src 'none'",
@@ -48,7 +70,7 @@ describe("buildCsp", () => {
       "form-action 'self'",
       "upgrade-insecure-requests",
     ]) {
-      expect(csp).toContain(directive);
+      expect(csp).toContain(d);
     }
   });
 });
