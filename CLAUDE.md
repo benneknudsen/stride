@@ -2,27 +2,27 @@
 
 ## Stack
 - Next.js 16 with App Router + TypeScript strict
-- Tailwind CSS + shadcn/ui (new-york style, zinc base, neutral accent)
-- Vercel AI SDK (streamUI, provider routing)
-- Drizzle ORM + Vercel Postgres
-- NextAuth.js v5 (database sessions)
-- Recharts 2.x
-- Zustand (UI state only — never server data)
-- TanStack Query (server cache)
+- Tailwind CSS + shadcn/ui (new-york style, zinc base)
+- Vercel AI SDK (`streamText`/`streamObject`, OpenRouter provider routing in `lib/ai/provider.ts`)
+- Drizzle ORM + Neon Postgres (`@neondatabase/serverless`, pooled WebSocket driver)
+- NextAuth.js v5 (database sessions — email magic link + Google; dev Credentials login in development)
+- Recharts 3.x
+- Zustand (UI state only — never server data; server data flows through Server Components)
 - Vercel deployment
 
 ## Commands
 ```bash
-npm run dev          # Next.js dev server
-npm run build        # Production build
+npm run dev          # Next.js dev server (port 6969)
+npm run build        # DB migrations (scripts/migrate.mjs) + production build
 npm run lint         # Biome lint
 npm run format       # Biome format
+npm run check        # Biome lint + format
 npm run db:generate  # Drizzle generate migrations
 npm run db:migrate   # Drizzle apply migrations
 npm run db:studio    # Drizzle Studio
-npm test             # Vitest
-npm run test:e2e     # Playwright
+npm test             # Vitest (npm run test:watch for watch mode)
 ```
+No e2e tests yet — `npm run test:e2e` intentionally exits 1.
 
 ## Code conventions
 - TypeScript strict mode — no `any` without explicit justification
@@ -31,28 +31,33 @@ npm run test:e2e     # Playwright
 - AI keys NEVER reach the browser — all AI calls through `/api/ai/*`
 - OAuth tokens encrypted at rest via `lib/crypto.ts` (AES-256-GCM)
 - Component files: PascalCase, one component per file (except shadcn/ui)
-- Imports: `lib/` first, then `components/`, then third-party
+- Imports: sorted by Biome (organize imports)
 - No default exports except Next.js page/layout convention
+- All app routes centralized in `lib/routes.ts` — never hardcode paths
 
 ## Architecture
-See ARCHITECTURE.md for full plan. Key design decisions:
+See `docs/architecture.md` for the original plan (the codebase has evolved past it). Key design decisions:
 - Drizzle over Prisma (SQL-first, edge-compatible, lighter)
 - NextAuth v5 over Clerk (free, no vendor lock-in, demonstrates OAuth competence)
 - Server-side AI only (cost control, GDPR, key security)
-- Generative UI via typed tools (model calls tools → our components render)
+- Chat coach via typed tools (`streamText` + tool calls); activity analysis via `streamObject` with a deterministic heuristic fallback when no AI key is set
 - Event-driven revalidation over ISR (running data changes on new activity only)
+- Cobalt Glass is the standard design — `components/cobalt/` (UI) + `lib/cobalt/` (view-models); pages are Danish: `/` (hjem), `/aktiviteter`, `/plan`
+- Coach lives at `/dashboard/coach` only (#86); the old `/coach` permanently redirects
+- Race date is per-user (#99) — `actions/race.ts` + `getRacePlan`, with the engine's demo race as fallback
 
 ## Demo mode
-ALWAYS build with seeded fixture data. Portfolio visitors won't connect Strava.
-Demo data path: `lib/demo/` — 30 realistic running activities.
+Live data is the default (#84): authenticated users get their own synced activities and race plan. Demo fixtures are the fallback for visitors and signed-in users with no synced runs.
+Demo data path: `lib/demo/` — 30 realistic running activities, fully deterministic (no `Math.random`) so server render and client hydration agree.
 
-## Phase 1 MVP
-Strava OAuth → dashboard → AI analysis with streaming generative UI → deploy.
-RAG chatbot is Phase 2.
+## Roadmap
+Phase 1 MVP (Strava OAuth → dashboard → AI analysis with streaming → deploy) is shipped.
+The chat coach (Phase 2) is live at `/dashboard/coach` via `app/api/ai/chat`.
 
-## Brand Identity (from Claude Design)
-- **Logo:** Three forward-leaning rounded bars (motion/acceleration/data). Duotone mark (grey + Volt `#C6F432`)
-- **Typography:** Space Grotesk (display), Geist (UI), Geist Mono (data/metrics)
-- **Color system:** Dark theme — Volt primary, Signal `#FF5B41` (HR), Aqua `#33E0CB` (cadence)
-- **Components:** `StrideLogo.tsx`, `StrideLoader.tsx`, `fonts.ts` in repo
-- See `design-system/` in Obsidian vault for full spec
+## Brand Identity (Cobalt Glass)
+- **Design system:** Cobalt Glass — light "silver paper" theme with liquid-glass surfaces. Tokens + `cg-*` utilities in `app/globals.css`
+- **Colors:** Cobalt `#1b29c0` (primary), Red `#ee2418` (accent), Silver `#e9eae5` (background), Ink `#5560a8` (muted text)
+- **Typography:** Bricolage Grotesque (display), Instrument Sans (UI), Instrument Serif (heroes — always italic), Spline Sans Mono (data/labels) — loaded in `lib/fonts.ts`
+- **Components:** `Logo.tsx`, `Wordmark.tsx`, `RunnerLoader.tsx` in `components/cobalt/`
+- Legacy "Volt" system (`StrideLogo.tsx`, `StrideLoader.tsx` in `components/ui/`, Space Grotesk/Geist fonts) is still in the repo but unused
+- See `docs/design_handoff_cobalt_glass/` for the full redesign spec
