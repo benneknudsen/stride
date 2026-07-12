@@ -42,11 +42,13 @@ export function HjemPageClient({
   view,
   userName,
   stravaConnected,
+  garminConnected,
   signedIn,
 }: {
   view: HomeView;
   userName?: string;
   stravaConnected: boolean;
+  garminConnected: boolean;
   signedIn: boolean;
 }) {
   const [loading, setLoading] = useState(true);
@@ -112,7 +114,11 @@ export function HjemPageClient({
             </Bento>
           ) : null}
           <Bento span="col-span-12 lg:col-span-5" delay={0.54}>
-            <DataSourcesCard stravaConnected={stravaConnected} signedIn={signedIn} />
+            <DataSourcesCard
+              stravaConnected={stravaConnected}
+              garminConnected={garminConnected}
+              signedIn={signedIn}
+            />
           </Bento>
         </div>
 

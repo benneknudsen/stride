@@ -8,12 +8,7 @@
 // actually carries and simply omits the rest — it never invents a number and
 // never crashes on a hole.
 
-import {
-  ACTIVITY_SOURCE,
-  type ActivitySource,
-  type ZoneInfo,
-  zoneForHeartRate,
-} from "@/lib/cobalt/hjem";
+import { type ActivitySource, sourceOf, type ZoneInfo, zoneForHeartRate } from "@/lib/cobalt/hjem";
 import { decodePolyline } from "@/lib/cobalt/polyline";
 import { ZONE_RAMP, type ZoneKey } from "@/lib/cobalt/zones";
 import { demoActivities } from "@/lib/demo/data";
@@ -56,6 +51,8 @@ const TYPE_LABELS: Record<string, string> = {
 export interface ActivityDetailLike {
   id: string;
   name: string;
+  /** Ingesting provider ("strava" | "garmin"); absent on the demo fixtures (#35). */
+  source?: string | null;
   /** Strava activity type — "Run", "TrailRun", … */
   type: string;
   startDate: Date;
@@ -307,7 +304,7 @@ export function buildActivityDetailView(activity: ActivityDetailLike): ActivityD
     durationLabel: durationLabel(activity.movingTime),
     paceLabel: formatPace(activity.averageSpeed ?? null),
     zone,
-    source: ACTIVITY_SOURCE,
+    source: sourceOf(activity),
     stats: buildStats(activity, zone),
     zoneSplit: buildZoneSplit(activity),
     routeCoords: decodePolyline(activity.summaryPolyline),

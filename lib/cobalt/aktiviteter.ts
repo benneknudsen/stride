@@ -8,9 +8,9 @@
 // users (issue #84).
 
 import {
-  ACTIVITY_SOURCE,
   type ActivitySource,
   type HomeActivityLike,
+  sourceOf,
   type ZoneInfo,
   zoneForHeartRate,
 } from "@/lib/cobalt/hjem";
@@ -141,7 +141,7 @@ export function buildActivitiesView(
       metaLabel: metaLabel(a.startDate, now, a.movingTime),
       zone,
       category: activityCategory(zone.level),
-      source: ACTIVITY_SOURCE,
+      source: sourceOf(a),
       km: a.distance / 1000,
       paceLabel: formatPace(a.averageSpeed),
       paceTone: zone.tone,

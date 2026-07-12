@@ -33,10 +33,10 @@ const DA_MONTHS = [
 const DA_WEEKDAYS_LONG = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
 
 /**
- * Where an activity was ingested from. Strava is the only provider the app
- * syncs (issue #96 — the views used to alternate a fabricated "garmin"/"strava"
- * badge per row); the union keeps room for a second provider without touching
- * every call site.
+ * Where an activity was ingested from. Both members are now real: #96 removed a
+ * *fabricated* badge that alternated per row, and #35 made Garmin an actual sync
+ * source — so the value is read from the activity's `source` column via
+ * {@link sourceOf}, never chosen at the call site.
  */
 export type ActivitySource = "garmin" | "strava";
 
@@ -168,6 +168,11 @@ export interface HomeActivityLike {
   /** Average cadence (single-leg, Strava convention). */
   averageCadence: number | null;
   totalElevationGain: number;
+  /**
+   * Which provider ingested the row (issue #35). Optional because the demo
+   * fixtures predate the column; {@link sourceOf} resolves the fallback.
+   */
+  source?: string | null;
 }
 
 export interface RecentRunView {
@@ -247,10 +252,20 @@ function isRun(activity: HomeActivityLike): boolean {
 }
 
 /**
- * Every activity the app holds came in over the Strava sync — the fixtures stand
- * in for exactly that. Change this the day a second provider is ingested.
+ * The provider assumed for a row that doesn't name one — the demo fixtures, and
+ * any activity synced before `activities.source` existed (its column default is
+ * "strava" for exactly the same reason).
  */
 export const ACTIVITY_SOURCE: ActivitySource = "strava";
+
+/**
+ * The badge a row should carry. Since #35 the app ingests two providers, so the
+ * source is per-activity data, not a constant — but it arrives as the DB's free
+ * -text column, so narrow it here rather than trusting the string at the badge.
+ */
+export function sourceOf(activity: { source?: string | null }): ActivitySource {
+  return activity.source === "garmin" ? "garmin" : ACTIVITY_SOURCE;
+}
 
 export function buildHomeView(
   activities: HomeActivityLike[] = demoActivities,
@@ -316,7 +331,7 @@ export function buildHomeView(
     name: a.name,
     dateLabel: danishDate(a.startDate),
     zone: zoneForHeartRate(a.averageHeartrate ?? 0),
-    source: ACTIVITY_SOURCE,
+    source: sourceOf(a),
     km: a.distance / 1000,
     paceLabel: formatPace(a.averageSpeed),
   }));
@@ -347,7 +362,7 @@ export function buildHomeView(
       elevation: latest.totalElevationGain,
       durationLabel: formatDuration(latest.movingTime),
       zone: latestZone,
-      source: ACTIVITY_SOURCE,
+      source: sourceOf(latest),
       dayLabel: relativeDayLabel(latest.startDate, now),
       clock: clock(latest.startDate),
       paceCurve: PACE_CURVE,

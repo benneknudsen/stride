@@ -1,16 +1,23 @@
 "use client";
 
+import { signIn } from "next-auth/react";
 import { useState, useTransition } from "react";
 import { connectStrava } from "@/actions/strava";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { ROUTES } from "@/lib/routes";
 
-// "Datakilder" widget (5/12): the Strava row, reflecting the user's real
-// connection state (issue #98 — it used to hardcode a "Garmin Forbundet" row for
-// an integration that doesn't exist, and faked the connect with local state).
-// Strava is the only source the app actually ingests; the button runs the real
-// PKCE OAuth flow. A plain-language zone legend sits at the bottom — no
-// "Z2"/"Z4" codes anywhere.
+// "Datakilder" widget (5/12): one row per provider, each reflecting the user's
+// real connection state. Issue #98 removed a hardcoded "Garmin Forbundet" row
+// for an integration that did not exist and faked the connect with local state;
+// issue #35 built the integration, so the row is back — and now it is real.
+//
+// The two connects run different flows, because the two providers are wired
+// differently: Strava is a data-only link (a server action mints the PKCE
+// challenge, and the callback stores the tokens), while Garmin is also an
+// identity provider, so its connect is a NextAuth sign-in that links the Garmin
+// account to the session user and stores the same tokens encrypted.
+//
+// A plain-language zone legend sits at the bottom — no "Z2"/"Z4" codes anywhere.
 const ZONE_LEGEND = [
   { label: "Rolig snak-fart", color: "var(--color-cobalt)" },
   { label: "Moderat tempo", color: "rgba(27,41,192,0.6)" },
@@ -40,23 +47,86 @@ function SourceRow({
   );
 }
 
+/** The connect/status control on the right of a provider row. */
+function ConnectControl({
+  connected,
+  signedIn,
+  pending,
+  brandColor,
+  onConnect,
+}: {
+  connected: boolean;
+  signedIn: boolean;
+  pending: boolean;
+  brandColor: string;
+  onConnect: () => void;
+}) {
+  if (connected) {
+    return (
+      <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-success-ink">
+        Forbundet
+      </span>
+    );
+  }
+
+  if (!signedIn) {
+    return (
+      <a
+        href={ROUTES.LOGIN}
+        className="cg-interactive rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+        style={{ background: brandColor }}
+      >
+        Log ind for at forbinde
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onConnect}
+      disabled={pending}
+      className="cg-interactive rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+      style={{ background: brandColor }}
+    >
+      {pending ? "Forbinder…" : "Forbind"}
+    </button>
+  );
+}
+
 export function DataSourcesCard({
   stravaConnected,
+  garminConnected,
   signedIn,
 }: {
   stravaConnected: boolean;
+  garminConnected: boolean;
   /** Visitors can't start an OAuth flow — the callback needs a session. */
   signedIn: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
 
-  const handleConnect = () => {
+  const handleConnectStrava = () => {
     setFailed(false);
     startTransition(async () => {
       try {
         const { url } = await connectStrava();
         window.location.assign(url);
+      } catch {
+        setFailed(true);
+      }
+    });
+  };
+
+  // NextAuth redirects the browser itself; linking the Garmin account to the
+  // signed-in user, and storing its tokens, both happen server-side on the way
+  // back through the callback.
+  const handleConnectGarmin = () => {
+    setFailed(false);
+    startTransition(async () => {
+      try {
+        await signIn("garmin", { callbackUrl: ROUTES.HOME });
       } catch {
         setFailed(true);
       }
@@ -74,29 +144,26 @@ export function DataSourcesCard({
           name="Strava"
           dotColor={stravaConnected ? "var(--color-success)" : "var(--color-strava)"}
         >
-          {stravaConnected ? (
-            <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-success-ink">
-              Forbundet
-            </span>
-          ) : signedIn ? (
-            <button
-              type="button"
-              onClick={handleConnect}
-              disabled={pending}
-              className="cg-interactive rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-              style={{ background: "var(--color-strava)" }}
-            >
-              {pending ? "Forbinder…" : "Forbind"}
-            </button>
-          ) : (
-            <a
-              href={ROUTES.LOGIN}
-              className="cg-interactive rounded-pill px-[16px] py-[7px] text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
-              style={{ background: "var(--color-strava)" }}
-            >
-              Log ind for at forbinde
-            </a>
-          )}
+          <ConnectControl
+            connected={stravaConnected}
+            signedIn={signedIn}
+            pending={pending}
+            brandColor="var(--color-strava)"
+            onConnect={handleConnectStrava}
+          />
+        </SourceRow>
+
+        <SourceRow
+          name="Garmin"
+          dotColor={garminConnected ? "var(--color-success)" : "var(--color-garmin)"}
+        >
+          <ConnectControl
+            connected={garminConnected}
+            signedIn={signedIn}
+            pending={pending}
+            brandColor="var(--color-garmin)"
+            onConnect={handleConnectGarmin}
+          />
         </SourceRow>
 
         {failed ? (
