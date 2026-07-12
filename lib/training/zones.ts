@@ -84,6 +84,41 @@ export function zoneForHeartRate(bpm: number, config: ZoneHrConfig = {}): ZoneNu
   return 1;
 }
 
+/**
+ * Lower bound of each zone as a fraction of intensity (%max HR, or %HRR when a
+ * resting HR is known). Mirrors the boundaries in {@link zoneForHeartRate} —
+ * keep the two in step.
+ */
+const ZONE_FLOORS: Record<ZoneNumber, number> = { 1: 0, 2: 0.6, 3: 0.7, 4: 0.8, 5: 0.9 };
+
+/** The bpm an intensity fraction corresponds to, using Karvonen when possible. */
+function heartRateForIntensity(intensity: number, config: ZoneHrConfig = {}): number {
+  const { maxHr = DEFAULT_MAX_HR, restingHr } = config;
+  const bpm =
+    restingHr != null && restingHr < maxHr
+      ? restingHr + intensity * (maxHr - restingHr)
+      : intensity * maxHr;
+  return Math.round(bpm);
+}
+
+/**
+ * The bpm range of every zone for an athlete. Zone 5 is open-ended (`max: null`),
+ * matching the `HrZone` contract. Used to label derived time-in-zone buckets.
+ */
+export function zoneBounds(
+  config: ZoneHrConfig = {}
+): Record<ZoneNumber, { min: number; max: number | null }> {
+  const bounds = {} as Record<ZoneNumber, { min: number; max: number | null }>;
+  for (const meta of ZONE_LIST) {
+    const next = (meta.zone + 1) as ZoneNumber;
+    bounds[meta.zone] = {
+      min: heartRateForIntensity(ZONE_FLOORS[meta.zone], config),
+      max: meta.zone === 5 ? null : heartRateForIntensity(ZONE_FLOORS[next], config) - 1,
+    };
+  }
+  return bounds;
+}
+
 /** Minimal activity shape the aggregator reads. */
 export interface ZoneActivityInput {
   hrZones?: HrZone[] | null;

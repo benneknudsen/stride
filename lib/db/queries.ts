@@ -10,6 +10,7 @@ import {
   users,
 } from "../../drizzle/schema";
 import type { AnalysisScope, HrZone } from "../../types/domain";
+import { fromDbDate, toDbDate } from "./calendar-date";
 import { db } from "./index";
 
 /**
@@ -61,7 +62,10 @@ export const getUserByEmail = cache(async (email: string) => {
 export const getUserById = cache(async (id: string) => {
   try {
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return user ?? null;
+    if (!user) return null;
+    // Normalised here too, so every raceDate leaving this module is a
+    // local-midnight calendar day regardless of which read it came from.
+    return { ...user, raceDate: fromDbDate(user.raceDate) };
   } catch {
     return null;
   }
@@ -80,23 +84,32 @@ export const getRacePlan = cache(async (userId: string) => {
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    return row ?? null;
+    if (!row) return null;
+    return { ...row, raceDate: fromDbDate(row.raceDate) };
   } catch {
     return null;
   }
 });
 
-/** Set (or clear) the user's target race. Write path — intentionally uncached. */
+/**
+ * Set (or clear) the user's target race. Write path — intentionally uncached.
+ * `raceDate` is a local-midnight calendar day (see lib/db/calendar-date.ts).
+ */
 export async function updateRacePlan(
   userId: string,
   input: { raceDate: Date | null; raceName: string | null }
 ) {
   const [user] = await db
     .update(users)
-    .set({ raceDate: input.raceDate, raceName: input.raceName, updatedAt: new Date() })
+    .set({
+      raceDate: toDbDate(input.raceDate),
+      raceName: input.raceName,
+      updatedAt: new Date(),
+    })
     .where(eq(users.id, userId))
     .returning({ id: users.id, raceDate: users.raceDate, raceName: users.raceName });
-  return user ?? null;
+  if (!user) return null;
+  return { ...user, raceDate: fromDbDate(user.raceDate) };
 }
 
 /**

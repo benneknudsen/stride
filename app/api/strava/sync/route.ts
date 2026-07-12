@@ -68,11 +68,15 @@ export async function POST(_req: NextRequest) {
               elapsedTime: sql`excluded.elapsed_time`,
               totalElevationGain: sql`excluded.total_elevation_gain`,
               averageSpeed: sql`excluded.average_speed`,
+              maxSpeed: sql`excluded.max_speed`,
               averageHeartrate: sql`excluded.average_heartrate`,
               maxHeartrate: sql`excluded.max_heartrate`,
               averageCadence: sql`excluded.average_cadence`,
+              averageWatts: sql`excluded.average_watts`,
               summaryPolyline: sql`excluded.summary_polyline`,
-              splits: sql`excluded.splits`,
+              // splits / calories / hr_zones are NOT updated here: the summary
+              // payload can't carry them, so overwriting would blank out the
+              // richer values the webhook's detail fetch already stored (#101).
               raw: sql`excluded.raw`,
               updatedAt: new Date(),
             },

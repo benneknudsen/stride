@@ -145,7 +145,7 @@ describe("getUserByEmail", () => {
 
 describe("getUserById", () => {
   it("returns the matching user row", async () => {
-    const user = { id: "u1", email: "a@b.com", name: null };
+    const user = { id: "u1", email: "a@b.com", name: null, raceDate: null };
     mock.setResult([user]);
     expect(await getUserById("u1")).toEqual(user);
   });
