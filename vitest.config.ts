@@ -24,10 +24,10 @@ export default defineConfig({
       reporter: ["text", "html"],
       // A floor so coverage cannot silently regress. Raise as suites are added.
       thresholds: {
-        statements: 65,
-        branches: 60,
-        functions: 65,
-        lines: 65,
+        statements: 82,
+        branches: 76,
+        functions: 87,
+        lines: 82,
       },
     },
   },
