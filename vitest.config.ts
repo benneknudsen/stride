@@ -9,6 +9,27 @@ export default defineConfig({
     // Playwright suite in __tests__/e2e — those import @playwright/test and want a
     // browser, so `npm test` would die on them. Playwright owns that directory.
     exclude: [...configDefaults.exclude, "__tests__/e2e/**"],
+    coverage: {
+      provider: "v8",
+      // Report on every source file in scope, not just the ones a test happened
+      // to import — otherwise a completely untested module silently counts as
+      // "no data" instead of 0%, and coverage looks better than it is.
+      all: true,
+      include: ["lib/**/*.{ts,tsx}", "actions/**/*.ts", "app/api/**/*.ts"],
+      exclude: [
+        "**/*.d.ts",
+        // Type-only modules have no executable lines to cover.
+        "lib/**/types.ts",
+      ],
+      reporter: ["text", "html"],
+      // A floor so coverage cannot silently regress. Raise as suites are added.
+      thresholds: {
+        statements: 82,
+        branches: 76,
+        functions: 87,
+        lines: 82,
+      },
+    },
   },
   resolve: {
     alias: {

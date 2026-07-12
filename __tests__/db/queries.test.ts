@@ -43,6 +43,7 @@ const mock = vi.hoisted(() => {
     "limit",
     "offset",
     "values",
+    "set",
     "onConflictDoUpdate",
     "returning",
   ]) {
@@ -60,9 +61,17 @@ const mock = vi.hoisted(() => {
     record("insert", args);
     return builder;
   });
+  const update = vi.fn((...args: Any[]) => {
+    record("update", args);
+    return builder;
+  });
+  const del = vi.fn((...args: Any[]) => {
+    record("delete", args);
+    return builder;
+  });
 
   return {
-    db: { select, insert },
+    db: { select, insert, update, delete: del },
     calls,
     /** Make the next awaited query resolve to `r`. */
     setResult(r: Any) {
@@ -81,21 +90,31 @@ const mock = vi.hoisted(() => {
       rejection = null;
       select.mockClear();
       insert.mockClear();
+      update.mockClear();
+      del.mockClear();
     },
   };
 });
 
 vi.mock("@/lib/db/index", () => ({ db: mock.db }));
 
+import { fromDbDate, toDbDate } from "@/lib/db/calendar-date";
 import {
+  deleteGarminTokens,
   getAccountsByUserId,
   getActivities,
   getActivityById,
   getCachedAnalysis,
+  getChatHistory,
+  getGarminTokens,
+  getRacePlan,
   getStravaTokens,
   getUserByEmail,
   getUserById,
   insertAnalysis,
+  insertChatMessage,
+  saveGarminTokens,
+  updateRacePlan,
   upsertStravaTokens,
 } from "@/lib/db/queries";
 
@@ -394,5 +413,216 @@ describe("insertAnalysis", () => {
   it("propagates database errors (no swallowing on writes)", async () => {
     mock.setError(DB_ERROR);
     await expect(insertAnalysis(input)).rejects.toThrow("connection refused");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getRacePlan (read — normalises raceDate through fromDbDate)
+// ---------------------------------------------------------------------------
+
+describe("getRacePlan", () => {
+  it("returns null raceDate/raceName when the user has not picked a race", async () => {
+    mock.setResult([{ raceDate: null, raceName: null }]);
+    expect(await getRacePlan("u1")).toEqual({ raceDate: null, raceName: null });
+    expect(mock.calls.limit?.[0]?.[0]).toBe(1);
+  });
+
+  it("normalises a stored UTC-midnight raceDate to a local calendar day", async () => {
+    // What Drizzle hands back for a `date` column: UTC midnight.
+    const stored = new Date(Date.UTC(2026, 8, 20));
+    mock.setResult([{ raceDate: stored, raceName: "Berlin Marathon" }]);
+    expect(await getRacePlan("u1")).toEqual({
+      raceDate: fromDbDate(stored),
+      raceName: "Berlin Marathon",
+    });
+  });
+
+  it("returns null when the user row is missing", async () => {
+    mock.setResult([]);
+    expect(await getRacePlan("nope")).toBeNull();
+  });
+
+  it("returns null when the query throws", async () => {
+    mock.setError(DB_ERROR);
+    expect(await getRacePlan("u1")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// updateRacePlan (write — serialises via toDbDate, normalises the return)
+// ---------------------------------------------------------------------------
+
+describe("updateRacePlan", () => {
+  it("serialises the calendar day with toDbDate and returns the normalised row", async () => {
+    const day = new Date(2026, 8, 20); // local midnight
+    mock.setResult([{ id: "u1", raceDate: new Date(Date.UTC(2026, 8, 20)), raceName: "Berlin" }]);
+    const out = await updateRacePlan("u1", { raceDate: day, raceName: "Berlin" });
+    expect(mock.db.update).toHaveBeenCalledTimes(1);
+    // The value written to the `date` column is the UTC-midnight form.
+    expect(mock.calls.set?.[0]?.[0]).toMatchObject({
+      raceDate: toDbDate(day),
+      raceName: "Berlin",
+    });
+    expect(out).toEqual({
+      id: "u1",
+      raceDate: fromDbDate(new Date(Date.UTC(2026, 8, 20))),
+      raceName: "Berlin",
+    });
+  });
+
+  it("clears the race (null date and name)", async () => {
+    mock.setResult([{ id: "u1", raceDate: null, raceName: null }]);
+    const out = await updateRacePlan("u1", { raceDate: null, raceName: null });
+    expect(mock.calls.set?.[0]?.[0]).toMatchObject({ raceDate: null, raceName: null });
+    expect(out).toEqual({ id: "u1", raceDate: null, raceName: null });
+  });
+
+  it("returns null when no row matches the user id", async () => {
+    mock.setResult([]);
+    expect(await updateRacePlan("nope", { raceDate: null, raceName: null })).toBeNull();
+  });
+
+  it("propagates database errors (no swallowing on writes)", async () => {
+    mock.setError(DB_ERROR);
+    await expect(updateRacePlan("u1", { raceDate: null, raceName: null })).rejects.toThrow(
+      "connection refused"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getGarminTokens (read — mirrors getStravaTokens)
+// ---------------------------------------------------------------------------
+
+describe("getGarminTokens", () => {
+  it("returns the token row for the user", async () => {
+    const token = { userId: "u1", accessTokenEnc: "enc", iv: "iv", authTag: "tag" };
+    mock.setResult([token]);
+    expect(await getGarminTokens("u1")).toEqual(token);
+    expect(mock.calls.limit?.[0]?.[0]).toBe(1);
+  });
+
+  it("returns null when the user has no stored Garmin tokens", async () => {
+    mock.setResult([]);
+    expect(await getGarminTokens("u1")).toBeNull();
+  });
+
+  it("returns null when the query throws", async () => {
+    mock.setError(DB_ERROR);
+    expect(await getGarminTokens("u1")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// saveGarminTokens (write — upsert on userId)
+// ---------------------------------------------------------------------------
+
+describe("saveGarminTokens", () => {
+  const input = {
+    userId: "u1",
+    accessTokenEnc: "a-enc",
+    refreshTokenEnc: "",
+    iv: "iv",
+    authTag: "tag",
+    expiresAt: new Date("2026-09-01T00:00:00.000Z"),
+    refreshExpiresAt: new Date("2026-12-01T00:00:00.000Z"),
+    scope: "activity",
+  };
+
+  it("inserts the values and returns the upserted row", async () => {
+    const row = { id: "g1", ...input };
+    mock.setResult([row]);
+    expect(await saveGarminTokens(input)).toEqual(row);
+    expect(mock.db.insert).toHaveBeenCalledTimes(1);
+    expect(mock.calls.values?.[0]?.[0]).toEqual(input);
+    expect(mock.calls.onConflictDoUpdate).toHaveLength(1);
+    expect(mock.calls.returning).toHaveLength(1);
+  });
+
+  it("accepts a null refreshExpiresAt and scope", async () => {
+    const partial = { ...input, refreshExpiresAt: null, scope: null };
+    const row = { id: "g1", ...partial };
+    mock.setResult([row]);
+    expect(await saveGarminTokens(partial)).toEqual(row);
+  });
+
+  it("propagates database errors (no swallowing on writes)", async () => {
+    mock.setError(DB_ERROR);
+    await expect(saveGarminTokens(input)).rejects.toThrow("connection refused");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deleteGarminTokens (write — drops tokens and clears users.garminUserId)
+// ---------------------------------------------------------------------------
+
+describe("deleteGarminTokens", () => {
+  it("deletes the token row and clears the user's garminUserId", async () => {
+    mock.setResult([]);
+    await expect(deleteGarminTokens("u1")).resolves.toBeUndefined();
+    // Two statements: delete from garmin_tokens, then update users.
+    expect(mock.db.delete).toHaveBeenCalledTimes(1);
+    expect(mock.db.update).toHaveBeenCalledTimes(1);
+    expect(mock.calls.set?.[0]?.[0]).toMatchObject({ garminUserId: null });
+  });
+
+  it("propagates database errors (no swallowing on writes)", async () => {
+    mock.setError(DB_ERROR);
+    await expect(deleteGarminTokens("u1")).rejects.toThrow("connection refused");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// insertChatMessage (best-effort write — swallows errors)
+// ---------------------------------------------------------------------------
+
+describe("insertChatMessage", () => {
+  const input = { userId: "u1", role: "user" as const, content: "How was my week?" };
+
+  it("inserts the message", async () => {
+    mock.setResult([]);
+    await expect(insertChatMessage(input)).resolves.toBeUndefined();
+    expect(mock.db.insert).toHaveBeenCalledTimes(1);
+    expect(mock.calls.values?.[0]?.[0]).toEqual(input);
+  });
+
+  it("swallows database errors so the chat route never breaks", async () => {
+    mock.setError(DB_ERROR);
+    await expect(insertChatMessage(input)).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getChatHistory (read — returns newest `limit` rows in chronological order)
+// ---------------------------------------------------------------------------
+
+describe("getChatHistory", () => {
+  it("reverses the newest-first query into chronological order", async () => {
+    // The query orders desc(createdAt); the function reverses to oldest-first.
+    mock.setResult([
+      { role: "assistant", content: "newest" },
+      { role: "user", content: "older" },
+    ]);
+    expect(await getChatHistory("u1")).toEqual([
+      { role: "user", content: "older" },
+      { role: "assistant", content: "newest" },
+    ]);
+  });
+
+  it("applies the default limit of 50", async () => {
+    mock.setResult([]);
+    await getChatHistory("u1");
+    expect(mock.calls.limit?.[0]?.[0]).toBe(50);
+  });
+
+  it("honours an explicit limit", async () => {
+    mock.setResult([]);
+    await getChatHistory("u1", 10);
+    expect(mock.calls.limit?.[0]?.[0]).toBe(10);
+  });
+
+  it("returns an empty array when the query throws", async () => {
+    mock.setError(DB_ERROR);
+    expect(await getChatHistory("u1")).toEqual([]);
   });
 });
