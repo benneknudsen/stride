@@ -6,6 +6,8 @@
  * seconds, and distances are in meters.
  */
 
+import { getLocalDate } from "@/lib/coach/engine";
+
 /** Convert speed (m/s) to a `min:sec` pace string per km. Null/zero → `--:--`. */
 export function formatPace(metersPerSecond: number | null): string {
   if (metersPerSecond === null || metersPerSecond <= 0) {
@@ -42,15 +44,24 @@ export function formatDistance(meters: number): string {
 
 /**
  * Sum distance (meters) for activities falling in a given week offset, where
- * `weeksAgo` of 0 is the current week (Sunday-anchored) and 1 is last week.
+ * `weeksAgo` of 0 is the current week and 1 is last week.
+ *
+ * The week is **Monday-anchored** and pinned to the athlete's Danish calendar
+ * day, matching the rest of the training domain (`buildPhases` / `getWeekPlan`
+ * in lib/coach/engine.ts). It previously anchored on Sunday in the server's
+ * timezone, so on Vercel (UTC) a Sunday run landed in the wrong training week
+ * and the "this week" tile could disagree with the plan's Monday–Sunday grid.
+ * `getLocalDate()` makes the day-of-week read timezone-independent.
  */
 export function getWeeklyVolume(
   activities: { startDate: Date; distance: number }[],
   weeksAgo: number
 ): number {
-  const now = new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay() - weeksAgo * 7);
+  const today = getLocalDate();
+  const startOfWeek = new Date(today);
+  // getDay() is 0=Sun..6=Sat, so (getDay() + 6) % 7 is the number of days since
+  // Monday — the offset back to the start of the training week.
+  startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7) - weeksAgo * 7);
   startOfWeek.setHours(0, 0, 0, 0);
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 7);
@@ -64,7 +75,7 @@ export function getWeeklyVolume(
 export function getWeekLabel(weeksAgo: number): string {
   if (weeksAgo === 0) return "This Week";
   if (weeksAgo === 1) return "Last Week";
-  const d = new Date();
+  const d = getLocalDate();
   d.setDate(d.getDate() - weeksAgo * 7);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

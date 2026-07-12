@@ -86,9 +86,16 @@ async function upsertSummaries(
   userId: string,
   summaries: GarminActivitySummary[]
 ): Promise<number> {
-  const rows = summaries
+  const mapped = summaries
     .filter((summary) => summary.summaryId)
     .map((summary) => mapGarminActivityToDb(summary, userId));
+
+  // Collapse duplicate summaryIds within this batch, keeping the last. Garmin
+  // can fan the same activity out more than once in a single push, and Postgres
+  // rejects an ON CONFLICT DO UPDATE that would touch the same row twice in one
+  // statement ("cannot affect row a second time"), which would 500 the whole
+  // batch and put it back in the retry queue.
+  const rows = [...new Map(mapped.map((row) => [row.garminSummaryId, row])).values()];
 
   if (rows.length === 0) return 0;
 

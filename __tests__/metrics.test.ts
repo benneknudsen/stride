@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getLocalDate } from "@/lib/coach/engine";
 import { demoActivities } from "@/lib/demo/data";
 import {
   formatDistance,
@@ -157,13 +158,13 @@ describe("formatDistance", () => {
 
 describe("getWeeklyVolume", () => {
   // Build a date that falls safely inside the week `weeksAgo` weeks back,
-  // mirroring the Sunday-anchored window the function computes.
+  // mirroring the Monday-anchored, local-day window the function computes.
   function dateInWeek(weeksAgo: number): Date {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() - weeksAgo * 7);
+    const today = getLocalDate();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7) - weeksAgo * 7);
     startOfWeek.setHours(0, 0, 0, 0);
-    // Wednesday noon of that week — comfortably inside the [Sun, next Sun) range.
+    // Thursday noon of that week — comfortably inside the [Mon, next Mon) range.
     const d = new Date(startOfWeek);
     d.setDate(startOfWeek.getDate() + 3);
     d.setHours(12, 0, 0, 0);
@@ -208,17 +209,17 @@ describe("getWeeklyVolume", () => {
   });
 
   it("includes an activity at the exact start-of-week boundary (>=)", () => {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
+    const today = getLocalDate();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
     startOfWeek.setHours(0, 0, 0, 0);
     expect(getWeeklyVolume([{ startDate: startOfWeek, distance: 4000 }], 0)).toBe(4000);
   });
 
   it("excludes an activity at the exact end-of-week boundary (< exclusive)", () => {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
+    const today = getLocalDate();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7));
     startOfWeek.setHours(0, 0, 0, 0);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
@@ -338,9 +339,9 @@ describe("getPaceDistribution", () => {
 
 describe("getWeeklyVolumeSeries", () => {
   function dateInWeek(weeksAgo: number): Date {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() - weeksAgo * 7);
+    const today = getLocalDate();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - ((today.getDay() + 6) % 7) - weeksAgo * 7);
     startOfWeek.setHours(0, 0, 0, 0);
     const d = new Date(startOfWeek);
     d.setDate(startOfWeek.getDate() + 3);
