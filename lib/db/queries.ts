@@ -6,6 +6,7 @@ import {
   activities,
   aiAnalyses,
   chatMessages,
+  garminTokens,
   stravaTokens,
   users,
 } from "../../drizzle/schema";
@@ -175,6 +176,73 @@ export async function upsertStravaTokens(input: UpsertStravaTokensInput) {
 }
 
 // ---------------------------------------------------------------------------
+// Garmin tokens (encrypted at rest) — issue #35.
+//
+// Same shape as the Strava trio above: both tokens are encrypted together as a
+// single JSON blob under one IV (see lib/garmin/client.ts), so `refreshTokenEnc`
+// stays empty and exists only for column parity.
+// ---------------------------------------------------------------------------
+
+export const getGarminTokens = cache(async (userId: string) => {
+  try {
+    const [token] = await db
+      .select()
+      .from(garminTokens)
+      .where(eq(garminTokens.userId, userId))
+      .limit(1);
+    return token ?? null;
+  } catch {
+    return null;
+  }
+});
+
+type UpsertGarminTokensInput = {
+  userId: string;
+  accessTokenEnc: string;
+  refreshTokenEnc: string;
+  iv: string;
+  authTag: string;
+  expiresAt: Date;
+  refreshExpiresAt?: Date | null;
+  scope?: string | null;
+};
+
+export async function saveGarminTokens(input: UpsertGarminTokensInput) {
+  const [token] = await db
+    .insert(garminTokens)
+    .values(input)
+    .onConflictDoUpdate({
+      target: garminTokens.userId,
+      set: {
+        accessTokenEnc: input.accessTokenEnc,
+        refreshTokenEnc: input.refreshTokenEnc,
+        iv: input.iv,
+        authTag: input.authTag,
+        expiresAt: input.expiresAt,
+        refreshExpiresAt: input.refreshExpiresAt,
+        scope: input.scope,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  return token;
+}
+
+/**
+ * Drop a user's Garmin connection. Called when the athlete revokes access from
+ * Garmin Connect (the webhook's `deregistrations` event) and from the disconnect
+ * action. The synced activities are left in place — the athlete's training
+ * history is theirs, and deleting it on a disconnect would be a surprise.
+ */
+export async function deleteGarminTokens(userId: string): Promise<void> {
+  await db.delete(garminTokens).where(eq(garminTokens.userId, userId));
+  await db
+    .update(users)
+    .set({ garminUserId: null, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+// ---------------------------------------------------------------------------
 // Activities
 // ---------------------------------------------------------------------------
 
@@ -244,6 +312,9 @@ export const getDashboardActivities = cache(
               id: activities.id,
               name: activities.name,
               type: activities.type,
+              // Which provider the row came in over — drives the SourceBadge,
+              // which used to be pinned to a "strava" constant (issue #35).
+              source: activities.source,
               startDate: activities.startDate,
               distance: activities.distance,
               movingTime: activities.movingTime,

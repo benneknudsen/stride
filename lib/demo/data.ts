@@ -12,6 +12,12 @@ export interface DemoActivity {
   id: string;
   name: string;
   type: string;
+  /**
+   * Ingesting provider. The fixtures stand in for a Strava-synced history, and
+   * `sourceOf()` falls back to "strava" when the field is absent — so no fixture
+   * sets it. It exists so a DemoActivity is assignable where a live row is (#35).
+   */
+  source?: string | null;
   /** Distance in meters. */
   distance: number;
   /** Moving time in seconds. */

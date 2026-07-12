@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { ROUTES } from "@/lib/routes";
 
-type OAuthProvider = "google";
+type OAuthProvider = "google" | "garmin";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -114,6 +114,22 @@ export default function LoginPage() {
           Fortsæt med Google
         </button>
 
+        {/* Garmin (#35). Signing in here also grants the Activity API scope, so
+            the athlete's runs start syncing without a second connect step. */}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => handleOAuth("garmin")}
+          className="cg-interactive mt-3 flex w-full items-center justify-center gap-2 rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.03] disabled:opacity-50"
+        >
+          {oauthLoading === "garmin" ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <GarminIcon />
+          )}
+          Fortsæt med Garmin
+        </button>
+
         <p className="mt-6 text-center text-[13px] text-ink/60">
           Kigger du bare?{" "}
           <Link
@@ -125,6 +141,19 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+function GarminIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <title>Garmin</title>
+      <path
+        fill="var(--color-garmin)"
+        d="M12 1.7 22.3 12 12 22.3 1.7 12 12 1.7Zm0 3.2L4.9 12l7.1 7.1 7.1-7.1L12 4.9Z"
+      />
+      <circle cx="12" cy="12" r="2.6" fill="var(--color-garmin)" />
+    </svg>
   );
 }
 

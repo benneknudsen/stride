@@ -40,7 +40,9 @@ export async function getActivities(opts?: {
     .select({
       id: activities.id,
       userId: activities.userId,
+      source: activities.source,
       stravaActivityId: activities.stravaActivityId,
+      garminSummaryId: activities.garminSummaryId,
       name: activities.name,
       type: activities.type,
       distance: activities.distance,
