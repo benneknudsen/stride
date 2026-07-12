@@ -67,9 +67,14 @@ export async function POST(_req: NextRequest) {
 
       if (batch.length === 0) continue;
 
-      const rows = batch
+      const mapped = batch
         .filter((summary) => summary.summaryId)
         .map((summary) => mapGarminActivityToDb(summary, userId));
+
+      // Collapse duplicate summaryIds within the window, keeping the last: a
+      // multi-row ON CONFLICT DO UPDATE that touches the same row twice throws
+      // ("cannot affect row a second time") — same guard as the webhook.
+      const rows = [...new Map(mapped.map((row) => [row.garminSummaryId, row])).values()];
 
       if (rows.length === 0) continue;
 

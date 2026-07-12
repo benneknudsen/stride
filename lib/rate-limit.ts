@@ -12,6 +12,22 @@ type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
 
+/**
+ * Above this many tracked keys, sweep expired buckets before adding a new one.
+ * An expired bucket is never read again (a fresh window replaces it), so keys
+ * that are hit once and never again would otherwise accumulate for the life of
+ * the process. The sweep bounds that growth without paying an O(n) scan on
+ * every call.
+ */
+const SWEEP_THRESHOLD = 10_000;
+
+/** Drop every bucket whose window has already elapsed at `now`. */
+function sweepExpired(now: number): void {
+  for (const [key, bucket] of buckets) {
+    if (now >= bucket.resetAt) buckets.delete(key);
+  }
+}
+
 export type RateLimitResult = {
   /** Whether the request is allowed under the current window. */
   allowed: boolean;
@@ -41,6 +57,7 @@ export function rateLimit(key: string, options: RateLimitOptions = {}): RateLimi
 
   // No active window (or it has expired) — start a fresh one.
   if (!bucket || now >= bucket.resetAt) {
+    if (buckets.size > SWEEP_THRESHOLD) sweepExpired(now);
     const resetAt = now + windowMs;
     buckets.set(key, { count: 1, resetAt });
     return { allowed: true, remaining: max - 1, resetAt };
