@@ -65,6 +65,8 @@ export type SummaryActivity = {
   average_heartrate: number | null;
   max_heartrate: number | null;
   average_cadence: number | null;
+  /** True when the athlete hid their heart-rate data — HR fields are absent. */
+  heartrate_opt_out?: boolean | null;
   map: StravaMap | null;
   trainer: boolean;
   commute: boolean;
