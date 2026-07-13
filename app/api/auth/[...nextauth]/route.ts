@@ -29,7 +29,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     if (email) {
-      const result = rateLimit(`magic-link:${email}`);
+      const result = await rateLimit(`magic-link:${email}`);
       if (!result.allowed) {
         const retryAfter = Math.max(0, Math.ceil((result.resetAt - Date.now()) / 1000));
         return NextResponse.json(
