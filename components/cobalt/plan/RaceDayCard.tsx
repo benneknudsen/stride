@@ -58,6 +58,12 @@ export function RaceDayCard({
         <Stat value={race.racePace} label="Race-pace /km" />
         <Stat value={race.aiEstimate} label="AI-estimat" />
       </div>
+
+      {race.estimateNote ? (
+        <div className="mt-3.5 font-cg-mono text-[9.5px] uppercase tracking-[0.1em] opacity-75">
+          {race.estimateNote}
+        </div>
+      ) : null}
     </GlassCard>
   );
 }

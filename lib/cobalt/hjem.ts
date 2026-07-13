@@ -10,8 +10,16 @@
 // defaults keep visitors on the engine's demo race.
 
 import { DEFAULT_RACE_DATE, DEFAULT_RACE_NAME, planTotalWeeks } from "@/lib/coach/engine";
+import { formatDanish } from "@/lib/cobalt/format";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
+import {
+  formatPaceClock,
+  formatRaceTime,
+  inferRaceDistanceMeters,
+  type PredictionConfidence,
+  predictRace,
+} from "@/lib/training/prediction";
 
 const DAY_MS = 86_400_000;
 
@@ -185,6 +193,26 @@ export interface RecentRunView {
   paceLabel: string;
 }
 
+/**
+ * A formatted race-time forecast (Riegel projection from the runner's own recent
+ * efforts — see lib/training/prediction.ts). Both the home plan strip and the
+ * plan-page race card read these strings, so the goal, pace and estimate stay in
+ * lockstep across pages. Null when there's no run substantial enough to project.
+ */
+export interface RacePredictionView {
+  /** Round goal time, "H:MM" / "M:SS" (the estimate is built to beat it). */
+  goalTime: string;
+  /** Predicted race pace, "M:SS" per km. */
+  racePace: string;
+  /** Riegel-projected finish, "H:MM" / "M:SS". */
+  aiEstimate: string;
+  /** Plan-strip goal label, "Mål under 1:45". */
+  goalLabel: string;
+  /** Danish one-liner naming the basis effort ("Fra 8,0 km @ 4:30 · høj sikkerhed"). */
+  note: string;
+  confidence: PredictionConfidence;
+}
+
 export interface HomeView {
   weekNumber: number;
   weeklyKm: number;
@@ -202,6 +230,8 @@ export interface HomeView {
   heroNote: string;
   coachQuote: string;
   recentRuns: RecentRunView[];
+  /** Data-grounded race forecast, or null when history is too thin to project. */
+  racePrediction: RacePredictionView | null;
   plan: {
     weekOfPlan: number;
     totalWeeks: number;
@@ -249,6 +279,37 @@ const PACE_CURVE = [
 /** Running activity types: "Run", "TrailRun", "VirtualRun", … */
 function isRun(activity: HomeActivityLike): boolean {
   return /run/i.test(activity.type);
+}
+
+/** Danish label for a prediction's confidence band. */
+const CONFIDENCE_LABEL: Record<PredictionConfidence, string> = {
+  high: "høj sikkerhed",
+  medium: "middel sikkerhed",
+  low: "lav sikkerhed",
+};
+
+/**
+ * The formatted race forecast for the given runs, or null when nothing is
+ * substantial enough to project (see predictRace). Kept here — not in the page —
+ * so home and plan render the identical strings from one derivation.
+ */
+function buildRacePrediction(
+  runs: HomeActivityLike[],
+  now: Date,
+  raceName: string
+): RacePredictionView | null {
+  const prediction = predictRace(runs, inferRaceDistanceMeters(raceName), now);
+  if (prediction === null) return null;
+  return {
+    goalTime: formatRaceTime(prediction.goalSeconds),
+    racePace: formatPaceClock(prediction.racePaceSecPerKm),
+    aiEstimate: formatRaceTime(prediction.predictedSeconds),
+    goalLabel: `Mål under ${formatRaceTime(prediction.goalSeconds)}`,
+    note: `Fra ${formatDanish(prediction.basis.distanceKm)} km @ ${formatPaceClock(
+      prediction.basis.paceSecPerKm
+    )} · ${CONFIDENCE_LABEL[prediction.confidence]}`,
+    confidence: prediction.confidence,
+  };
 }
 
 /**
@@ -345,6 +406,8 @@ export function buildHomeView(
   // one week earlier. Pre-plan dates clamp to week 1.
   const weekOfPlan = Math.min(totalWeeks, Math.max(1, totalWeeks - Math.floor(daysToRace / 7)));
 
+  const racePrediction = buildRacePrediction(runs, now, raceName);
+
   const coachQuote =
     recoveryBand === "ready"
       ? "Restitutionen ser stærk ud. Kør ugens tempopas som planlagt — kroppen er klar."
@@ -379,12 +442,13 @@ export function buildHomeView(
     heroNote,
     coachQuote,
     recentRuns,
+    racePrediction,
     plan: {
       weekOfPlan,
       totalWeeks,
       progressPct: Math.round((weekOfPlan / totalWeeks) * 100),
       daysToRace,
-      goalLabel: "Mål under 3:45",
+      goalLabel: racePrediction?.goalLabel ?? "Sæt dit mål",
       raceDateLabel: `${DA_WEEKDAYS_LONG[raceDate.getDay()]} ${danishDate(raceDate)}`,
       raceName,
       planTitle: `Træningsplan · ${raceName}`,
