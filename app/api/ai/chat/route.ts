@@ -344,7 +344,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "authentication_required" }, { status: 401 });
   }
 
-  const limit = rateLimit(`chat:${userId}`, {
+  const limit = await rateLimit(`chat:${userId}`, {
     max: RATE_LIMIT_MAX,
     windowMs: RATE_LIMIT_WINDOW_MS,
   });

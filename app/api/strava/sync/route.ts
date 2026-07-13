@@ -21,7 +21,7 @@ export async function POST(_req: NextRequest) {
 
   // B7: a full historical sync is expensive — enforce at least one minute
   // between syncs per user: rateLimit("strava-sync", { max: 1, windowMs: 60_000 }).
-  const limit = rateLimit(`strava-sync:${userId}`, { max: 1, windowMs: 60_000 });
+  const limit = await rateLimit(`strava-sync:${userId}`, { max: 1, windowMs: 60_000 });
   if (!limit.allowed) {
     const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
     return NextResponse.json(

@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
 
   // Per-user rate limit on the live-AI path (cache hits above never reach here),
   // mirroring the chat route: 429 with a `retry-after` when the window is full.
-  const limit = rateLimit(`analyze:${userId}`, {
+  const limit = await rateLimit(`analyze:${userId}`, {
     max: RATE_LIMIT_MAX,
     windowMs: RATE_LIMIT_WINDOW_MS,
   });

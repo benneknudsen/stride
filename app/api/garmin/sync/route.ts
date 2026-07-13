@@ -37,7 +37,7 @@ export async function POST(_req: NextRequest) {
 
   // A backfill is ~90 upstream calls — the same "at most one per minute" budget
   // the Strava sync gets, for the same reason.
-  const limit = rateLimit(`garmin-sync:${userId}`, { max: 1, windowMs: 60_000 });
+  const limit = await rateLimit(`garmin-sync:${userId}`, { max: 1, windowMs: 60_000 });
   if (!limit.allowed) {
     const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
     return NextResponse.json(
