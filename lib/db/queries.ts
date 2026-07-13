@@ -320,6 +320,10 @@ export const getDashboardActivities = cache(
               movingTime: activities.movingTime,
               averageSpeed: activities.averageSpeed,
               averageHeartrate: activities.averageHeartrate,
+              // Feeds the race predictor's HR ceiling (lib/training/prediction.ts):
+              // without a true max HR the effort adjustment collapses on an
+              // all-easy window, where max-average-HR looks near-maximal.
+              maxHeartrate: activities.maxHeartrate,
               averageCadence: activities.averageCadence,
               totalElevationGain: activities.totalElevationGain,
               hrZones: activities.hrZones,

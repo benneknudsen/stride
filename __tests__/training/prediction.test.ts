@@ -25,6 +25,17 @@ function run(days: number, km: number, paceMinPerKm: number, type = "Run"): Pred
   };
 }
 
+/** A run carrying heart rate — `avgHr`/`maxHr` drive the effort adjustment. */
+function hrRun(
+  days: number,
+  km: number,
+  paceMinPerKm: number,
+  avgHr: number,
+  maxHr: number
+): PredictionActivity {
+  return { ...run(days, km, paceMinPerKm), averageHeartrate: avgHr, maxHeartrate: maxHr };
+}
+
 describe("inferRaceDistanceMeters", () => {
   it("reads a half marathon before matching the substring 'marathon'", () => {
     expect(inferRaceDistanceMeters("Silkeborg Halvmarathon")).toBe(HALF_M);
@@ -120,6 +131,53 @@ describe("predictRace", () => {
   it("grades confidence low from a single short-relative effort", () => {
     // One 6 km run (6/21.1 ≈ 0.28 < 0.3) projected to a half.
     expect(predictRace([run(3, 6, 4.6)], HALF_M, AS_OF)?.confidence).toBe("low");
+  });
+
+  it("leaves the raw-Riegel result unchanged when no run carries heart rate", () => {
+    const withHr = predictRace([hrRun(3, 8, 5, 150, 175)], HALF_M, AS_OF);
+    const withoutHr = predictRace([run(3, 8, 5)], HALF_M, AS_OF);
+    // The lone effort is at ~0.86 of the 175 ceiling — below half intensity — so
+    // WITH hr it must project faster than the unadjusted projection.
+    expect(withHr).not.toBeNull();
+    expect(withoutHr).not.toBeNull();
+    expect(withHr?.effortAdjusted).toBe(true);
+    expect(withoutHr?.effortAdjusted).toBe(false);
+    expect(withHr!.predictedSeconds).toBeLessThan(withoutHr!.predictedSeconds);
+  });
+
+  it("scales an easy run's pace up toward race intensity, capped at 10%", () => {
+    // A very easy run (HR 130 of a 190 ceiling ≈ 0.68) would imply a huge naive
+    // gain; the cap holds the credited speed-up to 10%, so the estimate can be
+    // at most ~1/1.1 of the unadjusted projection, never less.
+    const easy = hrRun(3, 8, 6, 130, 150);
+    const ceiling = hrRun(20, 5, 4, 185, 195); // establishes HR max ≈ 195
+    const adjusted = predictRace([easy, ceiling], HALF_M, AS_OF);
+    const raw = predictRace(
+      [{ ...easy, averageHeartrate: null, maxHeartrate: null }],
+      HALF_M,
+      AS_OF
+    );
+    expect(adjusted?.effortAdjusted).toBe(true);
+    // Capped: never more than a 10% speed gain over the raw projection from the
+    // same 8 km basis (the 5 km ceiling run is too short to out-project it).
+    expect(adjusted!.predictedSeconds).toBeGreaterThanOrEqual(
+      Math.round(raw!.predictedSeconds / 1.1) - 1
+    );
+  });
+
+  it("does not slow down a run already harder than race intensity", () => {
+    // HR 178 of a 185 ceiling ≈ 0.96 > half intensity (0.88): no adjustment.
+    const prediction = predictRace([hrRun(3, 10, 4.2, 178, 185)], HALF_M, AS_OF);
+    expect(prediction?.effortAdjusted).toBe(false);
+  });
+
+  it("caps confidence at medium when the estimate leans on effort adjustment", () => {
+    // Six near-race-distance efforts (ratio ≥ 0.5, deep sample) — but all easy,
+    // so the basis is effort-adjusted and confidence can't reach 'high'.
+    const easyLongRuns = [3, 8, 13, 20, 27, 34].map((d) => hrRun(d, 18, 6, 135, 190));
+    const prediction = predictRace(easyLongRuns, HALF_M, AS_OF);
+    expect(prediction?.effortAdjusted).toBe(true);
+    expect(prediction?.confidence).toBe("medium");
   });
 });
 
