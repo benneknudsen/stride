@@ -173,6 +173,8 @@ export interface HomeActivityLike {
   /** Average speed in meters/second. */
   averageSpeed: number | null;
   averageHeartrate: number | null;
+  /** Max heart rate (bpm) — the race predictor's HR ceiling for effort adjustment. */
+  maxHeartrate?: number | null;
   /** Average cadence (single-leg, Strava convention). */
   averageCadence: number | null;
   totalElevationGain: number;
@@ -300,14 +302,21 @@ function buildRacePrediction(
 ): RacePredictionView | null {
   const prediction = predictRace(runs, inferRaceDistanceMeters(raceName), now);
   if (prediction === null) return null;
+  const basis = `${formatDanish(prediction.basis.distanceKm)} km @ ${formatPaceClock(
+    prediction.basis.paceSecPerKm
+  )}`;
+  // When the estimate credits a faster race pace than the run was jogged at
+  // (effort adjustment), say so — otherwise the pace in the note looks slower
+  // than the race pace above it, which would read as a bug rather than a feature.
+  const note = prediction.effortAdjusted
+    ? `Justeret fra ${basis} · ${CONFIDENCE_LABEL[prediction.confidence]}`
+    : `Fra ${basis} · ${CONFIDENCE_LABEL[prediction.confidence]}`;
   return {
     goalTime: formatRaceTime(prediction.goalSeconds),
     racePace: formatPaceClock(prediction.racePaceSecPerKm),
     aiEstimate: formatRaceTime(prediction.predictedSeconds),
     goalLabel: `Mål under ${formatRaceTime(prediction.goalSeconds)}`,
-    note: `Fra ${formatDanish(prediction.basis.distanceKm)} km @ ${formatPaceClock(
-      prediction.basis.paceSecPerKm
-    )} · ${CONFIDENCE_LABEL[prediction.confidence]}`,
+    note,
     confidence: prediction.confidence,
   };
 }

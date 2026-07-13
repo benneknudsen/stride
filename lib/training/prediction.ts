@@ -27,8 +27,32 @@ const RECENCY_DAYS = 42;
 /** Round the motivating goal up to the nearest 5 minutes. */
 const GOAL_ROUNDING_SECONDS = 5 * 60;
 
+/**
+ * The most an easy run's pace may be scaled toward race intensity (issue: real
+ * training is mostly easy — see below). The pace↔HR relationship is roughly
+ * linear only over a modest range; beyond ~10% the linear model over-promises
+ * and we simply lack the data to claim more, so we cap the credit and lower the
+ * confidence. Cross-validated against an independent 14-day model: on a real
+ * easy-base history this cap projects a marathon within that model's range,
+ * where the uncapped Riegel projection fell well outside it.
+ */
+const MAX_EFFORT_GAIN = 1.1;
+
 const HALF_MARATHON_M = 21_097.5;
 const MARATHON_M = 42_195;
+
+/**
+ * Race intensity as a fraction of max HR, by distance — the effort a trained
+ * runner holds for that race (5k ≈ 0.95, 10k ≈ 0.92, half ≈ 0.88, marathon ≈
+ * 0.82). Efforts run easier than this are submaximal and under-represent race
+ * ability; {@link effortMultiplier} scales them up toward it.
+ */
+const RACE_EFFORT_ANCHORS: [meters: number, fraction: number][] = [
+  [5000, 0.95],
+  [10_000, 0.92],
+  [HALF_MARATHON_M, 0.88],
+  [MARATHON_M, 0.82],
+];
 
 /** The minimal per-activity fields the prediction reads — a subset of an `activities` row. */
 export interface PredictionActivity {
@@ -40,6 +64,10 @@ export interface PredictionActivity {
   movingTime: number;
   /** Activity start. */
   startDate: Date;
+  /** Average heart rate (bpm), if recorded — drives the effort adjustment. */
+  averageHeartrate?: number | null;
+  /** Max heart rate (bpm), if recorded — feeds the athlete's observed HR ceiling. */
+  maxHeartrate?: number | null;
 }
 
 /** How much to trust an estimate — driven by data volume and the distance gap. */
@@ -63,11 +91,61 @@ export interface RacePrediction {
   /** Number of qualifying efforts considered. */
   sampleSize: number;
   targetDistanceKm: number;
+  /**
+   * True when the basis was an easy run whose pace we scaled up toward race
+   * intensity — i.e. the estimate leans on effort adjustment, not a run raced
+   * near race pace. Caps confidence at "medium" and flags the UI note.
+   */
+  effortAdjusted: boolean;
 }
 
 /** Running activity types: "Run", "TrailRun", "VirtualRun", … */
 function isRun(activity: PredictionActivity): boolean {
   return /run/i.test(activity.type);
+}
+
+/** Race intensity (fraction of max HR) for a distance, linearly interpolated. */
+function raceEffortFraction(distanceMeters: number): number {
+  const anchors = RACE_EFFORT_ANCHORS;
+  if (distanceMeters <= anchors[0][0]) return anchors[0][1];
+  const last = anchors[anchors.length - 1];
+  if (distanceMeters >= last[0]) return last[1];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const [d0, e0] = anchors[i];
+    const [d1, e1] = anchors[i + 1];
+    if (distanceMeters <= d1) return e0 + ((e1 - e0) * (distanceMeters - d0)) / (d1 - d0);
+  }
+  return last[1];
+}
+
+/**
+ * The athlete's HR ceiling — the max recorded across their runs (max HR beats
+ * average HR when both exist). Null when no run carries HR, which turns off the
+ * effort adjustment (fall back to raw Riegel).
+ */
+function observedHrMax(activities: PredictionActivity[]): number | null {
+  let ceiling = 0;
+  for (const a of activities) {
+    ceiling = Math.max(ceiling, a.maxHeartrate ?? 0, a.averageHeartrate ?? 0);
+  }
+  return ceiling > 0 ? ceiling : null;
+}
+
+/**
+ * How much to scale a run's pace toward race intensity, in [1, MAX_EFFORT_GAIN].
+ * A run at or above race effort is left as-is (Riegel handles the distance);
+ * an easier run is credited the HR ratio, capped. Returns 1 without HR data.
+ */
+function effortMultiplier(
+  activity: PredictionActivity,
+  targetEffort: number,
+  hrMax: number | null
+): number {
+  const avgHr = activity.averageHeartrate ?? 0;
+  if (hrMax === null || avgHr <= 0) return 1;
+  const effort = avgHr / hrMax;
+  if (effort <= 0 || effort >= targetEffort) return 1;
+  return Math.min(targetEffort / effort, MAX_EFFORT_GAIN);
 }
 
 /**
@@ -126,14 +204,22 @@ export function predictRace(
   if (candidates.length === 0) candidates = eligible(0);
   if (candidates.length === 0) return null;
 
-  // Riegel-project every candidate; the fastest projection is the current ceiling.
+  // Effort-adjust each candidate's pace toward race intensity (real training is
+  // mostly easy, and raw Riegel treats an easy run as a maximal one), then
+  // project it. The fastest adjusted projection is the current race ceiling.
+  const hrMax = observedHrMax(activities);
+  const targetEffort = raceEffortFraction(targetDistanceMeters);
+
   let best = candidates[0];
   let bestSeconds = Number.POSITIVE_INFINITY;
+  let bestMultiplier = 1;
   for (const a of candidates) {
-    const projected = a.movingTime * (targetDistanceMeters / a.distance) ** RIEGEL_EXPONENT;
+    const adjustedTime = a.movingTime / effortMultiplier(a, targetEffort, hrMax);
+    const projected = adjustedTime * (targetDistanceMeters / a.distance) ** RIEGEL_EXPONENT;
     if (projected < bestSeconds) {
       bestSeconds = projected;
       best = a;
+      bestMultiplier = a.movingTime / adjustedTime;
     }
   }
 
@@ -143,13 +229,15 @@ export function predictRace(
 
   const basisKm = best.distance / 1000;
   const daysAgo = Math.max(0, Math.round((nowMs - best.startDate.getTime()) / DAY_MS));
+  const effortAdjusted = bestMultiplier > 1.001;
 
   // Confidence rises with the sample and with how close the basis effort's
   // distance is to the race — projecting a marathon off a 10 km run is a longer
-  // reach than off a 30 km run.
+  // reach than off a 30 km run. An estimate leaning on effort adjustment (an
+  // easy run scaled up, no run raced near race pace) is capped at "medium".
   const distanceRatio = best.distance / targetDistanceMeters;
   const confidence: PredictionConfidence =
-    distanceRatio >= 0.5 && candidates.length >= 6
+    distanceRatio >= 0.5 && candidates.length >= 6 && !effortAdjusted
       ? "high"
       : distanceRatio >= 0.3 || candidates.length >= 3
         ? "medium"
@@ -161,12 +249,15 @@ export function predictRace(
     goalSeconds: Math.ceil(predictedSeconds / GOAL_ROUNDING_SECONDS) * GOAL_ROUNDING_SECONDS,
     basis: {
       distanceKm: round1(basisKm),
+      // The pace the runner actually ran — honest ("from your 6.2 km @ 7:19");
+      // effortAdjusted flags that the estimate credits a faster race pace.
       paceSecPerKm: Math.round(best.movingTime / basisKm),
       daysAgo,
     },
     confidence,
     sampleSize: candidates.length,
     targetDistanceKm: round1(targetKm),
+    effortAdjusted,
   };
 }
 
