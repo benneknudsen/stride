@@ -9,11 +9,11 @@ import "leaflet/dist/leaflet.css";
 // and a red finish dot. Leaflet is imported dynamically so it never touches SSR.
 export function RouteMap({
   coords,
-  label = "Rutekort over Søerne",
+  label,
 }: {
   coords: [number, number][];
-  /** Accessible name — the activity detail page passes the run's own route. */
-  label?: string;
+  /** Accessible name — each caller passes the run whose route this is. */
+  label: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -21,6 +21,11 @@ export function RouteMap({
     let cancelled = false;
     let map: import("leaflet").Map | undefined;
     const el = ref.current;
+
+    // A route with no points has nothing to draw, and Leaflet needs a view set
+    // before it will take a layer — so don't build a map at all. Both callers
+    // render a placeholder instead of this component in that case.
+    if (coords.length === 0) return;
 
     (async () => {
       const L = (await import("leaflet")).default;
@@ -43,8 +48,6 @@ export function RouteMap({
       }).addTo(map);
 
       const latlngs = coords.map(([lat, lng]) => L.latLng(lat, lng));
-      // A route with no points has no polyline, no markers and no bounds to fit.
-      if (latlngs.length === 0) return;
       L.polyline(latlngs, { color: "#ee2418", weight: 9, opacity: 0.22 }).addTo(map);
       L.polyline(latlngs, { color: "#ee2418", weight: 3.5, opacity: 1 }).addTo(map);
       L.circleMarker(latlngs[0], {

@@ -52,12 +52,17 @@ export function formatDistance(meters: number): string {
  * timezone, so on Vercel (UTC) a Sunday run landed in the wrong training week
  * and the "this week" tile could disagree with the plan's Monday–Sunday grid.
  * `getLocalDate()` makes the day-of-week read timezone-independent.
+ *
+ * `now` is injectable so a view-model built against a supplied clock (the plan
+ * page passes the request time) buckets its weeks against that same clock —
+ * otherwise "this week" here and "this week" there could be different weeks.
  */
 export function getWeeklyVolume(
   activities: { startDate: Date; distance: number }[],
-  weeksAgo: number
+  weeksAgo: number,
+  now: Date = getLocalDate()
 ): number {
-  const today = getLocalDate();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfWeek = new Date(today);
   // getDay() is 0=Sun..6=Sat, so (getDay() + 6) % 7 is the number of days since
   // Monday — the offset back to the start of the training week.

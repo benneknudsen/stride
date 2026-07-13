@@ -1,10 +1,18 @@
 // Cobalt Glass — Plan view-model.
 // Pure derivation (no React), mirroring lib/cobalt/hjem.ts. The live parts of the
 // plan (which training week we're in, days to race, progress, the race date) come
-// from the shared home view so the countdown stays in sync across pages. The plan
-// *prescription* — this week's sessions, the upcoming block and the race targets —
-// is fixed marathon-plan content, matching the design; only which of those days is
-// today, and therefore which are behind us, is derived from `now` (issue #96).
+// from the shared home view so the countdown stays in sync across pages.
+//
+// The week's *prescription* is data-driven for a runner with their own race
+// (issue #115): the sessions come from the phase engine (`getCurrentPhase` +
+// `getWeekPlan`), their volume is capped against what the runner's load ratio
+// says they can absorb (`computeSnapshot` + last week's actual km), and every
+// pace target is derived from the race predictor (`predictRace`) rather than
+// written down. Days the runner has already run report what they actually ran.
+// Demo and visitor traffic keeps the designed WEEK_TEMPLATE — fixed
+// marathon-plan content where only *which* day is today derives from `now`
+// (issue #96) — and so does any live user we can't predict a race for, since a
+// plan with invented paces would be worse than the demo one.
 //
 // buildPlanView() defaults to the demo fixtures (the unauthenticated fallback);
 // the server page passes getDashboardActivities rows for signed-in users
@@ -17,11 +25,27 @@ import {
   buildPhases,
   DEFAULT_RACE_DATE,
   DEFAULT_RACE_NAME,
+  getCurrentPhase,
+  getWeekPlan,
+  MAX_WEEKLY_INCREASE_RATIO,
   type PhaseKey,
+  type PlannedSession,
 } from "@/lib/coach/engine";
 import { formatDanish } from "@/lib/cobalt/format";
-import { buildHomeView, type HomeActivityLike } from "@/lib/cobalt/hjem";
+import { buildHomeView, type HomeActivityLike, zoneForHeartRate } from "@/lib/cobalt/hjem";
 import { demoActivities } from "@/lib/demo/data";
+import { getWeeklyVolume } from "@/lib/metrics";
+import {
+  formatPaceClock,
+  formatPaceRange,
+  formatRaceTime,
+  goalTimeFor,
+  type PaceZone,
+  predictRace,
+  type RacePrediction,
+  zonePaces,
+} from "@/lib/training/prediction";
+import { computeSnapshot } from "@/lib/training/progression";
 
 const DA_WEEKDAYS = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
 const DA_MONTHS_SHORT = [
@@ -112,6 +136,11 @@ export interface PlanView {
   planTitle: string;
   /** True once the race day is behind `now` — drives the "vælg din næste race" CTA. */
   racePassed: boolean;
+  /**
+   * True when this week's sessions, volume and pace targets were derived from
+   * the runner's own data (issue #115); false when they're the demo template.
+   */
+  dataDriven: boolean;
   phaseMarkers: PhaseMarker[];
   phaseSegments: PhaseSegment[];
   /** Short race date for the timeline end ("20. sep"). */
@@ -253,6 +282,308 @@ function mondayIndex(jsDay: number): number {
   return (jsDay + 6) % 7;
 }
 
+/** Weekday labels and ids for a derived week, Monday-first (the template's own). */
+const DOW_LABELS = WEEK_TEMPLATE.map((day) => day.dow);
+const DOW_IDS = WEEK_TEMPLATE.map((day) => day.id);
+
+/** Session types that leave the legs needing an easy day after them. */
+const HARD_TYPES = new Set(["tempo", "long", "race"]);
+
+/** Targets are prescribed on a half-km grid — "7,5 km", never "7,4 km". */
+function roundHalfKm(km: number): number {
+  return Math.round(km * 2) / 2;
+}
+
+function startOfDayDate(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** The Monday (local midnight) of the training week `now` falls in. */
+function startOfTrainingWeek(now: Date): Date {
+  const monday = startOfDayDate(now);
+  monday.setDate(monday.getDate() - mondayIndex(now.getDay()));
+  return monday;
+}
+
+/**
+ * How much of the phase's prescription the runner can actually absorb this week.
+ * Never scales *up* — the phase rules are the ceiling — and never asks for more
+ * than {@link MAX_WEEKLY_INCREASE_RATIO} on top of last week's real volume, with
+ * the load ratio (`computeSnapshot`) tightening that further when the acute:chronic
+ * band says the runner is already carrying too much.
+ */
+function volumeScale(runs: HomeActivityLike[], now: Date, prescribedKm: number): number {
+  if (prescribedKm <= 0) return 1;
+  const lastWeekKm = getWeeklyVolume(runs, 1, now) / 1000;
+  if (lastWeekKm <= 0) return 1;
+
+  const risk = computeSnapshot(
+    runs.map((run) => ({ ...run, hrZones: null })),
+    now
+  ).trainingLoad.risk;
+  const growthCap = risk === "high" ? 0.9 : risk === "elevated" ? 1 : MAX_WEEKLY_INCREASE_RATIO;
+
+  const targetKm = Math.min(prescribedKm, lastWeekKm * growthCap);
+  // Floored: a single missed week shouldn't collapse the plan to nothing.
+  return Math.max(0.6, Math.min(1, targetKm / prescribedKm));
+}
+
+/** Total prescribed distance across a generated week. */
+function prescribedWeekKm(sessions: PlannedSession[]): number {
+  return sessions.reduce((sum, session) => sum + (session.distanceKm ?? 0), 0);
+}
+
+/** A day the runner has already run: everything on the card is what they actually did. */
+function completedDay(index: number, runs: HomeActivityLike[], today: boolean): DayPlan {
+  const distance = runs.reduce((sum, run) => sum + run.distance, 0);
+  const movingTime = runs.reduce((sum, run) => sum + run.movingTime, 0);
+  const km = distance / 1000;
+
+  // HR averaged over time-in-motion, so a 90-minute long run outweighs a
+  // 20-minute jog on a double day. Runs without HR simply don't vote.
+  const withHr = runs.filter((run) => (run.averageHeartrate ?? 0) > 0);
+  const hrSeconds = withHr.reduce((sum, run) => sum + run.movingTime, 0);
+  const hr =
+    hrSeconds > 0
+      ? withHr.reduce((sum, run) => sum + (run.averageHeartrate ?? 0) * run.movingTime, 0) /
+        hrSeconds
+      : 0;
+  const zone = hr > 0 ? zoneForHeartRate(hr) : null;
+
+  return {
+    id: DOW_IDS[index],
+    dow: today ? `${DOW_LABELS[index]} · I DAG` : DOW_LABELS[index],
+    kind: "done",
+    name: runs.length === 1 ? runs[0].name : `${runs.length} ture`,
+    distance: `${formatDanish(km)} km`,
+    zoneLabel: zone?.label ?? "Gennemført",
+    zoneTone: zone?.tone ?? "muted",
+    ...(km > 0 && movingTime > 0 ? { meta: `${formatPaceClock(movingTime / km)} /km` } : {}),
+    metaTone: zone && zone.level >= 4 ? "red" : "cobalt",
+  };
+}
+
+/**
+ * A day still ahead of the runner: the phase engine says what the session is,
+ * the predictor says how fast. `sessions` is the whole week so a day can see its
+ * neighbours — the easy day after a hard one is a recovery jog, and the easy day
+ * before the long run carries the strides.
+ */
+function prescribedDay(
+  index: number,
+  sessions: PlannedSession[],
+  paces: Record<PaceZone, number>,
+  prediction: RacePrediction,
+  scale: number,
+  today: boolean,
+  raceName: string
+): DayPlan {
+  const session = sessions[index];
+  const dow = today ? `${DOW_LABELS[index]} · I DAG` : DOW_LABELS[index];
+  const id = DOW_IDS[index];
+
+  if (session.type === "rest") {
+    return {
+      id,
+      dow,
+      kind: "rest",
+      name: "Hviledag",
+      zoneLabel: "Restitution + mobilitet",
+      zoneTone: "muted",
+      metaTone: "muted",
+    };
+  }
+
+  const km = roundHalfKm((session.distanceKm ?? 0) * scale);
+  const distance = km > 0 ? { distance: `${formatDanish(km)} km` } : {};
+  // The week repeats, so Monday's "yesterday" is the previous Sunday.
+  const previous = sessions[(index + 6) % 7];
+  const next = sessions[(index + 1) % 7];
+
+  if (session.type === "race") {
+    return {
+      id,
+      dow,
+      kind: today ? "today" : "planned",
+      name: `Race — ${raceName}`,
+      ...distance,
+      zoneLabel: "Race-pace",
+      zoneTone: "red",
+      meta: `MÅL ${formatPaceClock(prediction.paceSecPerKm)} /km`,
+      metaTone: "red",
+    };
+  }
+
+  if (session.type === "tempo") {
+    // The week's quality session — the design's cobalt "AI-anbefalet" card.
+    return {
+      id,
+      dow,
+      kind: today ? "today" : "ai",
+      name: "Tempo",
+      ...distance,
+      zoneLabel: "Kvalitetspas · hårdt tempo",
+      zoneTone: "red",
+      meta: `MÅL ${formatPaceRange(paces.tempo)}`,
+      metaTone: "red",
+    };
+  }
+
+  if (session.type === "long") {
+    return {
+      id,
+      dow,
+      kind: today ? "today" : "planned",
+      name: "Lang tur",
+      ...distance,
+      zoneLabel: "Moderat tempo",
+      zoneTone: "muted",
+      meta: `MÅL ${formatPaceRange(paces.long)}`,
+      metaTone: "red",
+    };
+  }
+
+  if (HARD_TYPES.has(previous.type)) {
+    return {
+      id,
+      dow,
+      kind: today ? "today" : "planned",
+      name: "Recovery Jog",
+      ...distance,
+      zoneLabel: "Rolig restitution",
+      zoneTone: "muted",
+      meta: `MÅL ${formatPaceRange(paces.recovery)}`,
+      metaTone: "cobalt",
+    };
+  }
+
+  if (next.type === "long") {
+    return {
+      id,
+      dow,
+      kind: today ? "today" : "planned",
+      name: "Easy + Strides",
+      ...distance,
+      zoneLabel: `Rolig + 6×20 sek. @ ${formatPaceClock(paces.interval)}`,
+      zoneTone: "muted",
+      meta: `MÅL ${formatPaceRange(paces.easy)}`,
+      metaTone: "cobalt",
+    };
+  }
+
+  return {
+    id,
+    dow,
+    kind: today ? "today" : "planned",
+    name: "Rolig tur",
+    ...distance,
+    zoneLabel: "Rolig snak-fart",
+    zoneTone: "muted",
+    meta: `MÅL ${formatPaceRange(paces.easy)}`,
+    metaTone: "cobalt",
+  };
+}
+
+/** The next three weeks of the build, straight off the phase engine. */
+function derivedUpcomingWeeks(
+  weekStart: Date,
+  weekOfPlan: number,
+  raceDate: Date,
+  raceName: string,
+  paces: Record<PaceZone, number>,
+  scale: number
+): UpcomingWeek[] {
+  return [1, 2, 3].map((offset) => {
+    const start = new Date(weekStart);
+    start.setDate(start.getDate() + offset * 7);
+    const phase = getCurrentPhase(start, raceDate);
+    const sessions = getWeekPlan(phase, start, raceDate, raceName);
+    // The scale converges back to the phase's full prescription as the runner
+    // absorbs the load — the same 10% ceiling, one week at a time.
+    const weekScale = Math.min(1, scale * MAX_WEEKLY_INCREASE_RATIO ** offset);
+    const km = Math.round(prescribedWeekKm(sessions) * weekScale);
+
+    const longRun = sessions.find((session) => session.type === "long");
+    const hasQuality = sessions.some((session) => session.type === "tempo");
+    const longLabel = longRun
+      ? ` + lang tur ${formatDanish(roundHalfKm((longRun.distanceKm ?? 0) * weekScale), 0)} km`
+      : "";
+    const focus =
+      phase === "taper"
+        ? "Nedtrapning · rolig uge, kroppen samler op"
+        : `${PHASE_LABELS[phase]} · ${
+            hasQuality ? `tempo @ ${formatPaceClock(paces.tempo)} /km` : "rolig base i Zone 2"
+          }${longLabel}`;
+
+    return {
+      id: `u${offset}`,
+      week: weekOfPlan + offset,
+      focus,
+      km,
+      muted: phase === "taper",
+    };
+  });
+}
+
+/** Everything the data-driven path replaces in the view. */
+interface DerivedWeek {
+  days: DayPlan[];
+  weekPlannedKm: number;
+  weekDoneKm: number;
+  upcomingWeeks: UpcomingWeek[];
+  prediction: RacePrediction;
+}
+
+/**
+ * This week from the runner's own data, or null when we can't predict a race
+ * for them — in which case the caller keeps the demo template rather than
+ * prescribing paces we'd have had to invent.
+ */
+function buildDerivedWeek(
+  activities: HomeActivityLike[],
+  now: Date,
+  raceDate: Date,
+  raceName: string,
+  weekOfPlan: number
+): DerivedWeek | null {
+  const runs = activities.filter((activity) => /run/i.test(activity.type));
+  const prediction = predictRace(runs, now);
+  if (!prediction) return null;
+
+  const paces = zonePaces(prediction);
+  const weekStart = startOfTrainingWeek(now);
+  const phase = getCurrentPhase(now, raceDate);
+  const sessions = getWeekPlan(phase, weekStart, raceDate, raceName);
+  const scale = volumeScale(runs, now, prescribedWeekKm(sessions));
+  const todayIndex = mondayIndex(now.getDay());
+
+  // Runs already logged this training week, bucketed onto their weekday. A day
+  // with a run is reported, not prescribed — even if the plan called for rest.
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  const runsByDay: HomeActivityLike[][] = Array.from({ length: 7 }, () => []);
+  for (const run of runs) {
+    if (run.startDate >= weekStart && run.startDate < weekEnd) {
+      runsByDay[mondayIndex(run.startDate.getDay())].push(run);
+    }
+  }
+
+  const days = sessions.map((_, index) =>
+    runsByDay[index].length > 0
+      ? completedDay(index, runsByDay[index], index === todayIndex)
+      : prescribedDay(index, sessions, paces, prediction, scale, index === todayIndex, raceName)
+  );
+
+  return {
+    days,
+    // What the plan asks of the week, against what the runner has actually run.
+    weekPlannedKm: Math.round(prescribedWeekKm(sessions) * scale),
+    weekDoneKm: getWeeklyVolume(runs, 0, now) / 1000,
+    upcomingWeeks: derivedUpcomingWeeks(weekStart, weekOfPlan, raceDate, raceName, paces, scale),
+    prediction,
+  };
+}
+
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
@@ -273,7 +604,13 @@ export function buildPlanView(
   activities: HomeActivityLike[] = demoActivities,
   now: Date = new Date(),
   raceDate: Date = DEFAULT_RACE_DATE,
-  raceName: string = DEFAULT_RACE_NAME
+  raceName: string = DEFAULT_RACE_NAME,
+  /**
+   * Derive the week from `activities` instead of the demo template (issue #115).
+   * The page sets this for a signed-in runner who has synced runs *and* chosen
+   * their own race; demo and visitor traffic leaves it false.
+   */
+  live = false
 ): PlanView {
   const home = buildHomeView(activities, now, raceDate, raceName);
   const weekOfPlan = home.plan.weekOfPlan;
@@ -323,14 +660,20 @@ export function buildPlanView(
     fill: phaseState(key),
   }));
 
-  // The week's sessions are fixed plan content, but *which* day is today is not
-  // (issue #96): a template day resolves to done/today/planned by comparing its
-  // weekday to `now`. A session in the past reports the pace it was run at; the
-  // same session ahead of us reports its target — so no day can claim a result
-  // it hasn't produced yet.
+  // The data-driven week (issue #115) — sessions from the phase engine, volume
+  // from the load ratio, paces from the race predictor. Null when the runner
+  // has no race of their own, no synced runs, or nothing recent enough to
+  // predict from; the demo template below is the fallback in all three cases.
+  const derived = live ? buildDerivedWeek(activities, now, raceDate, raceName, weekOfPlan) : null;
+
+  // The template week's sessions are fixed plan content, but *which* day is
+  // today is not (issue #96): a template day resolves to done/today/planned by
+  // comparing its weekday to `now`. A session in the past reports the pace it
+  // was run at; the same session ahead of us reports its target — so no day can
+  // claim a result it hasn't produced yet.
   const todayIndex = mondayIndex(now.getDay());
 
-  const days: DayPlan[] = WEEK_TEMPLATE.map((day, index) => {
+  const templateDays: DayPlan[] = WEEK_TEMPLATE.map((day, index) => {
     const past = index < todayIndex;
     const today = index === todayIndex;
     // A rest day stays a rest day, whether it's behind us or ahead — there is
@@ -352,16 +695,16 @@ export function buildPlanView(
     };
   });
 
-  // Volume follows the same template, so the header can't promise 48 km against
-  // a week that prescribes something else, nor report kilometres as run on a day
-  // that hasn't happened.
-  const weekPlannedKm = WEEK_TEMPLATE.reduce((sum, day) => sum + (day.km ?? 0), 0);
-  const weekDoneKm = WEEK_TEMPLATE.slice(0, todayIndex).reduce(
+  // Template volume follows the same template, so the header can't promise 48 km
+  // against a week that prescribes something else, nor report kilometres as run
+  // on a day that hasn't happened.
+  const templatePlannedKm = WEEK_TEMPLATE.reduce((sum, day) => sum + (day.km ?? 0), 0);
+  const templateDoneKm = WEEK_TEMPLATE.slice(0, todayIndex).reduce(
     (sum, day) => sum + (day.km ?? 0),
     0
   );
 
-  const upcomingWeeks: UpcomingWeek[] = [
+  const templateUpcomingWeeks: UpcomingWeek[] = [
     {
       id: "u1",
       week: weekOfPlan + 1,
@@ -385,27 +728,39 @@ export function buildPlanView(
     },
   ];
 
+  // The race card. Live: the predictor's finish time is the AI estimate, and the
+  // goal is the round number just above it — the same relationship the design
+  // shows (an estimate sitting just under the goal), but computed. Demo keeps the
+  // designed numbers.
+  const prediction = derived?.prediction;
+  const race = prediction
+    ? {
+        goalTime: goalTimeFor(prediction.timeSeconds),
+        racePace: formatPaceClock(prediction.paceSecPerKm),
+        aiEstimate: formatRaceTime(prediction.timeSeconds),
+      }
+    : { goalTime: "3:45", racePace: "5:20", aiEstimate: "3:41" };
+
   return {
     totalWeeks,
     weekOfPlan,
     daysToRace,
-    goalLabel: home.plan.goalLabel,
+    goalLabel: prediction ? `Mål under ${race.goalTime}` : home.plan.goalLabel,
     planTitle: home.plan.planTitle,
     racePassed: home.plan.racePassed,
+    dataDriven: derived !== null,
     phaseMarkers,
     phaseSegments,
     raceShortDate,
-    weekPlannedKm,
-    weekDoneKm,
-    days,
-    upcomingWeeks,
+    weekPlannedKm: derived?.weekPlannedKm ?? templatePlannedKm,
+    weekDoneKm: derived?.weekDoneKm ?? templateDoneKm,
+    days: derived?.days ?? templateDays,
+    upcomingWeeks: derived?.upcomingWeeks ?? templateUpcomingWeeks,
     race: {
       name: raceName,
       dayLabel: raceDayLabel,
       dateValue: dateInputValue(raceDate),
-      goalTime: "3:45",
-      racePace: "5:20",
-      aiEstimate: "3:41",
+      ...race,
     },
   };
 }

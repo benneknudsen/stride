@@ -27,11 +27,18 @@ export default async function PlanPage() {
   const raceDate = racePlan?.raceDate ?? undefined;
   const raceName = racePlan?.raceName ?? (raceDate ? "Din race" : undefined);
 
+  // Data-driven (issue #115): a runner with synced runs *and* a race of their own
+  // gets a week derived from their own data — sessions from the phase engine,
+  // volume from their load ratio, pace targets from the race predictor. Everyone
+  // else (visitors, and signed-in users still on the demo plan) gets the template.
+  const live = activities.length > 0 && !!raceDate;
+
   const view = buildPlanView(
     activities.length > 0 ? activities : undefined,
     new Date(),
     raceDate,
-    raceName
+    raceName,
+    live
   );
 
   return <PlanPageClient view={view} canEditRace={!!userId} hasOwnRace={!!raceDate} />;

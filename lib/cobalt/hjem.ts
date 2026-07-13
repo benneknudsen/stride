@@ -10,6 +10,7 @@
 // defaults keep visitors on the engine's demo race.
 
 import { DEFAULT_RACE_DATE, DEFAULT_RACE_NAME, planTotalWeeks } from "@/lib/coach/engine";
+import { decodePolyline } from "@/lib/cobalt/polyline";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
 
@@ -173,6 +174,11 @@ export interface HomeActivityLike {
    * fixtures predate the column; {@link sourceOf} resolves the fallback.
    */
   source?: string | null;
+  /**
+   * Google-encoded route polyline, when the run carried GPS (issue #114). Only
+   * the newest run's is read — it's what the RouteCard draws.
+   */
+  summaryPolyline?: string | null;
 }
 
 export interface RecentRunView {
@@ -189,6 +195,11 @@ export interface HomeView {
   weekNumber: number;
   weeklyKm: number;
   latest: LatestActivityView;
+  /**
+   * The newest run's decoded GPS route (issue #114) — empty when that run
+   * carried no polyline (a treadmill run, or a Garmin row, which never has
+   * one). The RouteCard renders a placeholder rather than an empty map.
+   */
   routeCoords: [number, number][];
   routeKm: number;
   routeElevation: number;
@@ -218,9 +229,12 @@ export interface HomeView {
   };
 }
 
-// A ~5 km loop around the Copenhagen lakes ("Søerne"), used as the route
-// polyline. In production this is the activity's real GPS stream.
-const ROUTE_COORDS: [number, number][] = [
+// A ~5 km loop around the Copenhagen lakes ("Søerne"). The demo fixtures carry
+// no GPS, so this stands in as *their* route — it is never drawn for a live run
+// (issue #114): a signed-in user's card shows their own decoded polyline, or a
+// placeholder when the run had no GPS. Attaching it to a real run would put a
+// stranger's route under their own distance.
+const DEMO_ROUTE_COORDS: [number, number][] = [
   [55.6839, 12.5636],
   [55.685, 12.5658],
   [55.6867, 12.5681],
@@ -282,6 +296,10 @@ export function buildHomeView(
   // filters down to nothing, so fall back to the fixtures here — the same
   // demo-data path the pages take for users with no synced runs.
   const runs = filtered.length > 0 ? filtered : demoActivities;
+  // Are the runs above the fixtures? True for a visitor (the default argument)
+  // and for the cross-training fallback. Only the fixtures get the stand-in
+  // route below — a live run draws its own GPS or nothing at all.
+  const isDemo = activities === demoActivities || filtered.length === 0;
 
   const latest = runs[0];
   const latestHr = latest.averageHeartrate ?? 0;
@@ -345,6 +363,12 @@ export function buildHomeView(
   // one week earlier. Pre-plan dates clamp to week 1.
   const weekOfPlan = Math.min(totalWeeks, Math.max(1, totalWeeks - Math.floor(daysToRace / 7)));
 
+  // The real GPS route of the newest run (issue #114). A run without a polyline
+  // (treadmill, or any Garmin row) draws nothing; the fixtures keep the Søerne
+  // loop so demo mode still shows a route.
+  const decoded = decodePolyline(latest.summaryPolyline);
+  const routeCoords = decoded.length > 0 ? decoded : isDemo ? DEMO_ROUTE_COORDS : [];
+
   const coachQuote =
     recoveryBand === "ready"
       ? "Restitutionen ser stærk ud. Kør ugens tempopas som planlagt — kroppen er klar."
@@ -367,7 +391,7 @@ export function buildHomeView(
       clock: clock(latest.startDate),
       paceCurve: PACE_CURVE,
     },
-    routeCoords: ROUTE_COORDS,
+    routeCoords,
     routeKm: latest.distance / 1000,
     routeElevation: latest.totalElevationGain,
     avgPaceLabel: paceSecondsToClock(avgPaceSeconds),
