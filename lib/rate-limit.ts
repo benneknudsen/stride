@@ -18,7 +18,9 @@ type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
 
-/** Bound the fallback Map so a hot loop can't grow it without limit (#107). */
+/** Prevent unbounded growth on the fallback Map by sweeping expired
+ *  buckets once the map exceeds this threshold (#107). Active keys
+ *  within their window are never evicted — the ceiling is rate × window. */
 const MAX_BUCKETS = 10_000;
 
 export type RateLimitResult = {
@@ -69,8 +71,10 @@ export async function rateLimit(
 
   try {
     return await redisRateLimit(client, key, max, windowMs, now);
-  } catch {
-    // Redis unreachable — a per-instance limit beats no limit at all.
+  } catch (err) {
+    // Redis unreachable — a per-instance limit beats no limit at all. Upstash
+    // errors carry no credentials, so the raw error is safe to log.
+    console.error("[rate-limit] Redis failed, falling back to in-memory:", err);
     return memoryRateLimit(key, max, windowMs, now);
   }
 }
@@ -84,22 +88,18 @@ async function redisRateLimit(
 ): Promise<RateLimitResult> {
   const redisKey = `ratelimit:${key}`;
 
-  // One round trip: bump the counter and read the window's remaining life.
+  // One round trip: bump the counter, arm the expiry if the key has none (NX,
+  // so a mid-window hit never extends the window), and read what's left of it.
+  // NX also repairs a key left without a TTL by a run that died mid-transaction
+  // — without an expiry it would block the caller forever. PTTL runs after the
+  // PEXPIRE, so the TTL it reports is always positive.
   const tx = client.multi();
   tx.incr(redisKey);
+  tx.pexpire(redisKey, windowMs, "NX");
   tx.pttl(redisKey);
-  const [count, ttl] = await tx.exec<[number, number]>();
+  const [count, , ttl] = await tx.exec<[number, 0 | 1, number]>();
 
-  // A negative TTL means the key has no expiry: either this is the first hit of
-  // a new window, or a previous run died between INCR and PEXPIRE. Either way,
-  // (re)arm it — without an expiry the key would block the caller forever.
-  let resetAt: number;
-  if (ttl < 0) {
-    await client.pexpire(redisKey, windowMs);
-    resetAt = now + windowMs;
-  } else {
-    resetAt = now + ttl;
-  }
+  const resetAt = now + ttl;
 
   // The counter keeps climbing past `max` while blocked. That is harmless: the
   // window still expires on its original TTL, so the semantics match the Map.

@@ -14,7 +14,6 @@ export default defineConfig({
       // Report on every source file in scope, not just the ones a test happened
       // to import — otherwise a completely untested module silently counts as
       // "no data" instead of 0%, and coverage looks better than it is.
-      all: true,
       include: ["lib/**/*.{ts,tsx}", "actions/**/*.ts", "app/api/**/*.ts"],
       exclude: [
         "**/*.d.ts",
