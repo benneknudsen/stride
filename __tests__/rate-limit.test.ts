@@ -4,7 +4,6 @@ import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 const { redisMock } = vi.hoisted(() => ({
   redisMock: {
     multi: vi.fn(),
-    pexpire: vi.fn(),
   },
 }));
 
@@ -69,11 +68,19 @@ describe("rateLimit (in-memory fallback)", () => {
 });
 
 describe("rateLimit (Upstash Redis)", () => {
-  /** Stubs one MULTI round trip returning [count, pttl]. */
-  function stubTransaction(count: number, ttl: number) {
-    const exec = vi.fn().mockResolvedValue([count, ttl]);
-    redisMock.multi.mockReturnValue({ incr: vi.fn(), pttl: vi.fn(), exec });
-    return exec;
+  /**
+   * Stubs one MULTI round trip returning [incr, pexpire, pttl]. PEXPIRE NX runs
+   * inside the transaction, so PTTL always reports a live (positive) TTL.
+   */
+  function stubTransaction(count: number, ttl: number, armed: 0 | 1 = 1) {
+    const tx = {
+      incr: vi.fn(),
+      pexpire: vi.fn(),
+      pttl: vi.fn(),
+      exec: vi.fn().mockResolvedValue([count, armed, ttl]),
+    };
+    redisMock.multi.mockReturnValue(tx);
+    return tx;
   }
 
   beforeEach(() => {
@@ -89,32 +96,36 @@ describe("rateLimit (Upstash Redis)", () => {
   });
 
   it("allows a first hit and arms the window's expiry", async () => {
-    stubTransaction(1, -1); // fresh key: no TTL yet
+    // Fresh key: PEXPIRE NX arms it, so PTTL reports the full window.
+    const tx = stubTransaction(1, 60_000, 1);
     const result = await rateLimit("chat:u1", { now: 1_000, windowMs: 60_000 });
 
     expect(result).toEqual({ allowed: true, remaining: 4, resetAt: 61_000 });
-    expect(redisMock.pexpire).toHaveBeenCalledWith("ratelimit:chat:u1", 60_000);
+    expect(tx.pexpire).toHaveBeenCalledWith("ratelimit:chat:u1", 60_000, "NX");
   });
 
   it("derives resetAt from the live TTL and leaves the window alone", async () => {
-    stubTransaction(3, 20_000);
+    // Mid-window hit: the key already has a TTL, so PEXPIRE NX is a no-op (0).
+    const tx = stubTransaction(3, 20_000, 0);
     const result = await rateLimit("chat:u1", { now: 1_000, windowMs: 60_000 });
 
     expect(result).toEqual({ allowed: true, remaining: 2, resetAt: 21_000 });
     // The window must not be extended by a mid-window hit.
-    expect(redisMock.pexpire).not.toHaveBeenCalled();
+    expect(tx.pexpire).toHaveBeenCalledWith("ratelimit:chat:u1", 60_000, "NX");
   });
 
   it("blocks once the counter passes max", async () => {
-    stubTransaction(6, 20_000);
+    stubTransaction(6, 20_000, 0);
     const result = await rateLimit("chat:u1", { now: 1_000, windowMs: 60_000 });
 
     expect(result).toEqual({ allowed: false, remaining: 0, resetAt: 21_000 });
   });
 
   it("falls back to the in-memory limiter when Redis fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     redisMock.multi.mockReturnValue({
       incr: vi.fn(),
+      pexpire: vi.fn(),
       pttl: vi.fn(),
       exec: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
     });
@@ -122,5 +133,11 @@ describe("rateLimit (Upstash Redis)", () => {
     const now = 0;
     expect((await rateLimit("degraded", { now, max: 1 })).allowed).toBe(true);
     expect((await rateLimit("degraded", { now, max: 1 })).allowed).toBe(false);
+    expect(error).toHaveBeenCalledWith(
+      "[rate-limit] Redis failed, falling back to in-memory:",
+      expect.any(Error)
+    );
+
+    error.mockRestore();
   });
 });
