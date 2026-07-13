@@ -18,6 +18,14 @@ export interface DemoActivity {
    * sets it. It exists so a DemoActivity is assignable where a live row is (#35).
    */
   source?: string | null;
+  /**
+   * Google-encoded GPS route. The fixtures have no GPS streams to encode, so no
+   * fixture sets it — the Hjem route card falls back to its own stand-in loop
+   * for demo mode (issue #114), and the activity detail page shows its
+   * "no route saved" placeholder. It exists so a DemoActivity stays assignable
+   * where a live row is.
+   */
+  summaryPolyline?: string | null;
   /** Distance in meters. */
   distance: number;
   /** Moving time in seconds. */

@@ -3,11 +3,14 @@ import {
   buildPhases,
   DEFAULT_RACE_DATE,
   DEFAULT_RACE_NAME,
+  getCurrentPhase,
+  getWeekPlan,
   type PhaseKey,
   planTotalWeeks,
 } from "@/lib/coach/engine";
-import { buildHomeView } from "@/lib/cobalt/hjem";
+import { buildHomeView, type HomeActivityLike } from "@/lib/cobalt/hjem";
 import { buildPlanView } from "@/lib/cobalt/plan";
+import { formatPaceRange, predictRace, zonePaces } from "@/lib/training/prediction";
 
 // View-model tests for the race parameterisation (issue #99): the countdown,
 // plan title and phase timeline must all re-anchor to an arbitrary race date,
@@ -168,6 +171,145 @@ describe("buildPlanView — this week's calendar", () => {
     const sunday = buildPlanView(undefined, WEEK[6], RACE, RACE_NAME);
     expect(sunday.weekDoneKm).toBe(29); // 5 + 10 + 8 + 6
     expect(sunday.weekDoneKm).toBeLessThanOrEqual(sunday.weekPlannedKm);
+  });
+});
+
+describe("buildPlanView — data-driven week (issue #115)", () => {
+  // A Thursday inside the peak block: five run days, a mid-week tempo and a
+  // Sunday long run — the richest week the engine prescribes.
+  const PEAK_MID = midOf("peak");
+  const LIVE_NOW = addDays(PEAK_MID, 3 - ((PEAK_MID.getDay() + 6) % 7));
+
+  function liveRun(
+    daysAgo: number,
+    km: number,
+    paceSecPerKm: number,
+    hr: number
+  ): HomeActivityLike {
+    const startDate = addDays(LIVE_NOW, -daysAgo);
+    startDate.setHours(7, 30, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysAgo}`,
+      name: `Tur ${daysAgo}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: hr,
+      averageCadence: 88,
+      totalElevationGain: 20,
+    };
+  }
+
+  // Six weeks of training: a steady easy base, a hard 10 km to anchor the
+  // prediction, and one run already logged this week (Monday, 3 days back).
+  const RUNS: HomeActivityLike[] = [
+    liveRun(3, 9, 330, 140), // this week's Monday — already run
+    liveRun(6, 10, 270, 168), // last week's hard 10 km — the prediction's anchor
+    liveRun(8, 16, 330, 150),
+    liveRun(10, 8, 345, 138),
+    liveRun(13, 9, 340, 142),
+    liveRun(15, 14, 335, 148),
+    liveRun(17, 8, 350, 136),
+    liveRun(20, 10, 335, 144),
+    liveRun(24, 12, 340, 146),
+    liveRun(27, 8, 345, 138),
+    liveRun(31, 15, 335, 150),
+    liveRun(35, 9, 345, 140),
+    liveRun(40, 10, 340, 142),
+  ];
+
+  const PREDICTION = predictRace(RUNS, LIVE_NOW);
+  if (!PREDICTION) throw new Error("fixture must support a prediction");
+  const PACES = zonePaces(PREDICTION);
+  const SESSIONS = getWeekPlan(getCurrentPhase(LIVE_NOW, RACE), undefined, RACE, RACE_NAME);
+
+  const live = () => buildPlanView(RUNS, LIVE_NOW, RACE, RACE_NAME, true);
+
+  it("flags the week as data-driven and prescribes the phase engine's sessions", () => {
+    const view = live();
+    expect(view.dataDriven).toBe(true);
+    // Wednesday is the peak block's tempo day, Sunday its long run.
+    expect(SESSIONS[2].type).toBe("tempo");
+    expect(SESSIONS[6].type).toBe("long");
+    expect(view.days[2].name).toBe("Tempo");
+    expect(view.days[6].name).toBe("Lang tur");
+  });
+
+  it("derives every pace target from the race predictor — no template text survives", () => {
+    const view = live();
+    // Thursday's `now`, so Wednesday's tempo and Sunday's long run are both
+    // prescriptions, not results.
+    expect(view.days[2].meta).toBe(`MÅL ${formatPaceRange(PACES.tempo)}`);
+    expect(view.days[6].meta).toBe(`MÅL ${formatPaceRange(PACES.long)}`);
+    // None of the template's hardcoded paces can appear.
+    const metas = view.days.map((day) => day.meta).join(" ");
+    expect(metas).not.toContain("6:00–6:20");
+    expect(metas).not.toContain("4:20–4:35");
+    expect(metas).not.toContain("UGENS NØGLEPAS");
+  });
+
+  it("reports what a run day actually did instead of what it was told to do", () => {
+    const monday = live().days[0];
+    expect(monday.kind).toBe("done");
+    expect(monday.distance).toBe("9,0 km"); // the logged 9 km, not a prescription
+    expect(monday.meta).toBe("5:30 /km"); // the pace it was actually run at
+  });
+
+  it("never prescribes more than the phase allows, nor more than +10% on last week", () => {
+    const view = live();
+    const prescribed = SESSIONS.reduce((sum, s) => sum + (s.distanceKm ?? 0), 0);
+    expect(view.weekPlannedKm).toBeLessThanOrEqual(Math.round(prescribed));
+    expect(view.weekPlannedKm).toBeGreaterThan(0);
+    // Done km is the runner's real volume this week — the one logged 9 km run.
+    expect(view.weekDoneKm).toBeCloseTo(9, 5);
+  });
+
+  it("derives the race card from the prediction, with the goal just above the estimate", () => {
+    const view = live();
+    expect(view.race.aiEstimate).not.toBe("3:41"); // the template's number
+    expect(view.race.racePace).not.toBe("5:20");
+    expect(view.goalLabel).toBe(`Mål under ${view.race.goalTime}`);
+    // A goal you'd commit to: the estimate rounded up to the next 5 minutes.
+    const minutes = (time: string) => {
+      const [h, m] = time.split(":").map(Number);
+      return h * 60 + m;
+    };
+    expect(minutes(view.race.goalTime)).toBeGreaterThanOrEqual(minutes(view.race.aiEstimate));
+  });
+
+  it("derives the upcoming weeks from the engine rather than a fixed 52/56/38", () => {
+    const view = live();
+    expect(view.upcomingWeeks).toHaveLength(3);
+    for (const week of view.upcomingWeeks) {
+      expect(week.km).toBeGreaterThan(0);
+      expect(week.focus).not.toContain("8×1000 m"); // the template's copy
+    }
+    expect(view.upcomingWeeks.map((w) => w.week)).toEqual([
+      view.weekOfPlan + 1,
+      view.weekOfPlan + 2,
+      view.weekOfPlan + 3,
+    ]);
+  });
+
+  it("keeps the demo template for visitors — same call, live off", () => {
+    const view = buildPlanView(RUNS, LIVE_NOW, RACE, RACE_NAME);
+    expect(view.dataDriven).toBe(false);
+    expect(view.days[0].name).toBe("Recovery Jog");
+    expect(view.weekPlannedKm).toBe(53);
+    expect(view.race.aiEstimate).toBe("3:41");
+  });
+
+  it("falls back to the template rather than inventing paces it can't predict", () => {
+    // Only sub-5 km runs: nothing the predictor will anchor on.
+    const tooShort = [liveRun(2, 3, 360, 140), liveRun(5, 4, 355, 138)];
+    const view = buildPlanView(tooShort, LIVE_NOW, RACE, RACE_NAME, true);
+    expect(view.dataDriven).toBe(false);
+    expect(view.days[0].name).toBe("Recovery Jog");
+    expect(view.race.aiEstimate).toBe("3:41");
   });
 });
 

@@ -280,8 +280,8 @@ export const getActivities = cache(async (userId: string, options: GetActivities
 /**
  * Column-projected activity read for the dashboard. Selects only the fields the
  * dashboard's stat tiles, charts, and activity rows actually consume — omitting
- * the heavy jsonb/text columns (`raw`, `splits`, `summaryPolyline`) a page view
- * never touches. One call replaces the six independent `getActivities` reads the
+ * the heavy jsonb columns (`raw`, `splits`) a page view never touches. One call
+ * replaces the six independent `getActivities` reads the
  * dashboard used to issue (issue #37): the page fetches this once and slices it
  * per component instead of re-querying the same rows six times.
  *
@@ -323,6 +323,10 @@ export const getDashboardActivities = cache(
               averageCadence: activities.averageCadence,
               totalElevationGain: activities.totalElevationGain,
               hrZones: activities.hrZones,
+              // The encoded GPS route, drawn on Hjem's RouteCard for the newest
+              // run (issue #114). A summary polyline is a few hundred bytes per
+              // row — cheap next to `raw`/`splits`, which stay out.
+              summaryPolyline: activities.summaryPolyline,
             })
             .from(activities)
             .where(and(eq(activities.userId, userId), gte(activities.startDate, since)))

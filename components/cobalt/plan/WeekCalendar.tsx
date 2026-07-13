@@ -42,7 +42,10 @@ function DayCard({ day }: { day: DayPlan }) {
           </svg>
         </div>
         <div className="text-[13.5px] font-semibold">{day.name}</div>
-        <div className="text-[11.5px] text-silver/75">{day.zoneLabel}</div>
+        <div className="text-[11.5px] text-silver/75">
+          {day.distance ? `${day.distance} · ` : ""}
+          {day.zoneLabel}
+        </div>
         {day.meta ? (
           <div className="mt-auto font-cg-mono text-[10.5px] text-silver">{day.meta}</div>
         ) : null}
@@ -65,11 +68,12 @@ function DayCard({ day }: { day: DayPlan }) {
         >
           {day.dow}
         </span>
+        {/* The ✓ marks a session that was actually run — never one still ahead. */}
         {today ? (
           <span className="size-[7px] rounded-full bg-cobalt [animation:cg-pulse-dot_1.8s_ease-in-out_infinite] motion-reduce:animate-none" />
-        ) : (
+        ) : day.kind === "done" ? (
           <span className="text-[13px] text-success-ink">✓</span>
-        )}
+        ) : null}
       </div>
       <div className="text-[13.5px] font-semibold text-cobalt">{day.name}</div>
       <div className="text-[11.5px] text-ink">

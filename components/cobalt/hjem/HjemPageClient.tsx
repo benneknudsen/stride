@@ -87,6 +87,7 @@ export function HjemPageClient({
               coords={view.routeCoords}
               km={view.routeKm}
               elevation={view.routeElevation}
+              name={view.latest.name}
             />
           </Bento>
           <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.24}>
