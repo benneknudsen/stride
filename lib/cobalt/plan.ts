@@ -129,6 +129,8 @@ export interface PlanView {
     goalTime: string;
     racePace: string;
     aiEstimate: string;
+    /** Danish basis/confidence line under the estimate (empty when unavailable). */
+    estimateNote: string;
   };
 }
 
@@ -403,9 +405,13 @@ export function buildPlanView(
       name: raceName,
       dayLabel: raceDayLabel,
       dateValue: dateInputValue(raceDate),
-      goalTime: "3:45",
-      racePace: "5:20",
-      aiEstimate: "3:41",
+      // Real Riegel projection from the runner's own efforts (issue #99 keeps the
+      // race per user), shared with the home strip via buildHomeView so the two
+      // pages never disagree. The dashes are the no-history fallback.
+      goalTime: home.racePrediction?.goalTime ?? "–",
+      racePace: home.racePrediction?.racePace ?? "–",
+      aiEstimate: home.racePrediction?.aiEstimate ?? "–",
+      estimateNote: home.racePrediction?.note ?? "",
     },
   };
 }
