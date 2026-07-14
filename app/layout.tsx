@@ -12,11 +12,34 @@ import {
 } from "@/lib/fonts";
 import "./globals.css";
 
+// Absolute URLs for og:image/twitter:image resolve against metadataBase.
+// VERCEL_PROJECT_PRODUCTION_URL is bare (no protocol) and set in every Vercel
+// environment; the localhost fallback matches `npm run dev` (port 6969).
+const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : "http://localhost:6969";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Stride — AI-Powered Running Dashboard",
   description: "Visualize your running data with AI-powered insights",
   icons: {
     icon: "/app-icon.svg",
+  },
+  // The card image itself comes from app/opengraph-image.tsx — Next wires it
+  // into og:image and twitter:image automatically.
+  openGraph: {
+    type: "website",
+    siteName: "Stride",
+    locale: "da_DK",
+    url: "/",
+    title: "Stride — AI-Powered Running Dashboard",
+    description: "Al din løbedata. Én coach, der forstår den.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stride — AI-Powered Running Dashboard",
+    description: "Al din løbedata. Én coach, der forstår den.",
   },
 };
 
