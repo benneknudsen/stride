@@ -7,13 +7,17 @@ import { Logo } from "@/components/cobalt/Logo";
 import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
 import { Wordmark } from "@/components/cobalt/Wordmark";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
-import { ROUTES } from "@/lib/routes";
+import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 // Glass-pill navigation. Active route = a raised liquid-glass pill (issue #100,
 // shared with the BottomTabBar) rather than a flat cobalt fill. Coach carries the
 // red AI spark. Sync POSTs to /api/strava/sync and drives the button from the
 // response — idle → syncing → synced|error → idle — so it can be run again (#97).
+//
+// For a visitor the Hjem tab points at the demo dashboard (`?demo=1`) instead of
+// bare "/" — "/" shows the Velkommen landing page without a session, and a tab
+// that dropped the visitor out of the demo mid-browse would read as a bug.
 const LINKS = [
   { label: "Hjem", href: ROUTES.HOME },
   { label: "Aktiviteter", href: ROUTES.AKTIVITETER },
@@ -89,7 +93,17 @@ export function NavBar({
     }
   }, [onSync, router, settle]);
 
-  const isActive = (href: string) => current === href || current.startsWith(`${href}/`);
+  // usePathname carries no query string, so match on the path alone — the
+  // visitor's Hjem href ("/?demo=1") still has to light up on "/".
+  const isActive = (href: string) => {
+    const path = href.split("?")[0];
+    return current === path || current.startsWith(`${path}/`);
+  };
+
+  // Visitors (no identity chip) keep the demo when they tab back to Hjem.
+  const links = userName
+    ? LINKS
+    : LINKS.map((link) => (link.href === ROUTES.HOME ? { ...link, href: DEMO_HOME_ROUTE } : link));
 
   return (
     <nav className="cg-glass mt-[18px] flex items-center justify-between gap-3 rounded-card px-4 py-2.5 md:gap-[18px] md:px-[22px] md:py-[13px]">
@@ -99,7 +113,7 @@ export function NavBar({
       </Link>
 
       <div className="hidden items-center gap-1.5 text-[13px] font-medium md:flex">
-        {LINKS.map((link) => {
+        {links.map((link) => {
           const active = isActive(link.href);
           return (
             <Link
