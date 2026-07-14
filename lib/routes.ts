@@ -14,6 +14,14 @@ export const ROUTES = {
 } as const;
 
 /**
+ * Demo-dashboardet som destination. Forsiden viser velkomstsiden for besøgende
+ * uden session, så demoen (#84) nås via `?demo=1` på samme rute — login-sidens
+ * "Prøv demoen" og besøgendes Hjem-tab peger her. Signede brugere ignorerer
+ * parameteren; de ser altid deres egne data.
+ */
+export const DEMO_HOME_ROUTE = "/?demo=1";
+
+/**
  * Den gamle coach-rute. Ingen interne links peger her længere; den lever kun som
  * kilde for den permanente redirect til {@link ROUTES.COACH} (next.config.ts),
  * så bogmærker og delte links stadig virker.

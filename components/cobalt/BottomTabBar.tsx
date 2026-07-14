@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
-import { ROUTES } from "@/lib/routes";
+import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 // Mobile-only bottom navigation: a floating glass pill fixed to the bottom of the
@@ -67,8 +67,16 @@ const TABS: { label: string; href: string; icon: ReactNode }[] = [
   },
 ];
 
-export function BottomTabBar() {
+export function BottomTabBar({
+  signedIn = false,
+}: {
+  /** Without a session the Hjem tab keeps the visitor inside the demo (`?demo=1`). */
+  signedIn?: boolean;
+}) {
   const pathname = usePathname() ?? "";
+  const tabs = signedIn
+    ? TABS
+    : TABS.map((tab) => (tab.href === ROUTES.HOME ? { ...tab, href: DEMO_HOME_ROUTE } : tab));
 
   return (
     <nav
@@ -82,10 +90,13 @@ export function BottomTabBar() {
         boxShadow: "0 12px 36px rgba(27,41,192,0.18), inset 0 1px 0 rgba(255,255,255,0.9)",
       }}
     >
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         // `${"/"}/` is "//", which no pathname starts with — so the Hjem tab
-        // matches "/" exactly and doesn't light up on every other page.
-        const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+        // matches "/" exactly and doesn't light up on every other page. The
+        // query is stripped first: usePathname never carries one, but the
+        // visitor's Hjem href ("/?demo=1") does.
+        const path = tab.href.split("?")[0];
+        const active = pathname === path || pathname.startsWith(`${path}/`);
         return (
           <Link
             key={tab.href}
