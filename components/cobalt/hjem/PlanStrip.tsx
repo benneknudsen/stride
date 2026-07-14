@@ -20,7 +20,8 @@ export function PlanStrip({
   totalWeeks: number;
   progressPct: number;
   daysToRace: number;
-  goalLabel: string;
+  /** Derived goal ("Mål under 1:55"), or null when no estimate exists. */
+  goalLabel: string | null;
   raceDateLabel: string;
   /** From the view-model (issue #99) — carries the user's race name. */
   planTitle: string;
@@ -34,7 +35,7 @@ export function PlanStrip({
           {planTitle}
         </div>
         <div className="text-[12.5px] text-ink">
-          {goalLabel} · {raceDateLabel}
+          {goalLabel ? `${goalLabel} · ${raceDateLabel}` : raceDateLabel}
         </div>
       </div>
 

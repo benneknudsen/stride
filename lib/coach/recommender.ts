@@ -81,8 +81,10 @@ export const PAUSE_DISTANCE_FACTOR = 0.8;
 /** Heart-rate ceiling for a tempo session, in bpm. */
 export const TEMPO_HR_CAP_BPM = 172;
 
-/** Target pace bands per run type, min (fast) → max (slow), in min/km. */
-const PACE_RANGES: Record<Exclude<WorkoutRecommendation["type"], "rest">, PaceRange> = {
+/** Target pace bands per run type, min (fast) → max (slow), in min/km.
+ * Exported so the plan page's target metas quote the same bands the
+ * recommender prescribes — one source of truth for "what pace is an easy run". */
+export const PACE_RANGES: Record<Exclude<WorkoutRecommendation["type"], "rest">, PaceRange> = {
   easy: { min: "5:45", max: "6:15" },
   long: { min: "5:45", max: "6:15" },
   tempo: { min: "4:45", max: "5:05" },
