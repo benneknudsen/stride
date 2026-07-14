@@ -7,7 +7,6 @@
 - Drizzle ORM + Neon Postgres (`@neondatabase/serverless`, pooled WebSocket driver)
 - NextAuth.js v5 (database sessions — email magic link + Google; dev Credentials login in development)
 - Recharts 3.x
-- Zustand (UI state only — never server data; server data flows through Server Components)
 - Vercel deployment
 
 ## Commands

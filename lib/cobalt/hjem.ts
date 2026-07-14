@@ -11,6 +11,12 @@
 
 import { DEFAULT_RACE_DATE, DEFAULT_RACE_NAME, planTotalWeeks } from "@/lib/coach/engine";
 import { decodePolyline } from "@/lib/cobalt/polyline";
+import {
+  estimateRaceTime,
+  goalTimeFromEstimate,
+  inferRaceDistanceKm,
+  type RaceEstimate,
+} from "@/lib/cobalt/race-estimate";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
 
@@ -144,7 +150,11 @@ export interface LatestActivityView {
   source: ActivitySource;
   dayLabel: string;
   clock: string;
-  /** Deterministic pace-curve samples (relative 0–1, higher = faster). */
+  /**
+   * Pace-curve samples (relative 0–1, higher = faster). Only the demo fixtures
+   * carry a curve — live rows have no per-activity streams, and the card hides
+   * the trace rather than draw an invented one. Empty = no curve.
+   */
   paceCurve: number[];
 }
 
@@ -205,7 +215,8 @@ export interface HomeView {
   routeElevation: number;
   avgPaceLabel: string;
   avgPaceFraction: number;
-  avgPaceDeltaLabel: string;
+  /** Signed pace delta vs. the previous week, or null without a week to compare. */
+  avgPaceDeltaLabel: string | null;
   volumeBars: { id: string; km: number }[];
   recoveryPct: number;
   recoveryNote: string;
@@ -218,7 +229,10 @@ export interface HomeView {
     totalWeeks: number;
     progressPct: number;
     daysToRace: number;
-    goalLabel: string;
+    /** "Mål under 1:55" — derived from the race estimate; null when unknown. */
+    goalLabel: string | null;
+    /** Riegel prediction for the race, or null (no runs / unknown distance). */
+    estimate: RaceEstimate | null;
     raceDateLabel: string;
     /** Display name of the target race ("Silkeborg Halvmarathon"). */
     raceName: string;
@@ -253,9 +267,11 @@ const DEMO_ROUTE_COORDS: [number, number][] = [
   [55.683, 12.5618],
 ];
 
-// Deterministic pace-curve shape (relative, higher = faster). Fixture data has
-// no per-activity streams, so this is a plausible negative-split effort.
-const PACE_CURVE = [
+// Deterministic pace-curve shape (relative, higher = faster) for the DEMO
+// fixtures, which have no per-activity streams. Live rows don't either, so the
+// live path sends an empty curve and the card hides the trace — it never draws
+// a fabricated one over real data.
+const DEMO_PACE_CURVE = [
   0.28, 0.34, 0.4, 0.38, 0.45, 0.52, 0.5, 0.58, 0.63, 0.6, 0.68, 0.72, 0.7, 0.78, 0.85, 0.82, 0.9,
   0.95, 0.88, 0.98,
 ];
@@ -298,7 +314,7 @@ export function buildHomeView(
   const runs = filtered.length > 0 ? filtered : demoActivities;
   // Are the runs above the fixtures? True for a visitor (the default argument)
   // and for the cross-training fallback. Only the fixtures get the stand-in
-  // route below — a live run draws its own GPS or nothing at all.
+  // route and pace curve below — a live run draws its own GPS or nothing at all.
   const isDemo = activities === demoActivities || filtered.length === 0;
 
   const latest = runs[0];
@@ -313,7 +329,9 @@ export function buildHomeView(
   const latestPaceSeconds =
     latest.distance > 0 ? latest.movingTime / (latest.distance / 1000) : 390;
   const avgPaceSeconds = last7 ?? latestPaceSeconds;
-  const deltaSeconds = last7 !== null && prev7 !== null ? last7 - prev7 : -9;
+  // No previous week to compare against → no delta. The card hides the chip
+  // rather than invent an improvement.
+  const deltaSeconds = last7 !== null && prev7 !== null ? last7 - prev7 : null;
   // Ring fill: map pace 4:00–6:30 /km onto 0–1 (faster = fuller).
   const avgPaceFraction = Math.min(1, Math.max(0, (390 - avgPaceSeconds) / (390 - 240)));
 
@@ -374,6 +392,13 @@ export function buildHomeView(
       ? "Restitutionen ser stærk ud. Kør ugens tempopas som planlagt — kroppen er klar."
       : "Hold intensiteten nede i dag. En rolig snak-fart bygger form uden at koste restitution.";
 
+  // Race numbers are derived, never asserted: a Riegel prediction from the
+  // athlete's own recent runs against the distance the race's name implies.
+  const raceDistanceKm = inferRaceDistanceKm(raceName);
+  const estimate = raceDistanceKm !== null ? estimateRaceTime(runs, raceDistanceKm, now) : null;
+  const goalLabel =
+    estimate !== null ? `Mål under ${goalTimeFromEstimate(estimate.seconds)}` : null;
+
   return {
     weekNumber: isoWeek(now),
     weeklyKm,
@@ -389,14 +414,14 @@ export function buildHomeView(
       source: sourceOf(latest),
       dayLabel: relativeDayLabel(latest.startDate, now),
       clock: clock(latest.startDate),
-      paceCurve: PACE_CURVE,
+      paceCurve: isDemo ? DEMO_PACE_CURVE : [],
     },
     routeCoords,
     routeKm: latest.distance / 1000,
     routeElevation: latest.totalElevationGain,
     avgPaceLabel: paceSecondsToClock(avgPaceSeconds),
     avgPaceFraction,
-    avgPaceDeltaLabel: paceDelta(deltaSeconds),
+    avgPaceDeltaLabel: deltaSeconds !== null ? paceDelta(deltaSeconds) : null,
     volumeBars,
     recoveryPct,
     recoveryNote,
@@ -408,7 +433,8 @@ export function buildHomeView(
       totalWeeks,
       progressPct: Math.round((weekOfPlan / totalWeeks) * 100),
       daysToRace,
-      goalLabel: "Mål under 3:45",
+      goalLabel,
+      estimate,
       raceDateLabel: `${DA_WEEKDAYS_LONG[raceDate.getDay()]} ${danishDate(raceDate)}`,
       raceName,
       planTitle: `Træningsplan · ${raceName}`,

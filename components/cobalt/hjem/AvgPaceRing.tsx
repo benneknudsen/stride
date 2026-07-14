@@ -16,7 +16,8 @@ export function AvgPaceRing({
 }: {
   paceLabel: string;
   fraction: number;
-  deltaLabel: string;
+  /** Null when there is no previous week to compare — the note row hides. */
+  deltaLabel: string | null;
   started: boolean;
 }) {
   const offset = started ? C * (1 - fraction) : C;
@@ -72,12 +73,16 @@ export function AvgPaceRing({
         </div>
       </div>
 
-      <div className="text-center">
-        <span className="font-cg-mono text-[12px] font-semibold tracking-[0.04em] text-red">
-          {deltaLabel}
-        </span>
-        <span className="ml-2 text-[11px] text-ink">mod sidste uge</span>
-      </div>
+      {deltaLabel !== null ? (
+        <div className="text-center">
+          <span className="font-cg-mono text-[12px] font-semibold tracking-[0.04em] text-red">
+            {deltaLabel}
+          </span>
+          <span className="ml-2 text-[11px] text-ink">mod sidste uge</span>
+        </div>
+      ) : (
+        <div className="text-center text-[11px] text-ink">for få ture til sammenligning</div>
+      )}
     </GlassCard>
   );
 }
