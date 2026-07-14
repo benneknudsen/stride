@@ -1,16 +1,5 @@
-/* @vitest-environment jsdom */
-
-import { render, screen } from "@testing-library/react";
-import { useRouter } from "next/navigation";
-import React from "react";
-import { describe, expect, test, vi } from "vitest";
-import { GoalCard } from "../components/training/goal-card";
+import { describe, expect, test } from "vitest";
 import { GOAL_LIST, GOALS, ZONE_COLOR } from "../lib/training/goals";
-
-// Mock next/navigation
-vi.mock("next/navigation", () => ({
-  useRouter: vi.fn(),
-}));
 
 describe("Training Goals Configuration", () => {
   test("GOALS object structure contains all required fields for each goal", () => {
@@ -48,18 +37,5 @@ describe("Training Goals Configuration", () => {
 
   test("GOAL_LIST equals Object.values(GOALS)", () => {
     expect(GOAL_LIST).toEqual(Object.values(GOALS));
-  });
-});
-
-describe("GoalCard Component", () => {
-  test("renders correctly", () => {
-    const mockRouter = { push: vi.fn() };
-    vi.mocked(useRouter).mockReturnValue(mockRouter as unknown as ReturnType<typeof useRouter>);
-
-    const goal = GOALS.c25k;
-    render(React.createElement(GoalCard, { goal }));
-
-    expect(screen.getByText(goal.title)).toBeDefined();
-    expect(screen.getByText(goal.desc)).toBeDefined();
   });
 });

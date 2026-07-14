@@ -192,7 +192,12 @@ const LOAD_NOTES: Record<LoadStatus, string> = {
   RISIKO: "Akut belastning langt over din base — skru ned og prioritér restitution.",
 };
 
-export function buildCoachView(now: Date = new Date()): CoachView {
+/** "Godmorgen Nadia!" with a name, plain "Godmorgen!" without one. */
+function greeting(userName?: string): string {
+  return userName ? `Godmorgen ${userName}!` : "Godmorgen!";
+}
+
+export function buildCoachView(now: Date = new Date(), userName?: string): CoachView {
   const latest = demoActivities[0];
 
   // Long run → message 3, derived from the real fixture so the numbers are live.
@@ -220,7 +225,7 @@ export function buildCoachView(now: Date = new Date()): CoachView {
     {
       id: "m1",
       role: "coach",
-      text: `Godmorgen Benjamin! ${hrTrendLine} Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25.`,
+      text: `${greeting(userName)} ${hrTrendLine} Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25.`,
     },
     { id: "m2", role: "user", text: "Hvordan så min lange tur ud i søndags?" },
     {
@@ -299,7 +304,8 @@ function liveFocusQuote(workout: CoachDashboardData["workout"]): string {
 export function buildLiveCoachView(
   dashboard: CoachDashboardData,
   activities: CoachLoadActivityLike[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  userName?: string
 ): CoachView {
   const { workout, loadGauge } = dashboard;
   const ratio = loadGauge.ratio;
@@ -334,7 +340,7 @@ export function buildLiveCoachView(
     {
       id: "m1",
       role: "coach",
-      text: `Godmorgen Benjamin! Din readiness er ${pct}% — ${note.toLowerCase()}. Ugens anbefaling: ${focusQuote}`,
+      text: `${greeting(userName)} Din readiness er ${pct}% — ${note.toLowerCase()}. Ugens anbefaling: ${focusQuote}`,
     },
     { id: "m2", role: "user", text: "Hvordan ser min træningsbelastning ud?" },
     { id: "m3", role: "coach", text: loadAnswer },

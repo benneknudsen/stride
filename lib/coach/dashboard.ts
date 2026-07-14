@@ -226,7 +226,8 @@ export function buildCoachDashboard(
   activities: CoachActivityInput[],
   now: Date,
   weeks: number = DASHBOARD_WEEKS,
-  raceDate?: Date
+  raceDate?: Date,
+  userId?: string
 ): CoachDashboardData {
   const normalized = normalize(activities);
   const snapshots = computeProgression(normalized, weeks, now);
@@ -249,7 +250,10 @@ export function buildCoachDashboard(
 
   const { weekStrip, ...workout } = recommendWorkout(
     {
-      userId: "demo",
+      // The signed-in user's own id; "demo" only on the fixture path. The goal
+      // stays the product's Zone-2 philosophy — no per-user goal exists yet, and
+      // the recommender doesn't read it (see WorkoutInput.goal).
+      userId: userId ?? "demo",
       goal: GOALS.zone2,
       progression: current,
       lastRun: lastRun ?? new Date(now.getTime() - 3 * DAY_MS),
