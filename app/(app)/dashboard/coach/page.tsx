@@ -69,11 +69,13 @@ function SectionLoader({ height }: { height: number }) {
 async function NextWorkoutSection({
   activities,
   raceDate,
+  userId,
 }: {
   activities: CoachPageActivity[];
   raceDate?: Date;
+  userId?: string;
 }) {
-  const { workout, weekStrip } = computeCoachDashboard(activities, raceDate);
+  const { workout, weekStrip } = computeCoachDashboard(activities, raceDate, userId);
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 lg:col-span-7">
@@ -173,9 +175,18 @@ export default async function CoachPage() {
   const scope = live && userId ? userId : undefined;
 
   // The console's chat + cards derive from the same dashboard the workout card
-  // above them shows, so the two can never contradict each other.
-  const coachView = session?.user
-    ? buildLiveCoachView(computeCoachDashboard(activities, raceDate), activities)
+  // above them shows, so the two can never contradict each other. The greeting
+  // addresses the signed-in user by their own name (issue: it used to hardcode
+  // the developer's).
+  const user = session?.user;
+  const userName = user?.name?.trim() || user?.email?.split("@")[0] || undefined;
+  const coachView = user
+    ? buildLiveCoachView(
+        computeCoachDashboard(activities, raceDate, userId),
+        activities,
+        new Date(),
+        userName
+      )
     : buildCoachView();
 
   return (
@@ -191,7 +202,7 @@ export default async function CoachPage() {
       <section>
         <SectionHeading index="01" title="Næste pas" hint="Realtid" />
         <Suspense fallback={<SectionLoader height={280} />}>
-          <NextWorkoutSection activities={activities} raceDate={raceDate} />
+          <NextWorkoutSection activities={activities} raceDate={raceDate} userId={userId} />
         </Suspense>
       </section>
 

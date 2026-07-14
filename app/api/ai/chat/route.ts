@@ -37,15 +37,18 @@ import {
   type WorkoutContext,
 } from "@/lib/coach/engine";
 import { recommendWorkout } from "@/lib/coach/recommender";
-import { getChatHistory, getRacePlan, insertChatMessage } from "@/lib/db/queries";
+import {
+  getChatHistory,
+  getDashboardActivities,
+  getRacePlan,
+  insertChatMessage,
+} from "@/lib/db/queries";
+import { demoActivities } from "@/lib/demo/data";
 import { rateLimit } from "@/lib/rate-limit";
 import { GOALS } from "@/lib/training/goals";
-import {
-  computeSnapshot,
-  type ProgressionActivityInput,
-  type ProgressionSnapshot,
-} from "@/lib/training/progression";
+import { computeSnapshot, type ProgressionActivityInput } from "@/lib/training/progression";
 import type { ChatReply } from "@/types/chat";
+import type { HrZone } from "@/types/domain";
 
 export const runtime = "nodejs";
 // Tool loop (up to MAX_STEPS model round-trips) needs more headroom than the
@@ -101,7 +104,7 @@ const NDJSON_HEADERS = {
 const NOT_CONFIGURED_REPLY: ChatReply = {
   role: "assistant",
   content:
-    "AI coachen er ikke aktiveret endnu. Når Benjamin sætter en AI-nøgle på, kan jeg give dig personlige træningsråd. Indtil da kan du se dit næste pas på Coach-dashboardet.",
+    "AI coachen er ikke aktiveret endnu — der er ikke sat en AI-nøgle op. Indtil da kan du se dit næste pas på Coach-dashboardet.",
 };
 
 const PROVIDER_DOWN_REPLY: ChatReply = {
@@ -132,7 +135,7 @@ const COACH_SYSTEM_PROMPT = `Du er Stride — brugerens personlige løbecoach. D
 
 Regler:
 - Svar altid på dansk og sig "du" til brugeren.
-- Brug ALTID dine tools til at hente data — gæt aldrig, og opdig aldrig tal. Alt du siger om form, belastning og pas skal komme fra tool-output.
+- Brug ALTID dine tools til at hente data — gæt aldrig, og opdig aldrig tal. Alt du siger om form, belastning og pas skal komme fra tool-output. Tools læser selv brugerens synkroniserede aktiviteter — du skal ikke levere dem.
 - Brug recommendWorkout når du skal anbefale næste pas.
 - Brug getProgression når du skal forstå brugerens form og belastning.
 - Brug getWeekPlan når du skal kende ugens struktur.
@@ -140,6 +143,11 @@ Regler:
 - Vær motiverende, men ærlig — pynt ikke på tallene.
 - Forklar kort hvorfor du giver et råd (1-2 sætninger).
 - Sleep data findes ikke i produktet og må aldrig indgå i dine råd.`;
+
+/** Appended when the user has nothing synced yet, so the coach never passes
+ * demo numbers off as the user's own training. */
+const DEMO_DATA_NOTE = `
+- VIGTIGT: Brugeren har endnu ingen synkroniserede aktiviteter, så dine tools læser produktets demodata. Gør altid opmærksom på det, når du refererer til tallene, og anbefal at forbinde Strava eller Garmin.`;
 
 // ---------------------------------------------------------------------------
 // Agent tools — thin, validated adapters over the coach engine (the SSOT)
@@ -149,37 +157,43 @@ const GOAL_KEYS = ["c25k", "marathon", "zone2", "efficient"] as const;
 
 const isoDate = z.string().describe("ISO 8601 date string");
 
-/** The snapshot fields the recommender actually reads, JSON-friendly. */
-const progressionInputSchema = z
-  .object({
-    hasFullWindow: z.boolean(),
-    readyToIncrease: z.boolean().nullable(),
-    paceEfficiency: z.number().nullable(),
-  })
-  .describe("Progression snapshot from getProgression (subset)");
-
-/** Inflate the tool-input subset into a full `ProgressionSnapshot`. */
-function toSnapshot(
-  input: z.infer<typeof progressionInputSchema> | undefined,
-  now: Date
-): ProgressionSnapshot {
-  return {
-    date: now,
-    hasFullWindow: input?.hasFullWindow ?? false,
-    paceEfficiency: input?.paceEfficiency ?? null,
-    hrStability: null,
-    trainingLoad: { acute: 0, chronic: null, ratio: null, risk: null },
-    zone2Percent: null,
-    volumeKm: null,
-    readyToIncrease: input?.readyToIncrease ?? null,
-  };
-}
+/** The activity fields the progression engine reads — DB rows and demo fixtures both fit. */
+type CoachChatActivity = {
+  type: string;
+  startDate: Date;
+  distance: number;
+  movingTime: number;
+  averageHeartrate: number | null;
+  hrZones?: HrZone[] | null;
+};
 
 function buildCoachTools(
   userId: string,
   now: Date,
-  race?: { raceDate: Date | null; raceName: string | null } | null
+  race: { raceDate: Date | null; raceName: string | null } | null | undefined,
+  activities: CoachChatActivity[]
 ) {
+  // The user's real synced activities, resolved once by the route and bound
+  // into the tools — the model reads data, it never supplies it (so it can
+  // neither guess nor fabricate the history it reasons over).
+  const progressionInputs: ProgressionActivityInput[] = activities.map((a) => ({
+    type: a.type,
+    distance: a.distance,
+    movingTime: a.movingTime,
+    averageHeartrate: a.averageHeartrate ?? null,
+    hrZones: a.hrZones ?? null,
+    startDate: a.startDate,
+  }));
+  const latestRun = progressionInputs
+    .filter((a) => /run/i.test(a.type))
+    .reduce<Date | null>(
+      (latest, run) =>
+        run.startDate.getTime() <= now.getTime() &&
+        (latest === null || run.startDate.getTime() > latest.getTime())
+          ? run.startDate
+          : latest,
+      null
+    );
   // E2: resolve "the current phase" from the athlete's Danish calendar day, not
   // the server's UTC one. `now` stays the real instant for the recommender's
   // recovery math; only the day-of read goes through `getLocalDate`.
@@ -193,41 +207,35 @@ function buildCoachTools(
   return {
     recommendWorkout: tool({
       description:
-        "Anbefal brugerens næste pas som et workout card (type, distance, pace, pulsloft, sko, begrundelse, ugestrimmel). Hent progression med getProgression først.",
+        "Anbefal brugerens næste pas som et workout card (type, distance, pace, pulsloft, sko, begrundelse, ugestrimmel). Progression og seneste løbetur læses automatisk fra brugerens egne aktiviteter.",
       inputSchema: z.object({
-        lastRun: isoDate.optional().describe("Start of the user's most recent run"),
-        goal: z.enum(GOAL_KEYS).describe("The user's training goal"),
-        progression: progressionInputSchema.optional(),
-        footballYesterday: z.boolean().default(false),
-        injuryHistory: z.boolean().default(false),
+        goal: z
+          .enum(GOAL_KEYS)
+          .default("zone2")
+          .describe("The user's training goal, when they have stated one"),
+        footballYesterday: z
+          .boolean()
+          .default(false)
+          .describe("Set true only if the user says they played football yesterday"),
+        injuryHistory: z
+          .boolean()
+          .default(false)
+          .describe("Set true only if the user mentions an injury history"),
         risk: z
           .enum(["low", "medium", "high"])
           .optional()
           .describe("Optional risk read for the session, threaded to the rule engine"),
-        pauseDays: z
-          .number()
-          .min(0)
-          .optional()
-          .describe("Days since the last run, when the exact lastRun date is unknown"),
       }),
-      execute: async ({
-        lastRun,
-        goal,
-        progression,
-        footballYesterday,
-        injuryHistory,
-        risk,
-        pauseDays,
-      }) => {
-        const lastRunDate = lastRun
-          ? new Date(lastRun)
-          : new Date(now.getTime() - (pauseDays ?? 2) * DAY_MS);
+      execute: async ({ goal, footballYesterday, injuryHistory, risk }) => {
+        // The recommendation is grounded in the user's real history: the
+        // progression snapshot and the last-run date both come from the
+        // activities the route loaded, never from model-supplied numbers.
         return recommendWorkout(
           {
             userId,
             goal: GOALS[goal],
-            progression: toSnapshot(progression, now),
-            lastRun: lastRunDate,
+            progression: computeSnapshot(progressionInputs, now),
+            lastRun: latestRun ?? new Date(now.getTime() - 2 * DAY_MS),
             footballYesterday,
             injuryHistory,
             risk,
@@ -240,31 +248,9 @@ function buildCoachTools(
 
     getProgression: tool({
       description:
-        "Beregn brugerens progressionssnapshot (hasFullWindow, pace efficiency, training load, zone 2-andel, volumen) ud fra en liste af aktiviteter.",
-      inputSchema: z.object({
-        activities: z
-          .array(
-            z.object({
-              startDate: isoDate,
-              distance: z.number().describe("Distance in meters"),
-              movingTime: z.number().describe("Moving time in seconds"),
-              averageHeartrate: z.number().nullable().optional(),
-              type: z.string().default("Run").describe("Strava activity type"),
-            })
-          )
-          .min(1),
-      }),
-      execute: async ({ activities }) => {
-        const inputs: ProgressionActivityInput[] = activities.map((a) => ({
-          type: a.type,
-          distance: a.distance,
-          movingTime: a.movingTime,
-          averageHeartrate: a.averageHeartrate ?? null,
-          hrZones: null,
-          startDate: new Date(a.startDate),
-        }));
-        return computeSnapshot(inputs, now);
-      },
+        "Beregn brugerens progressionssnapshot (hasFullWindow, pace efficiency, training load, zone 2-andel, volumen) ud fra brugerens egne synkroniserede aktiviteter.",
+      inputSchema: z.object({}),
+      execute: async () => computeSnapshot(progressionInputs, now),
     }),
 
     getWeekPlan: tool({
@@ -357,9 +343,20 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
-  // Issue #99: look the user's race up once and bind it into all four tools.
-  const racePlan = await getRacePlan(userId);
-  const tools = buildCoachTools(userId, now, racePlan);
+  // Resolve the user's race AND their real synced activities once, and bind
+  // both into the tools. The demo fixtures are the fallback for users with
+  // nothing synced yet (the #84 pattern) — flagged to the model so it never
+  // presents demo numbers as the user's own training.
+  const [racePlan, rows] = await Promise.all([
+    getRacePlan(userId),
+    // Best-effort like the chat history reads: a cache/DB outage degrades the
+    // coach to the demo fixtures, it never breaks the route.
+    getDashboardActivities(userId).catch(() => []),
+  ]);
+  const usingDemoData = rows.length === 0;
+  const activities: CoachChatActivity[] = usingDemoData ? demoActivities : rows;
+  const tools = buildCoachTools(userId, now, racePlan, activities);
+  const systemPrompt = usingDemoData ? COACH_SYSTEM_PROMPT + DEMO_DATA_NOTE : COACH_SYSTEM_PROMPT;
   const incoming = parsed.data.messages;
   const latest = incoming[incoming.length - 1];
 
@@ -389,7 +386,7 @@ export async function POST(req: NextRequest) {
         try {
           const result = streamText({
             model,
-            system: COACH_SYSTEM_PROMPT,
+            system: systemPrompt,
             messages,
             tools,
             stopWhen: stepCountIs(MAX_STEPS),

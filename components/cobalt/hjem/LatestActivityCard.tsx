@@ -77,9 +77,12 @@ export function LatestActivityCard({
         <Metric value={String(latest.spm)} unit="spm" label="Kadence" />
       </div>
 
-      <div className="-mb-1">
-        <PaceCurve samples={latest.paceCurve} started={started} />
-      </div>
+      {/* Live rows carry no per-activity pace stream — no curve to draw then. */}
+      {latest.paceCurve.length >= 2 ? (
+        <div className="-mb-1">
+          <PaceCurve samples={latest.paceCurve} started={started} />
+        </div>
+      ) : null}
     </GlassCard>
   );
 }
