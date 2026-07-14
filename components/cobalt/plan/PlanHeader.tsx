@@ -19,7 +19,8 @@ export function PlanHeader({
   totalWeeks: number;
   weekOfPlan: number;
   daysToRace: number;
-  goalLabel: string;
+  /** Derived goal ("Mål under 1:55"); null falls back to a neutral headline. */
+  goalLabel: string | null;
   started: boolean;
 }) {
   return (
@@ -31,7 +32,7 @@ export function PlanHeader({
         <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
           {totalWeeks} uger.
           <br />
-          {goalLabel.replace(/^Mål/, "Ét mål:")}.
+          {goalLabel ? `${goalLabel.replace(/^Mål/, "Ét mål:")}.` : "Klar til race."}
         </h1>
       </div>
 

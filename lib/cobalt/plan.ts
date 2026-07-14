@@ -149,7 +149,12 @@ export interface PlanView {
   weekOfPlan: number;
   /** Live countdown to race day. */
   daysToRace: number;
-  goalLabel: string;
+  /**
+   * The headline goal ("Mål under 1:55"). Null when there's nothing to derive it
+   * from — no prediction, no lock, and no goal on the home view — and the header
+   * falls back to a neutral headline rather than inventing a target.
+   */
+  goalLabel: string | null;
   /** Header label ("Træningsplan · Silkeborg Halvmarathon"). */
   planTitle: string;
   /** True once the race day is behind `now` — drives the "vælg din næste race" CTA. */

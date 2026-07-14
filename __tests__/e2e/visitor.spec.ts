@@ -6,6 +6,9 @@ import { MOBILE_VIEWPORT, waitForContent } from "./helpers";
 // with no session at all can browse every one of them, hence the empty storage
 // state, which drops the signed-in cookie the other suites rely on. The viewport
 // is phone-sized because the BottomTabBar is `md:hidden`.
+//
+// The front page itself now greets a visitor with the Velkommen landing page;
+// the demo dashboard lives one click behind it on "/?demo=1" (DEMO_HOME_ROUTE).
 test.use({
   storageState: { cookies: [], origins: [] },
   viewport: MOBILE_VIEWPORT,
@@ -18,18 +21,30 @@ test.describe("browsing without a session", () => {
     await expect(page).toHaveURL(/localhost:6969\/$/);
   });
 
-  test("Hjem renders the demo fixtures instead of a login wall", async ({ page }) => {
+  test("the front page is the Velkommen landing, with a way into the demo", async ({ page }) => {
     await page.goto("/");
     await waitForContent(page);
 
-    await expect(page.getByText(/^Uge \d+ · Marathonplan$/)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Al din løbedata");
+    // Two demo CTAs (hero + footer band) — following one lands in the demo dashboard.
+    await page.getByRole("link", { name: "Udforsk demoen" }).first().click();
+    await expect(page).toHaveURL(/\/\?demo=1$/);
+    await waitForContent(page);
+    await expect(page.getByText(/^Uge \d+ · Silkeborg Halvmarathon$/)).toBeVisible();
+  });
+
+  test("Hjem (demo) renders the demo fixtures instead of a login wall", async ({ page }) => {
+    await page.goto("/?demo=1");
+    await waitForContent(page);
+
+    await expect(page.getByText(/^Uge \d+ · Silkeborg Halvmarathon$/)).toBeVisible();
     // The greeting is clock-dependent ("Godmorgen." / "Godaften."), so assert the
     // shape, not the words.
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 
   test("renders every bento card on Hjem", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?demo=1");
     await waitForContent(page);
 
     // Most cards announce themselves with a mono <span> header. Scoping to the
