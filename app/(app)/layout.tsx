@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavBar userName={userName} />
         {children}
       </div>
-      <BottomTabBar />
+      <BottomTabBar signedIn={user !== undefined} />
     </div>
   );
 }

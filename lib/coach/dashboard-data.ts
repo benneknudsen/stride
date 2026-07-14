@@ -33,9 +33,10 @@ const DEMO_SCOPE = "demo";
  */
 export function computeCoachDashboard(
   activities: CoachActivityInput[] = demoActivities,
-  raceDate?: Date
+  raceDate?: Date,
+  userId?: string
 ): CoachDashboardData {
-  return buildCoachDashboard(activities, new Date(), DASHBOARD_WEEKS, raceDate);
+  return buildCoachDashboard(activities, new Date(), DASHBOARD_WEEKS, raceDate, userId);
 }
 
 /**

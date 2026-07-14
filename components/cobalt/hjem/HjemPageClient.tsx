@@ -69,6 +69,7 @@ export function HjemPageClient({
         greeting={greeting}
         note={view.heroNote}
         userName={userName}
+        planName={view.plan.raceName}
         started={started}
       />
 

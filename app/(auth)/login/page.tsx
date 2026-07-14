@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
-import { ROUTES } from "@/lib/routes";
+import { DEMO_HOME_ROUTE } from "@/lib/routes";
 
 type OAuthProvider = "google" | "garmin";
 
@@ -133,7 +133,7 @@ export default function LoginPage() {
         <p className="mt-6 text-center text-[13px] text-ink/60">
           Kigger du bare?{" "}
           <Link
-            href={ROUTES.HOME}
+            href={DEMO_HOME_ROUTE}
             className="cg-interactive font-semibold text-cobalt hover:underline"
           >
             Prøv demoen
