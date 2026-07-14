@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, max } from "drizzle-orm";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { cache } from "react";
 import {
@@ -363,6 +363,28 @@ export function revalidateDashboardActivities(userId: string): void {
  * shape shared by every dashboard component's props.
  */
 export type DashboardActivity = Awaited<ReturnType<typeof getDashboardActivities>>[number];
+
+/**
+ * The highest max heart rate the user has ever recorded (issue #116) — the
+ * ceiling the race predictor measures each effort against, so an easy run can't
+ * pass for a race effort just because it was the hardest one in the window.
+ * Null when the user has no HR data at all; the predictor then falls back to the
+ * hardest *average* HR it can see. Read across the full history, not the
+ * dashboard's 90-day window: a max HR is a property of the athlete, not of a
+ * training block.
+ */
+export const getUserHrMax = cache(async (userId: string): Promise<number | null> => {
+  if (!userId) return null;
+  try {
+    const [row] = await db
+      .select({ hrMax: max(activities.maxHeartrate) })
+      .from(activities)
+      .where(eq(activities.userId, userId));
+    return row?.hrMax ?? null;
+  } catch {
+    return null;
+  }
+});
 
 /** Fetch a single activity, enforcing ownership via userId. */
 export const getActivityById = cache(async (userId: string, activityId: string) => {

@@ -1,7 +1,7 @@
 import { PlanPageClient } from "@/components/cobalt/plan/PlanPageClient";
 import { auth } from "@/lib/auth";
 import { buildPlanView } from "@/lib/cobalt/plan";
-import { getDashboardActivities, getRacePlan } from "@/lib/db/queries";
+import { getDashboardActivities, getRacePlan, getUserHrMax } from "@/lib/db/queries";
 
 // Plan (issue #84) — a Server Component that builds the view-model per
 // request: authenticated users get live data (getDashboardActivities) behind
@@ -21,24 +21,29 @@ export default async function PlanPage() {
   const session = await auth();
   const userId = session?.user?.id;
 
-  const [activities, racePlan] = userId
-    ? await Promise.all([getDashboardActivities(userId), getRacePlan(userId)])
-    : [[], null];
+  const [activities, racePlan, hrMax] = userId
+    ? await Promise.all([getDashboardActivities(userId), getRacePlan(userId), getUserHrMax(userId)])
+    : [[], null, null];
   const raceDate = racePlan?.raceDate ?? undefined;
   const raceName = racePlan?.raceName ?? (raceDate ? "Din race" : undefined);
 
-  // Data-driven (issue #115): a runner with synced runs *and* a race of their own
-  // gets a week derived from their own data — sessions from the phase engine,
-  // volume from their load ratio, pace targets from the race predictor. Everyone
-  // else (visitors, and signed-in users still on the demo plan) gets the template.
-  const live = activities.length > 0 && !!raceDate;
+  // Data-driven (issue #115): a runner with a race of their own gets a week
+  // derived from their own data — sessions from the phase engine, volume from
+  // their load ratio, pace targets from the race predictor (against their own max
+  // HR, issue #116). Visitors and signed-in users still on the demo plan get the
+  // template. A runner with a race but nothing to predict from stays live too, so
+  // the race card can show *why* it has no estimate rather than the demo's
+  // numbers (issue #117) — which is also why their own (possibly empty) rows are
+  // passed rather than the fixtures.
+  const live = !!raceDate;
 
   const view = buildPlanView(
-    activities.length > 0 ? activities : undefined,
+    live || activities.length > 0 ? activities : undefined,
     new Date(),
     raceDate,
     raceName,
-    live
+    live,
+    hrMax
   );
 
   return <PlanPageClient view={view} canEditRace={!!userId} hasOwnRace={!!raceDate} />;

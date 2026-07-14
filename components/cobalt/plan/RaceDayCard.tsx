@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import type { PlanView } from "@/lib/cobalt/plan";
 
@@ -16,6 +17,11 @@ function Stat({ value, label }: { value: string; label: string }) {
 // countdown, and the three target numbers (goal time, race pace, AI estimate).
 // `onEdit` (signed-in users, issue #99) adds the "Skift race" affordance that
 // opens the RaceDateDialog.
+//
+// When the view-model carries a `lock` (issue #117) there is no prediction to
+// show, so the three numbers give way to the lock state: what's missing, and the
+// one run that would unlock it. Showing the demo's 3:45/5:20 here would put a
+// stranger's race time under the runner's own race name.
 export function RaceDayCard({
   race,
   daysToRace,
@@ -53,11 +59,26 @@ export function RaceDayCard({
         {race.dayLabel}
       </div>
 
-      <div className="mt-[18px] flex flex-wrap gap-[26px]">
-        <Stat value={race.goalTime} label="Måltid" />
-        <Stat value={race.racePace} label="Race-pace /km" />
-        <Stat value={race.aiEstimate} label="AI-estimat" />
-      </div>
+      {race.lock ? (
+        <div
+          className="mt-[18px] flex items-start gap-3 rounded-[14px] border border-current/25 bg-current/8 px-3.5 py-3"
+          data-testid="race-estimate-lock"
+        >
+          <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0 opacity-85" />
+          <div>
+            <div className="font-cg-mono text-[9.5px] uppercase tracking-[0.14em] opacity-85">
+              Estimat låst
+            </div>
+            <p className="mt-1.5 max-w-[38ch] text-[13px] leading-[1.45]">{race.lock.message}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-[18px] flex flex-wrap gap-[26px]">
+          <Stat value={race.goalTime} label="Måltid" />
+          <Stat value={race.racePace} label="Race-pace /km" />
+          <Stat value={race.aiEstimate} label="AI-estimat" />
+        </div>
+      )}
     </GlassCard>
   );
 }

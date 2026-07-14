@@ -111,6 +111,7 @@ import {
   getStravaTokens,
   getUserByEmail,
   getUserById,
+  getUserHrMax,
   insertAnalysis,
   insertChatMessage,
   saveGarminTokens,
@@ -177,6 +178,42 @@ describe("getUserById", () => {
   it("returns null when the query throws", async () => {
     mock.setError(DB_ERROR);
     expect(await getUserById("u1")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getUserHrMax (issue #116 — the HR ceiling the race predictor measures against)
+// ---------------------------------------------------------------------------
+
+describe("getUserHrMax", () => {
+  it("returns the aggregated max heart rate across the user's whole history", async () => {
+    mock.setResult([{ hrMax: 192 }]);
+    expect(await getUserHrMax("u1")).toBe(192);
+    expect(mock.db.select).toHaveBeenCalledTimes(1);
+    // One aggregate column, and no date bound — a max HR belongs to the athlete,
+    // not to the dashboard's 90-day window.
+    expect(mock.db.select).toHaveBeenCalledWith({ hrMax: expect.anything() });
+    expect(mock.calls.where).toHaveLength(1);
+  });
+
+  it("returns null when the user has no heart-rate data (max over no rows is null)", async () => {
+    mock.setResult([{ hrMax: null }]);
+    expect(await getUserHrMax("u2")).toBeNull();
+  });
+
+  it("returns null when the aggregate comes back with no row at all", async () => {
+    mock.setResult([]);
+    expect(await getUserHrMax("u3")).toBeNull();
+  });
+
+  it("returns null for an empty user id without touching the database", async () => {
+    expect(await getUserHrMax("")).toBeNull();
+    expect(mock.db.select).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the query throws, so the predictor just falls back", async () => {
+    mock.setError(DB_ERROR);
+    expect(await getUserHrMax("u4")).toBeNull();
   });
 });
 
