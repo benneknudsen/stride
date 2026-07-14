@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { SectionHeading } from "@/components/cobalt/SectionHeading";
+import { CoachTeaser } from "@/components/cobalt/velkommen/CoachTeaser";
 import { PreviewShowcase } from "@/components/cobalt/velkommen/PreviewShowcase";
 import { buildHomeView } from "@/lib/cobalt/hjem";
 import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
@@ -149,6 +150,12 @@ export function VelkommenPage() {
           />
         </div>
       </section>
+
+      {/* ── AI-øjeblik: coachens analyse som typewriter-replay ── */}
+      <Reveal delay={0.05} as="section" ariaLabel="Eksempel på coachens analyse" className="mt-16">
+        <SectionHeading index="04" title="Coachen i aktion" hint="Replay på demoens data" />
+        <CoachTeaser />
+      </Reveal>
 
       {/* ── Afsluttende CTA ── */}
       <section className="mt-16">
