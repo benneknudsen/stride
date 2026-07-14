@@ -222,7 +222,7 @@ describe("buildPlanView — data-driven week (issue #115)", () => {
     liveRun(40, 10, 340, 142),
   ];
 
-  const PREDICTION = predictRace(RUNS, LIVE_NOW);
+  const PREDICTION = predictRace(RUNS, LIVE_NOW).prediction;
   if (!PREDICTION) throw new Error("fixture must support a prediction");
   const PACES = zonePaces(PREDICTION);
   const SESSIONS = getWeekPlan(getCurrentPhase(LIVE_NOW, RACE), undefined, RACE, RACE_NAME);
@@ -301,15 +301,90 @@ describe("buildPlanView — data-driven week (issue #115)", () => {
     expect(view.days[0].name).toBe("Recovery Jog");
     expect(view.weekPlannedKm).toBe(53);
     expect(view.race.aiEstimate).toBe("3:41");
+    // A visitor's demo card is designed, not derived — nothing to unlock.
+    expect(view.race.lock).toBeNull();
   });
 
-  it("falls back to the template rather than inventing paces it can't predict", () => {
-    // Only sub-5 km runs: nothing the predictor will anchor on.
-    const tooShort = [liveRun(2, 3, 360, 140), liveRun(5, 4, 355, 138)];
-    const view = buildPlanView(tooShort, LIVE_NOW, RACE, RACE_NAME, true);
+  it("measures the runner's effort against the max HR it's handed (issue #116)", () => {
+    // The anchor is a 10 km at 168 bpm. Left to itself the predictor takes that
+    // for a max effort (it's the hardest HR it can see); told the runner's real
+    // ceiling is 200, the same run was 84% effort and the estimate turns cautious.
+    const observed = buildPlanView(RUNS, LIVE_NOW, RACE, RACE_NAME, true);
+    const withHrMax = buildPlanView(RUNS, LIVE_NOW, RACE, RACE_NAME, true, 200);
+
+    const seconds = (time: string) => {
+      const [h, m] = time.split(":").map(Number);
+      return h * 3600 + m * 60;
+    };
+    expect(seconds(withHrMax.race.aiEstimate)).toBeGreaterThan(seconds(observed.race.aiEstimate));
+    // Cautious end to end: the pace targets move with the prediction.
+    expect(withHrMax.days[2].meta).not.toBe(observed.days[2].meta);
+  });
+});
+
+describe("buildPlanView — locked race card (issue #117)", () => {
+  // Inside the race's own build, so the phase engine has a week to prescribe.
+  const NOW = midOf("burn");
+
+  function liveRun(daysAgo: number, km: number, paceSecPerKm: number): HomeActivityLike {
+    const startDate = addDays(NOW, -daysAgo);
+    startDate.setHours(7, 30, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysAgo}`,
+      name: `Tur ${daysAgo}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: 140,
+      averageCadence: 88,
+      totalElevationGain: 10,
+    };
+  }
+
+  it("locks the estimate — with the reason — when the runner has no runs at all", () => {
+    const view = buildPlanView([], NOW, RACE, RACE_NAME, true);
     expect(view.dataDriven).toBe(false);
+    expect(view.race.lock?.reason).toBe("no-runs");
+    expect(view.race.lock?.message).toMatch(/Strava|Garmin/);
+  });
+
+  it("locks it when every run is too short to anchor a prediction", () => {
+    const view = buildPlanView(
+      [liveRun(2, 3, 360), liveRun(5, 4, 355)],
+      NOW,
+      RACE,
+      RACE_NAME,
+      true
+    );
+    expect(view.dataDriven).toBe(false);
+    expect(view.race.lock?.reason).toBe("runs-too-short");
+    // The card can name the run that would unlock the estimate — a quarter of the
+    // half marathon it's counting down to, not a bare 5 km.
+    expect(view.race.lock?.requiredKm).toBe(5.5);
+    expect(view.race.lock?.message).toContain("5,5 km");
+    // The template's sessions still stand in — only the race numbers are withheld.
     expect(view.days[0].name).toBe("Recovery Jog");
-    expect(view.race.aiEstimate).toBe("3:41");
+  });
+
+  it("locks it when the runs are all older than the lookback window", () => {
+    const view = buildPlanView([liveRun(200, 12, 320)], NOW, RACE, RACE_NAME, true);
+    expect(view.race.lock?.reason).toBe("stale-runs");
+  });
+
+  it("never headlines a locked plan with the demo's goal time", () => {
+    const view = buildPlanView([], NOW, RACE, RACE_NAME, true);
+    expect(view.goalLabel).not.toContain("3:45");
+  });
+
+  it("unlocks the card the moment there's something to predict from", () => {
+    const view = buildPlanView([liveRun(3, 10, 270)], NOW, RACE, RACE_NAME, true);
+    expect(view.dataDriven).toBe(true);
+    expect(view.race.lock).toBeNull();
+    expect(view.race.aiEstimate).not.toBe("3:41");
   });
 });
 

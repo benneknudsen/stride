@@ -41,6 +41,7 @@ import {
   formatRaceTime,
   goalTimeFor,
   type PaceZone,
+  type PredictionLockReason,
   predictRace,
   type RacePrediction,
   zonePaces,
@@ -124,6 +125,23 @@ export interface UpcomingWeek {
   muted: boolean;
 }
 
+/**
+ * Why the race card has no numbers to show (issue #117). Present only for a live
+ * runner we couldn't predict a race for — a visitor on the demo plan sees the
+ * designed numbers, not a lock they can't do anything about.
+ */
+export interface RaceLock {
+  reason: PredictionLockReason;
+  /** Danish, action-directing: what the runner can do to unlock the estimate. */
+  message: string;
+  /**
+   * The run that would unlock the estimate, in km — a quarter of the race
+   * distance, so the bar scales with what the runner is training for. Absent only
+   * if the predictor ever locks without naming one.
+   */
+  requiredKm?: number;
+}
+
 export interface PlanView {
   /** Total plan length (the serif hero: "13 uger."). */
   totalWeeks: number;
@@ -158,6 +176,13 @@ export interface PlanView {
     goalTime: string;
     racePace: string;
     aiEstimate: string;
+    /**
+     * Set when the estimate is locked (issue #117): the goal/pace/estimate above
+     * are placeholders the card must not show, and this says what would unlock
+     * them instead. Null whenever there's a real prediction — or a demo plan,
+     * whose numbers are designed rather than derived.
+     */
+    lock: RaceLock | null;
   };
 }
 
@@ -535,20 +560,45 @@ interface DerivedWeek {
 }
 
 /**
- * This week from the runner's own data, or null when we can't predict a race
+ * A derived week, or the lock that explains why there isn't one — exactly one of
+ * the two, so the caller can't render a locked card and a derived week at once.
+ */
+type DerivedWeekResult = { week: DerivedWeek; lock: null } | { week: null; lock: RaceLock };
+
+/**
+ * This week from the runner's own data, or a lock when we can't predict a race
  * for them — in which case the caller keeps the demo template rather than
- * prescribing paces we'd have had to invent.
+ * prescribing paces we'd have had to invent, and the race card says what the
+ * runner can do about it (issue #117).
+ *
+ * `hrMaxOverride` is the runner's true max heart rate (issue #116) — see
+ * `getUserHrMax`. Passed straight to the predictor, which measures every
+ * effort's heart rate against it.
  */
 function buildDerivedWeek(
   activities: HomeActivityLike[],
   now: Date,
   raceDate: Date,
   raceName: string,
-  weekOfPlan: number
-): DerivedWeek | null {
+  weekOfPlan: number,
+  hrMaxOverride?: number | null
+): DerivedWeekResult {
   const runs = activities.filter((activity) => /run/i.test(activity.type));
-  const prediction = predictRace(runs, now);
-  if (!prediction) return null;
+  const result = predictRace(runs, now, undefined, hrMaxOverride);
+  const prediction = result.prediction;
+  if (!prediction) {
+    // All three are non-null whenever `prediction` is null — the predictor's contract.
+    const reason = result.reason ?? "no-runs";
+    const message = result.message ?? "";
+    return {
+      week: null,
+      lock: {
+        reason,
+        message,
+        ...(result.requiredKm !== null ? { requiredKm: result.requiredKm } : {}),
+      },
+    };
+  }
 
   const paces = zonePaces(prediction);
   const weekStart = startOfTrainingWeek(now);
@@ -575,12 +625,15 @@ function buildDerivedWeek(
   );
 
   return {
-    days,
-    // What the plan asks of the week, against what the runner has actually run.
-    weekPlannedKm: Math.round(prescribedWeekKm(sessions) * scale),
-    weekDoneKm: getWeeklyVolume(runs, 0, now) / 1000,
-    upcomingWeeks: derivedUpcomingWeeks(weekStart, weekOfPlan, raceDate, raceName, paces, scale),
-    prediction,
+    week: {
+      days,
+      // What the plan asks of the week, against what the runner has actually run.
+      weekPlannedKm: Math.round(prescribedWeekKm(sessions) * scale),
+      weekDoneKm: getWeeklyVolume(runs, 0, now) / 1000,
+      upcomingWeeks: derivedUpcomingWeeks(weekStart, weekOfPlan, raceDate, raceName, paces, scale),
+      prediction,
+    },
+    lock: null,
   };
 }
 
@@ -607,10 +660,16 @@ export function buildPlanView(
   raceName: string = DEFAULT_RACE_NAME,
   /**
    * Derive the week from `activities` instead of the demo template (issue #115).
-   * The page sets this for a signed-in runner who has synced runs *and* chosen
-   * their own race; demo and visitor traffic leaves it false.
+   * The page sets this for a signed-in runner who has chosen their own race;
+   * demo and visitor traffic leaves it false.
    */
-  live = false
+  live = false,
+  /**
+   * The runner's true max heart rate (issue #116), from `getUserHrMax`. The
+   * predictor measures each effort's HR against it; without it, it falls back to
+   * the hardest average HR among the runs.
+   */
+  hrMax?: number | null
 ): PlanView {
   const home = buildHomeView(activities, now, raceDate, raceName);
   const weekOfPlan = home.plan.weekOfPlan;
@@ -661,10 +720,17 @@ export function buildPlanView(
   }));
 
   // The data-driven week (issue #115) — sessions from the phase engine, volume
-  // from the load ratio, paces from the race predictor. Null when the runner
-  // has no race of their own, no synced runs, or nothing recent enough to
-  // predict from; the demo template below is the fallback in all three cases.
-  const derived = live ? buildDerivedWeek(activities, now, raceDate, raceName, weekOfPlan) : null;
+  // from the load ratio, paces from the race predictor. Null when the runner has
+  // no race of their own, no synced runs, or nothing recent enough to predict
+  // from; the demo template below is the fallback in all three cases. For a live
+  // runner the last two also produce a lock (issue #117): the demo template's
+  // *sessions* are a reasonable stand-in, but its race numbers are not the
+  // runner's, so the card shows what would unlock theirs instead.
+  const derivedResult = live
+    ? buildDerivedWeek(activities, now, raceDate, raceName, weekOfPlan, hrMax)
+    : null;
+  const derived = derivedResult?.week ?? null;
+  const lock = derivedResult?.lock ?? null;
 
   // The template week's sessions are fixed plan content, but *which* day is
   // today is not (issue #96): a template day resolves to done/today/planned by
@@ -745,7 +811,13 @@ export function buildPlanView(
     totalWeeks,
     weekOfPlan,
     daysToRace,
-    goalLabel: prediction ? `Mål under ${race.goalTime}` : home.plan.goalLabel,
+    // A locked card can't be headlined by the demo's goal — the runner would
+    // read someone else's target as their own.
+    goalLabel: prediction
+      ? `Mål under ${race.goalTime}`
+      : lock
+        ? "Mål på vej"
+        : home.plan.goalLabel,
     planTitle: home.plan.planTitle,
     racePassed: home.plan.racePassed,
     dataDriven: derived !== null,
@@ -761,6 +833,7 @@ export function buildPlanView(
       dayLabel: raceDayLabel,
       dateValue: dateInputValue(raceDate),
       ...race,
+      lock,
     },
   };
 }
