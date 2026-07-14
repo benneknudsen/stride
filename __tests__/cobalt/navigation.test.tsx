@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
 import { NavBar } from "@/components/cobalt/NavBar";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
-import { activityRoute, ROUTES } from "@/lib/routes";
+import { activityRoute, DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 
 // Issue #86 consolidated the two coach routes into ROUTES.COACH. Both navs link
 // there, so the tab marker has to light up on that exact path — and only there.
@@ -76,6 +76,46 @@ describe("active tab across all four routes (#100)", () => {
 
     expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
     expect(activeLabel()).toContain(label);
+  });
+});
+
+// The Velkommen landing page took over "/" for visitors, so a visitor's Hjem tab
+// carries ?demo=1 — tabbing "home" mid-demo must stay in the demo, not bounce the
+// visitor back onto the pitch. Signed-in navs keep the bare route, and the tab
+// marker has to survive the query (usePathname never carries one).
+describe("visitor Hjem points at the demo, not the landing page", () => {
+  function hjemHref(): string | null {
+    return screen.getByRole("link", { name: "Hjem" }).getAttribute("href");
+  }
+
+  test("NavBar: visitor gets ?demo=1 and still lights up on /", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    render(<NavBar />);
+
+    expect(hjemHref()).toBe(DEMO_HOME_ROUTE);
+    expect(activeLabel()).toContain("Hjem");
+  });
+
+  test("NavBar: signed-in keeps the bare front page", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    render(<NavBar userName="Benne" />);
+
+    expect(hjemHref()).toBe(ROUTES.HOME);
+  });
+
+  test("BottomTabBar: visitor gets ?demo=1 and still lights up on /", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    render(<BottomTabBar />);
+
+    expect(hjemHref()).toBe(DEMO_HOME_ROUTE);
+    expect(activeLabel()).toContain("Hjem");
+  });
+
+  test("BottomTabBar: signed-in keeps the bare front page", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    render(<BottomTabBar signedIn />);
+
+    expect(hjemHref()).toBe(ROUTES.HOME);
   });
 });
 
