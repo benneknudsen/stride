@@ -51,7 +51,11 @@ export function PreviewShowcase({
           decimals={1}
           label="km · denne uge"
           run={started}
-          className="items-end text-right text-[44px] text-cobalt"
+          // Right-aligned only while it actually sits at the row's right edge
+          // (sm+). Below that the row wraps and the block stands alone at the
+          // left margin — right-aligning the number against its wider label
+          // there left "23,2" floating indented off the page's left edge.
+          className="items-start text-left text-[44px] text-cobalt sm:items-end sm:text-right"
         />
       </div>
 
