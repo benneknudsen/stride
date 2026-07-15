@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { GlassCard } from "@/components/cobalt/GlassCard";
 import { AiCoachCard } from "@/components/cobalt/hjem/AiCoachCard";
 import { AvgPaceRing } from "@/components/cobalt/hjem/AvgPaceRing";
 import { DataSourcesCard } from "@/components/cobalt/hjem/DataSourcesCard";
@@ -14,6 +16,7 @@ import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
 import { greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
+import { ROUTES } from "@/lib/routes";
 
 // Widget wrapper applying the staggered fadeUp entrance. `span` is the 12-col
 // grid span; `delay` staggers each widget's reveal. The wrapper stretches to its
@@ -44,12 +47,15 @@ export function HjemPageClient({
   stravaConnected,
   garminConnected,
   signedIn,
+  isDemo = false,
 }: {
   view: HomeView;
   userName?: string;
   stravaConnected: boolean;
   garminConnected: boolean;
   signedIn: boolean;
+  /** True only for a visitor on `?demo=1` (#124) — never for a signed-in user. */
+  isDemo?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
   const [greeting] = useState(() => greetingForHour(new Date().getHours()));
@@ -63,6 +69,32 @@ export function HjemPageClient({
 
   return (
     <main>
+      {/* Demo-markering (#124): a sticky glass bar so a visitor browsing the
+          demo dashboard always knows the numbers are fixtures — with the way
+          into the real thing one click away. Sticky (not fixed) so it scrolls
+          inside the page flow and can't detach on iOS like a fixed bar with
+          backdrop-filter would; z-40 keeps it under the BottomTabBar (z-50). */}
+      {isDemo ? (
+        <div className="sticky top-2 z-40 [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
+          <GlassCard className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-widget px-4 py-2.5 sm:px-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="rounded-pill bg-red px-2.5 py-1 font-cg-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+                Demo
+              </span>
+              <p className="m-0 text-[13px] leading-snug text-ink">
+                Dette er en demo med eksempeldata
+              </p>
+            </div>
+            <Link
+              href={ROUTES.LOGIN}
+              className="cg-interactive rounded-pill bg-cobalt px-5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              Log ind
+            </Link>
+          </GlassCard>
+        </div>
+      ) : null}
+
       <Hero
         weekNumber={view.weekNumber}
         weeklyKm={view.weeklyKm}
