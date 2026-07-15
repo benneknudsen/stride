@@ -94,7 +94,7 @@ export function VelkommenPage() {
           routeElevation={view.routeElevation}
           routeName={view.latest.name}
           avgPaceLabel={view.avgPaceLabel}
-          avgPaceFraction={view.avgPaceFraction}
+          paceTrend={view.paceTrend}
           avgPaceDeltaLabel={view.avgPaceDeltaLabel}
           volumeBars={view.volumeBars}
         />

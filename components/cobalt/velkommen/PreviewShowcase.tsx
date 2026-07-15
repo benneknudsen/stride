@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { CountUpNumber } from "@/components/cobalt/CountUpNumber";
-import { AvgPaceRing } from "@/components/cobalt/hjem/AvgPaceRing";
+import { PaceTrendCard } from "@/components/cobalt/hjem/PaceTrendCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
+import type { PaceTrendPoint } from "@/lib/cobalt/hjem";
 
 // The landing page's "live forsmag": three of the real dashboard widgets fed by
 // the real demo view-model — not screenshots, the actual components. The only
@@ -18,7 +19,7 @@ export function PreviewShowcase({
   routeElevation,
   routeName,
   avgPaceLabel,
-  avgPaceFraction,
+  paceTrend,
   avgPaceDeltaLabel,
   volumeBars,
 }: {
@@ -28,7 +29,7 @@ export function PreviewShowcase({
   routeElevation: number;
   routeName: string;
   avgPaceLabel: string;
-  avgPaceFraction: number;
+  paceTrend: PaceTrendPoint[];
   avgPaceDeltaLabel: string | null;
   volumeBars: { id: string; km: number }[];
 }) {
@@ -69,9 +70,9 @@ export function PreviewShowcase({
           />
         </div>
         <div className="col-span-12 h-full sm:col-span-6 md:col-span-3 [&>*]:h-full">
-          <AvgPaceRing
+          <PaceTrendCard
             paceLabel={avgPaceLabel}
-            fraction={avgPaceFraction}
+            points={paceTrend}
             deltaLabel={avgPaceDeltaLabel}
             started={started}
           />

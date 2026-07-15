@@ -206,6 +206,18 @@ export interface RecentRunView {
   paceLabel: string;
 }
 
+/** One run on the Snit-pace card's trend line. */
+export interface PaceTrendPoint {
+  id: string;
+  /** The run's average pace in seconds per km. */
+  paceSeconds: number;
+  /** Same pace as m:ss ("5:12") — the tooltip and extreme labels. */
+  paceLabel: string;
+  /** "3. jul" — the tooltip's date. */
+  dateLabel: string;
+  km: number;
+}
+
 export interface HomeView {
   weekNumber: number;
   weeklyKm: number;
@@ -219,7 +231,14 @@ export interface HomeView {
   routeKm: number;
   routeElevation: number;
   avgPaceLabel: string;
-  avgPaceFraction: number;
+  /**
+   * Per-run pace over the same ten-run window as `volumeBars`, oldest→newest —
+   * the Snit-pace card's trend line. The old ring mapped the average onto an
+   * arbitrary fixed 4:00–6:30 band (full or empty for most runners, and a ring
+   * implies a fraction pace doesn't have); the trend shows what pace actually
+   * did. Runs without distance/time carry no pace and are skipped.
+   */
+  paceTrend: PaceTrendPoint[];
   /** Signed pace delta vs. the previous week, or null without a week to compare. */
   avgPaceDeltaLabel: string | null;
   volumeBars: { id: string; km: number }[];
@@ -343,13 +362,27 @@ export function buildHomeView(
   // No previous week to compare against → no delta. The card hides the chip
   // rather than invent an improvement.
   const deltaSeconds = last7 !== null && prev7 !== null ? last7 - prev7 : null;
-  // Ring fill: map pace 4:00–6:30 /km onto 0–1 (faster = fuller).
-  const avgPaceFraction = Math.min(1, Math.max(0, (390 - avgPaceSeconds) / (390 - 240)));
 
   // Last 10 activities, oldest→newest, as volume bars (final bar = most recent).
   const volumeBars = runs
     .slice(0, 10)
     .map((a) => ({ id: a.id, km: a.distance / 1000 }))
+    .reverse();
+
+  // The same ten runs as pace points (see HomeView.paceTrend).
+  const paceTrend: PaceTrendPoint[] = runs
+    .slice(0, 10)
+    .filter((a) => a.distance > 0 && a.movingTime > 0)
+    .map((a) => {
+      const paceSeconds = a.movingTime / (a.distance / 1000);
+      return {
+        id: a.id,
+        paceSeconds,
+        paceLabel: paceSecondsToClock(paceSeconds),
+        dateLabel: danishDate(a.startDate),
+        km: a.distance / 1000,
+      };
+    })
     .reverse();
 
   // Readiness (issues #126/#127): the acute:chronic load ratio from the shared
@@ -432,7 +465,7 @@ export function buildHomeView(
     routeKm: latest.distance / 1000,
     routeElevation: latest.totalElevationGain,
     avgPaceLabel: paceSecondsToClock(avgPaceSeconds),
-    avgPaceFraction,
+    paceTrend,
     avgPaceDeltaLabel: deltaSeconds !== null ? paceDelta(deltaSeconds) : null,
     volumeBars,
     readinessPct: readiness.pct,
