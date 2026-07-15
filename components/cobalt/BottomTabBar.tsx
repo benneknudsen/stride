@@ -83,13 +83,25 @@ export function BottomTabBar({
       aria-label="Primær navigation"
       className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)_+_12px)] z-50 flex items-center justify-around rounded-widget px-2 py-2.5 md:hidden"
       style={{
-        background: "rgba(255,255,255,0.55)",
-        border: "1px solid rgba(255,255,255,0.85)",
-        backdropFilter: "blur(28px)",
-        WebkitBackdropFilter: "blur(28px)",
-        boxShadow: "0 12px 36px rgba(27,41,192,0.18), inset 0 1px 0 rgba(255,255,255,0.9)",
+        // iOS Safari detaches a fixed element that carries backdrop-filter
+        // itself: while the page scrolls, the bar drifts up mid-screen with the
+        // content. translateZ(0) pins the nav on its own compositing layer, and
+        // the glass surface (incl. the blur) lives on the child span below.
+        transform: "translateZ(0)",
+        WebkitTransform: "translateZ(0)",
       }}
     >
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 -z-10 rounded-widget"
+        style={{
+          background: "rgba(255,255,255,0.55)",
+          border: "1px solid rgba(255,255,255,0.85)",
+          backdropFilter: "blur(28px)",
+          WebkitBackdropFilter: "blur(28px)",
+          boxShadow: "0 12px 36px rgba(27,41,192,0.18), inset 0 1px 0 rgba(255,255,255,0.9)",
+        }}
+      />
       {tabs.map((tab) => {
         // `${"/"}/` is "//", which no pathname starts with — so the Hjem tab
         // matches "/" exactly and doesn't light up on every other page. The
