@@ -14,6 +14,10 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 const db = drizzle(pool);
 
+// pgvector extension skal eksistere før første migration (bruger vector(1536) type)
+console.log("Ensuring pgvector extension...");
+await pool.query(`CREATE EXTENSION IF NOT EXISTS vector;`);
+
 console.log("Running database migrations...");
 await migrate(db, { migrationsFolder: "./drizzle/migrations" });
 console.log("Migrations complete!");
