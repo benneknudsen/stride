@@ -130,9 +130,12 @@ export default function LoginPage() {
           onClick={() => handleOAuth("garmin")}
           className="cg-interactive mt-3 flex w-full items-center justify-center gap-2 rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.03] disabled:opacity-50"
         >
-          {oauthLoading === "garmin" && <Loader2 size={16} className="animate-spin" />}
-          Fortsæt med
-          <GarminWordmark />
+          {oauthLoading === "garmin" ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <GarminIcon />
+          )}
+          Fortsæt med Garmin
         </button>
 
         <p className="mt-6 text-center text-[13px] text-ink/60">
@@ -149,15 +152,11 @@ export default function LoginPage() {
   );
 }
 
-// Text-based Garmin word-mark — we can't ship Garmin's trademarked logo file.
-function GarminWordmark() {
+// Garmin's triangle brand mark in Garmin blue (public/garmin-icon.svg).
+function GarminIcon() {
   return (
-    <span
-      className="text-[16px] font-bold leading-none tracking-tight"
-      style={{ color: "var(--color-garmin)" }}
-    >
-      Garmin
-    </span>
+    // biome-ignore lint/performance/noImgElement: static 16px SVG asset — next/image adds nothing here
+    <img src="/garmin-icon.svg" width={16} height={16} alt="" aria-hidden="true" />
   );
 }
 
