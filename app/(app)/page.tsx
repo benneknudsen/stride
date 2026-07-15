@@ -63,6 +63,7 @@ export default async function HjemPage({
       stravaConnected={stravaTokens !== null}
       garminConnected={garminTokens !== null}
       signedIn={userId !== undefined}
+      isDemo={userId === undefined && demo !== undefined}
     />
   );
 }
