@@ -5,7 +5,7 @@
 - Tailwind CSS + shadcn/ui (new-york style, zinc base)
 - Vercel AI SDK (`streamText`/`streamObject`, OpenRouter provider routing in `lib/ai/provider.ts`)
 - Drizzle ORM + Neon Postgres (`@neondatabase/serverless`, pooled WebSocket driver)
-- NextAuth.js v5 (database sessions — email magic link + Google; dev Credentials login in development)
+- NextAuth.js v5 (JWT session strategy with per-login `sid` rotation for session-fixation mitigation — email magic link + Google; dev Credentials login in development)
 - Recharts 3.x
 - Vercel deployment
 
