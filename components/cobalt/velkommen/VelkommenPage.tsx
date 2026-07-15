@@ -1,10 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { GlassCard } from "@/components/cobalt/GlassCard";
+import { Logo } from "@/components/cobalt/Logo";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { SectionHeading } from "@/components/cobalt/SectionHeading";
 import { CoachTeaser } from "@/components/cobalt/velkommen/CoachTeaser";
 import { PreviewShowcase } from "@/components/cobalt/velkommen/PreviewShowcase";
+import { Wordmark } from "@/components/cobalt/Wordmark";
 import { buildHomeView } from "@/lib/cobalt/hjem";
 import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -23,6 +25,22 @@ export function VelkommenPage() {
 
   return (
     <main className="pb-8">
+      {/* ── Landing header — the app chrome (NavBar/BottomTabBar) is gated off
+             on this page (LandingChromeGate), so the landing brings its own
+             minimal top bar: brand on the left, login on the right. ── */}
+      <header className="mt-[18px] flex items-center justify-between">
+        <span className="flex items-center gap-3">
+          <Logo />
+          <Wordmark />
+        </span>
+        <Link
+          href={ROUTES.LOGIN}
+          className="cg-interactive cg-glass rounded-pill px-5 py-2 text-[13px] font-semibold text-cobalt transition-colors hover:text-red"
+        >
+          Log ind
+        </Link>
+      </header>
+
       {/* ── Hero ── */}
       <section className="px-3 pt-14 pb-12 text-center md:pt-20 md:pb-16">
         <Reveal delay={0}>
