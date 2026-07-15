@@ -5,10 +5,10 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { AiCoachCard } from "@/components/cobalt/hjem/AiCoachCard";
-import { AvgPaceRing } from "@/components/cobalt/hjem/AvgPaceRing";
 import { DataSourcesCard } from "@/components/cobalt/hjem/DataSourcesCard";
 import { Hero } from "@/components/cobalt/hjem/Hero";
 import { LatestActivityCard } from "@/components/cobalt/hjem/LatestActivityCard";
+import { PaceTrendCard } from "@/components/cobalt/hjem/PaceTrendCard";
 import { PlanStrip } from "@/components/cobalt/hjem/PlanStrip";
 import { RecentRunsCard } from "@/components/cobalt/hjem/RecentRunsCard";
 import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
@@ -124,9 +124,9 @@ export function HjemPageClient({
             />
           </Bento>
           <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.24}>
-            <AvgPaceRing
+            <PaceTrendCard
               paceLabel={view.avgPaceLabel}
-              fraction={view.avgPaceFraction}
+              points={view.paceTrend}
               deltaLabel={view.avgPaceDeltaLabel}
               started={started}
             />
