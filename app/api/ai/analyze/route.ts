@@ -71,6 +71,16 @@ const RATE_LIMIT_MAX = 15;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
+ * Per-IP guard on the heuristic path. The heuristic reduces up to 500
+ * client-supplied activities *before* auth, so on the keyless demo deploy it is
+ * an unauthenticated compute sink. This caps how often one IP can trigger that
+ * work: 30 requests per 60 seconds — generous for a real visitor, cheap to
+ * abuse-proof. The live-AI path keeps its own (stricter) per-user limit below.
+ */
+const HEURISTIC_RATE_LIMIT_MAX = 30;
+const HEURISTIC_RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
  * Per-candidate stream timeout (issue #71 E3). If a model accepts the request
  * but then stalls without streaming, this aborts it so the router falls through
  * to the next candidate (or the heuristic floor) instead of burning the whole
@@ -135,8 +145,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // No provider → deterministic, data-grounded analysis for the demo.
+  // No provider → deterministic, data-grounded analysis for the demo. Guard it
+  // with a light per-IP rate limit first: this path runs before auth on up to
+  // 500 client-supplied activities, so it is a cheap compute-DoS surface on the
+  // keyless demo deploy without one.
   if (!isAIConfigured()) {
+    const ip = clientIp(req);
+    const limit = await rateLimit(`ai-heuristic:${ip}`, {
+      max: HEURISTIC_RATE_LIMIT_MAX,
+      windowMs: HEURISTIC_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!limit.allowed) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
+      return Response.json(
+        { error: "rate_limited" },
+        { status: 429, headers: { "retry-after": String(retryAfterSeconds) } }
+      );
+    }
     return ndjsonResponse(heuristicBlocks(input));
   }
 
@@ -229,6 +254,21 @@ export async function POST(req: NextRequest) {
   });
 
   return new Response(stream, { headers: NDJSON_HEADERS });
+}
+
+/**
+ * Best-effort client IP for the pre-auth rate-limit key. Prefers the first hop
+ * of `x-forwarded-for` (the real client on Vercel's proxy), falling back to
+ * `x-real-ip` and finally a shared bucket so a missing header still rate-limits
+ * rather than opening the path up.
+ */
+function clientIp(req: NextRequest): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 /** Resolve the signed-in user id, or null (demo / unauthenticated). */

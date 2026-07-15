@@ -12,6 +12,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   // getDb() returns the real Drizzle instance. The exported `db` is a lazy
   // Proxy, which breaks the adapter's `instanceof` dialect detection.
+  // Session strategy is JWT (see auth.config.ts), so the adapter never reads or
+  // writes `sessionsTable` — it stays wired here only so switching back to
+  // database sessions is a one-line config change. `accountsTable` and
+  // `verificationTokensTable` are still used (OAuth linking + magic-link tokens).
   adapter: DrizzleAdapter(getDb(), {
     usersTable: users,
     accountsTable: accounts,
