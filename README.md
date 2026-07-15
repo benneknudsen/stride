@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/stride-icon.svg" alt="Stride" width="96" height="84" />
+  <img src="public/app-icon.svg" alt="Stride" width="96" height="96" />
 </p>
 
 <h1 align="center">Stride</h1>
@@ -31,9 +31,9 @@ It's designed to replace a manual running-coach workflow with an intelligent, da
 | Database | Drizzle ORM + Neon (Vercel Postgres) |
 | Auth | NextAuth.js v5 |
 | Charts | Recharts |
-| Testing | Vitest (255 tests) |
+| Testing | Vitest (845 tests) |
 | CI/CD | Vercel (automatic deploys) |
-| LLM Agents | Hermes + Claude Code (Opus, high effort) |
+| LLM Agents | Hermes (Orchestrator) + Claude Code (Opus, Fable) |
 
 ## Architecture
 
@@ -58,12 +58,18 @@ Instead of streaming text, the AI endpoint (`app/api/ai/analyze`) streams typed 
 - **AES-256-GCM encrypted tokens** — Per-row IVs for Strava OAuth tokens
 - **Heuristic fallback** — AI analysis works without API key for demo/portfolio
 
+### Landing & Brand
+
+- **Velkommen landing page** ([#119](../../issues/119)) — public visitors get a branded landing page with live preview widgets; the demo dashboard lives at `/?demo=1`
+- **AI coach teaser** ([#121](../../issues/121)) — coach analysis rendered as a typewriter loop on the landing page
+- **Open Graph social card** ([#120](../../issues/120)) — `app/opengraph-image.tsx` with Bricolage wordmark + serif-italic tagline
+- **Cobalt Glass design system** — light "silver paper" theme with liquid-glass surfaces: `components/cobalt/` (UI) + `lib/cobalt/` (view-models), tokens in `app/globals.css`
+
 ### AI-First Workflow
 
 ```
-Hermes                 →  Plans, verifies, manages issues
-Claude Code (Opus)     →  Implements features via GitHub Issues
-Sub-agents (parallel)  →  Code review, security audit, test verification
+Hermes (Orchestrator)     →  Planlægger, verificerer, håndterer issues
+Claude Code (Opus/Fable)  →  Implementerer features via GitHub Issues
 ```
 
 ## Getting Started
@@ -81,6 +87,8 @@ Required env vars: `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY` (see `.env.ex
 
 ## Project Status
 
+**✅ Live på Vercel → [stride-ochre-five.vercel.app](https://stride-ochre-five.vercel.app)**
+
 ### ✅ Phase 1 — Complete
 
 - [x] Architecture + project scaffold
@@ -93,15 +101,15 @@ Required env vars: `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY` (see `.env.ex
 - [x] AI analysis with generative UI (streamObject + 4 typed tools)
 - [x] Training plan dashboard (committed plan, latest run, last 5, next run)
 - [x] Deploy to Vercel + Neon Postgres
-- [x] 255 unit tests
+- [x] 845 tests
 
-### 🏗️ Phase 2 — Coach Intelligence
+### ✅ Phase 2 — Coach Intelligence — Complete
 
-- [ ] [#30 Progression metrics engine](../../issues/30) — pace/HR trends, training load
-- [ ] [#31 Coach rule engine](../../issues/31) — 155 bpm, 48h buffer, phases
-- [ ] [#32 Workout recommender](../../issues/32) — next workout engine
-- [ ] [#33 Coach insight cards](../../issues/33) — AI-generated coaching messages
-- [ ] [#34 Coach dashboard](../../issues/34) — unified coaching view
+- [x] [#30 Progression metrics engine](../../issues/30) — pace/HR trends, training load
+- [x] [#31 Coach rule engine](../../issues/31) — 155 bpm, 48h buffer, phases
+- [x] [#32 Workout recommender](../../issues/32) — next workout engine
+- [x] [#33 Coach insight cards](../../issues/33) — AI-generated coaching messages
+- [x] [#34 Coach dashboard](../../issues/34) — unified coaching view
 
 ## Author
 
