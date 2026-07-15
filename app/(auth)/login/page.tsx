@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { DEMO_HOME_ROUTE } from "@/lib/routes";
 
 type OAuthProvider = "google" | "garmin";
@@ -50,6 +51,13 @@ export default function LoginPage() {
     <div className="w-full max-w-[360px]">
       {/* Cobalt Glass card */}
       <div className="rounded-card border border-cobalt/10 bg-white/60 p-8 shadow-glass backdrop-blur-xl">
+        <RunnerGlyph
+          size={40}
+          stroke="var(--color-cobalt)"
+          head="var(--color-red)"
+          title="Stride"
+          className="mx-auto mb-5"
+        />
         <h1 className="mb-1 font-cg-sans text-[22px] font-bold leading-tight tracking-tight text-cobalt">
           Log ind
         </h1>
@@ -122,12 +130,9 @@ export default function LoginPage() {
           onClick={() => handleOAuth("garmin")}
           className="cg-interactive mt-3 flex w-full items-center justify-center gap-2 rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.03] disabled:opacity-50"
         >
-          {oauthLoading === "garmin" ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <GarminIcon />
-          )}
-          Fortsæt med Garmin
+          {oauthLoading === "garmin" && <Loader2 size={16} className="animate-spin" />}
+          Fortsæt med
+          <GarminWordmark />
         </button>
 
         <p className="mt-6 text-center text-[13px] text-ink/60">
@@ -144,16 +149,15 @@ export default function LoginPage() {
   );
 }
 
-function GarminIcon() {
+// Text-based Garmin word-mark — we can't ship Garmin's trademarked logo file.
+function GarminWordmark() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-      <title>Garmin</title>
-      <path
-        fill="var(--color-garmin)"
-        d="M12 1.7 22.3 12 12 22.3 1.7 12 12 1.7Zm0 3.2L4.9 12l7.1 7.1 7.1-7.1L12 4.9Z"
-      />
-      <circle cx="12" cy="12" r="2.6" fill="var(--color-garmin)" />
-    </svg>
+    <span
+      className="text-[16px] font-bold leading-none tracking-tight"
+      style={{ color: "var(--color-garmin)" }}
+    >
+      Garmin
+    </span>
   );
 }
 
