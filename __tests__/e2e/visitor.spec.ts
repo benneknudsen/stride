@@ -26,11 +26,17 @@ test.describe("browsing without a session", () => {
     await waitForContent(page);
 
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Al din løbedata");
+    // A landing page, not the app: no NavBar/BottomTabBar (LandingChromeGate) —
+    // the landing brings its own header with a login link instead.
+    await expect(page.getByRole("navigation", { name: "Primær navigation" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Log ind" }).first()).toBeVisible();
     // Two demo CTAs (hero + footer band) — following one lands in the demo dashboard.
     await page.getByRole("link", { name: "Udforsk demoen" }).first().click();
     await expect(page).toHaveURL(/\/\?demo=1$/);
     await waitForContent(page);
     await expect(page.getByText(/^Uge \d+ · Silkeborg Halvmarathon$/)).toBeVisible();
+    // …where the chrome is back, so the visitor can browse the demo (#100).
+    await expect(page.getByRole("navigation", { name: "Primær navigation" })).toBeVisible();
   });
 
   test("Hjem (demo) renders the demo fixtures instead of a login wall", async ({ page }) => {

@@ -57,3 +57,34 @@ describe("buildHomeView route (issue #114)", () => {
     expect(view.routeCoords).not.toEqual(decodePolyline(POLYLINE));
   });
 });
+
+// The Snit-pace card's trend line — per-run pace over the same ten-run window
+// as the volume bars, oldest first, so the two cards tell one story.
+describe("buildHomeView paceTrend", () => {
+  /** Twelve runs, newest first (buildHomeView's input order), pace rising 5:00, 5:01, … */
+  const runs = Array.from({ length: 12 }, (_, i) =>
+    run({
+      id: `r${i}`,
+      startDate: new Date(2026, 6, 13 - i, 18),
+      distance: 10_000,
+      movingTime: 3_000 + i * 10,
+    })
+  );
+
+  it("plots the last ten runs oldest→newest with per-run pace", () => {
+    const view = buildHomeView(runs);
+
+    expect(view.paceTrend).toHaveLength(10);
+    // Oldest of the window (r9) first, newest (r0) last — matching volumeBars.
+    expect(view.paceTrend.map((p) => p.id)).toEqual(view.volumeBars.map((b) => b.id));
+    expect(view.paceTrend[9]).toMatchObject({ id: "r0", paceSeconds: 300, paceLabel: "5:00" });
+    expect(view.paceTrend[0].paceSeconds).toBeCloseTo(309);
+    expect(view.paceTrend[9].dateLabel).toBe("13. jul");
+  });
+
+  it("skips a run whose pace is undefined instead of plotting a zero", () => {
+    const view = buildHomeView([run({ id: "ok" }), run({ id: "bad", distance: 0 })]);
+
+    expect(view.paceTrend.map((p) => p.id)).toEqual(["ok"]);
+  });
+});
