@@ -88,3 +88,43 @@ describe("buildHomeView paceTrend", () => {
     expect(view.paceTrend.map((p) => p.id)).toEqual(["ok"]);
   });
 });
+
+// The PR celebration (#122): the view-model flags a latest run that beats the
+// athlete's own history, per distance band (see lib/training/personal-record.ts).
+describe("buildHomeView isPersonalRecord", () => {
+  it("flags the demo fixtures' newest run — the set's fastest 5k", () => {
+    const view = buildHomeView();
+
+    expect(view.latest.isPersonalRecord).toBe(true);
+    expect(view.latest.id).toBe("demo-01");
+  });
+
+  it("flags a live run that beats the athlete's prior 5k pace", () => {
+    const view = buildHomeView([
+      run({ id: "new", distance: 5_000, movingTime: 1_275 }), // 4:15/km
+      run({ id: "old", distance: 5_000, movingTime: 1_500, startDate: new Date("2026-07-06") }),
+    ]);
+
+    expect(view.latest.isPersonalRecord).toBe(true);
+    expect(view.latest.id).toBe("new");
+  });
+
+  it("does not flag a live run slower than the athlete's prior 5k", () => {
+    const view = buildHomeView([
+      run({ id: "new", distance: 5_000, movingTime: 1_500 }),
+      run({ id: "old", distance: 5_000, movingTime: 1_275, startDate: new Date("2026-07-06") }),
+    ]);
+
+    expect(view.latest.isPersonalRecord).toBe(false);
+  });
+
+  it("only compares against runs — a longer bike ride doesn't block 'longest'", () => {
+    const view = buildHomeView([
+      run({ id: "new", distance: 26_000, movingTime: 8_800 }),
+      run({ id: "ride", type: "Ride", distance: 60_000, startDate: new Date("2026-07-07") }),
+      run({ id: "old", distance: 24_000, movingTime: 8_000, startDate: new Date("2026-07-06") }),
+    ]);
+
+    expect(view.latest.isPersonalRecord).toBe(true);
+  });
+});

@@ -21,6 +21,7 @@ import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
+import { detectPersonalRecord } from "@/lib/training/personal-record";
 import { computeSnapshot } from "@/lib/training/progression-core";
 import type { ZoneHrConfig } from "@/lib/training/zones";
 
@@ -144,6 +145,8 @@ function paceDelta(seconds: number): string {
 }
 
 export interface LatestActivityView {
+  /** The activity's id — keys the PR celebration's "already shown" mark (#122). */
+  id: string;
   name: string;
   km: number;
   paceLabel: string;
@@ -161,6 +164,13 @@ export interface LatestActivityView {
    * the trace rather than draw an invented one. Empty = no curve.
    */
   paceCurve: number[];
+  /**
+   * True when this run beats the athlete's own history — fastest pace in its
+   * distance band (5k/10k/halvmarathon) or the longest run ever (#122, see
+   * lib/training/personal-record.ts). Drives the badge and the one-time
+   * confetti/toast celebration on the LatestActivityCard.
+   */
+  isPersonalRecord: boolean;
 }
 
 /**
@@ -448,6 +458,7 @@ export function buildHomeView(
     weekNumber: isoWeek(now),
     weeklyKm,
     latest: {
+      id: latest.id,
       name: latest.name,
       km: latest.distance / 1000,
       paceLabel: formatPace(latest.averageSpeed),
@@ -460,6 +471,9 @@ export function buildHomeView(
       dayLabel: relativeDayLabel(latest.startDate, now),
       clock: clock(latest.startDate),
       paceCurve: isDemo ? DEMO_PACE_CURVE : [],
+      // Only runs are compared — `runs` is already filtered, so a PB can't be
+      // "beaten" by a bike ride's distance or pace.
+      isPersonalRecord: detectPersonalRecord(latest, runs.slice(1)) !== null,
     },
     routeCoords,
     routeKm: latest.distance / 1000,

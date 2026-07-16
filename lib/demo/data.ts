@@ -112,8 +112,11 @@ function buildActivity(seed: Seed, index: number): DemoActivity {
 
 // 30 activities spanning ~6 weeks of structured training (easy, tempo, long,
 // intervals, recovery, trail). Ordered newest-first to match getActivities().
+// The newest one is deliberately the fixture set's fastest 5k-band run (the
+// recovery jogs are its only band rivals), so the demo dashboard shows the
+// personal-record celebration (#122).
 const seeds: Seed[] = [
-  { daysAgo: 0, name: "Morning Easy Run", km: 8.2, pace: 5.35, hr: 142, spm: 178 },
+  { daysAgo: 0, name: "Parkrun 5K", km: 5.0, pace: 4.25, hr: 171, spm: 188 },
   { daysAgo: 1, name: "Tempo Tuesday", km: 10.0, pace: 4.45, hr: 165, spm: 184 },
   { daysAgo: 2, name: "Recovery Jog", km: 5.0, pace: 6.1, hr: 128, spm: 172 },
   { daysAgo: 4, name: "Long Run Sunday", km: 21.1, pace: 5.25, hr: 152, spm: 180 },
