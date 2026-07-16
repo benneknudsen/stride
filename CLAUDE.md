@@ -44,10 +44,10 @@ See `docs/architecture.md` for the original plan (the codebase has evolved past 
 - Cobalt Glass is the standard design — `components/cobalt/` (UI) + `lib/cobalt/` (view-models); pages are Danish: `/` (hjem), `/aktiviteter`, `/plan`
 - Coach lives at `/dashboard/coach` only (#86); the old `/coach` permanently redirects
 - Race date is per-user (#99) — `actions/race.ts` + `getRacePlan`, with the engine's demo race as fallback
-- Visitors (no session) get the Velkommen landing page on `/` (`components/cobalt/velkommen/`); the demo dashboard lives behind `/?demo=1` (`DEMO_HOME_ROUTE` in `lib/routes.ts`), and visitor navs point Hjem there so the demo stays browsable. The landing itself drops the app chrome — `LandingChromeGate` hides NavBar/BottomTabBar there, and the page brings its own header
+- Visitors (no session) get the Velkommen landing page on `/` (`components/cobalt/velkommen/`); the demo dashboard lives at `/demo` (`DEMO_HOME_ROUTE` in `lib/routes.ts`, a rewrite of `/?demo=1` in `next.config.ts` — legacy query links still work), and visitor navs point Hjem there so the demo stays browsable. The landing itself drops the app chrome — `LandingChromeGate` hides NavBar/BottomTabBar there, and the page brings its own header
 
 ## Demo mode
-Live data is the default (#84): authenticated users get their own synced activities and race plan. Demo fixtures are the fallback for signed-in users with no synced runs, and power the public demo at `/?demo=1` plus the landing page's preview widgets.
+Live data is the default (#84): authenticated users get their own synced activities and race plan. Demo fixtures are the fallback for signed-in users with no synced runs, and power the public demo at `/demo` plus the landing page's preview widgets.
 Demo data path: `lib/demo/` — 30 realistic running activities, fully deterministic (no `Math.random`) so server render and client hydration agree.
 
 ## Roadmap

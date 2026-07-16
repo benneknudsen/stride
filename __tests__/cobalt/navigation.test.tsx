@@ -83,17 +83,33 @@ describe("active tab across all four routes (#100)", () => {
 });
 
 // The Velkommen landing page took over "/" for visitors, so a visitor's Hjem tab
-// carries ?demo=1 — tabbing "home" mid-demo must stay in the demo, not bounce the
-// visitor back onto the pitch. Signed-in navs keep the bare route, and the tab
-// marker has to survive the query (usePathname never carries one).
+// points at the demo's clean path (/demo, a rewrite of the front page) — tabbing
+// "home" mid-demo must stay in the demo, not bounce the visitor back onto the
+// pitch. Signed-in navs keep the bare route. The marker has to light up both on
+// /demo itself and on "/", where legacy /?demo=1 links still land (usePathname
+// never carries the query).
 describe("visitor Hjem points at the demo, not the landing page", () => {
   function hjemHref(): string | null {
     return screen.getByRole("link", { name: "Hjem" }).getAttribute("href");
   }
 
-  test("NavBar: visitor gets ?demo=1 and still lights up on /", () => {
+  const NAVS = [
+    ["NavBar", NavBar],
+    ["BottomTabBar", BottomTabBar],
+  ] as const;
+
+  test.each(NAVS)("%s: visitor's Hjem links to /demo and lights up there", (_name, Nav) => {
+    pathname.mockReturnValue(DEMO_HOME_ROUTE);
+    render(<Nav />);
+
+    expect(hjemHref()).toBe(DEMO_HOME_ROUTE);
+    expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
+    expect(activeLabel()).toContain("Hjem");
+  });
+
+  test.each(NAVS)("%s: visitor's Hjem still lights up on / (legacy ?demo=1)", (_name, Nav) => {
     pathname.mockReturnValue(ROUTES.HOME);
-    render(<NavBar />);
+    render(<Nav />);
 
     expect(hjemHref()).toBe(DEMO_HOME_ROUTE);
     expect(activeLabel()).toContain("Hjem");
@@ -106,14 +122,6 @@ describe("visitor Hjem points at the demo, not the landing page", () => {
     expect(hjemHref()).toBe(ROUTES.HOME);
   });
 
-  test("BottomTabBar: visitor gets ?demo=1 and still lights up on /", () => {
-    pathname.mockReturnValue(ROUTES.HOME);
-    render(<BottomTabBar />);
-
-    expect(hjemHref()).toBe(DEMO_HOME_ROUTE);
-    expect(activeLabel()).toContain("Hjem");
-  });
-
   test("BottomTabBar: signed-in keeps the bare front page", () => {
     pathname.mockReturnValue(ROUTES.HOME);
     render(<BottomTabBar signedIn />);
@@ -123,8 +131,9 @@ describe("visitor Hjem points at the demo, not the landing page", () => {
 });
 
 // The Velkommen landing ("/" for a visitor without ?demo) is a landing page and
-// drops the app chrome — it brings its own header. The demo ("/?demo=1"), the
-// other public pages and every signed-in view keep NavBar + BottomTabBar (#100).
+// drops the app chrome — it brings its own header. The demo (/demo, plus legacy
+// /?demo=1 links), the other public pages and every signed-in view keep
+// NavBar + BottomTabBar (#100).
 describe("LandingChromeGate hides the chrome on the landing page only", () => {
   const renderGate = (signedIn: boolean) =>
     render(
@@ -141,6 +150,13 @@ describe("LandingChromeGate hides the chrome on the landing page only", () => {
   });
 
   test("visitor in the demo keeps the chrome", () => {
+    pathname.mockReturnValue(DEMO_HOME_ROUTE);
+    search.mockReturnValue("");
+    renderGate(false);
+    expect(screen.queryByTestId("chrome")).not.toBeNull();
+  });
+
+  test("visitor on a legacy /?demo=1 link keeps the chrome", () => {
     pathname.mockReturnValue(ROUTES.HOME);
     search.mockReturnValue("demo=1");
     renderGate(false);
