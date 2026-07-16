@@ -46,7 +46,7 @@ import {
   type RacePrediction,
   zonePaces,
 } from "@/lib/training/prediction";
-import { computeSnapshot } from "@/lib/training/progression";
+import { computeSnapshot } from "@/lib/training/progression-core";
 
 const DA_WEEKDAYS = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
 const DA_MONTHS_SHORT = [

@@ -17,8 +17,12 @@ import {
   inferRaceDistanceKm,
   type RaceEstimate,
 } from "@/lib/cobalt/race-estimate";
+import { readinessFromRatio } from "@/lib/cobalt/readiness";
+import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
+import { computeSnapshot } from "@/lib/training/progression-core";
+import type { ZoneHrConfig } from "@/lib/training/zones";
 
 const DAY_MS = 86_400_000;
 
@@ -55,12 +59,13 @@ export interface ZoneInfo {
   tone: "cobalt" | "red";
 }
 
-/** Map an average heart rate to a plain-language training zone. */
-export function zoneForHeartRate(hr: number): ZoneInfo {
-  if (hr < 135) return { level: 2, label: "Rolig snak-fart", tone: "cobalt" };
-  if (hr < 150) return { level: 3, label: "Moderat tempo", tone: "cobalt" };
-  if (hr < 165) return { level: 4, label: "Hårdt tempo", tone: "red" };
-  return { level: 5, label: "Meget hårdt", tone: "red" };
+/**
+ * Map an average heart rate to a plain-language training zone. The zone number
+ * comes from lib/training/zones.ts — the same model the per-activity zone split
+ * uses (issue #129) — so a badge and a split can never disagree about one pulse.
+ */
+export function zoneForHeartRate(hr: number, config: ZoneHrConfig = {}): ZoneInfo {
+  return zoneBadgeForHeartRate(hr, config);
 }
 
 /** Danish time-of-day greeting for the serif hero line. */
@@ -218,9 +223,15 @@ export interface HomeView {
   /** Signed pace delta vs. the previous week, or null without a week to compare. */
   avgPaceDeltaLabel: string | null;
   volumeBars: { id: string; km: number }[];
-  recoveryPct: number;
-  recoveryNote: string;
-  /** The hero's second line — same recovery band as `recoveryNote`, as a sentence. */
+  /**
+   * Readiness estimate (issues #126/#127): derived from the acute:chronic load
+   * ratio via the shared `readinessFromRatio` — the same number the Coach page
+   * shows. An estimate from training load only, and the card says so; nothing
+   * here measures HRV or sleep.
+   */
+  readinessPct: number;
+  readinessNote: string;
+  /** The hero's second line — same readiness band as `readinessNote`, as a sentence. */
   heroNote: string;
   coachQuote: string;
   recentRuns: RecentRunView[];
@@ -341,21 +352,22 @@ export function buildHomeView(
     .map((a) => ({ id: a.id, km: a.distance / 1000 }))
     .reverse();
 
-  const recoveryPct = Math.min(95, Math.max(60, Math.round(150 - latestHr * 0.45)));
-  // One recovery band feeds three surfaces — the RecoveryCard note, the hero's
+  // Readiness (issues #126/#127): the acute:chronic load ratio from the shared
+  // progression engine, through the same readinessFromRatio the Coach page
+  // uses — the two can never show different numbers for the same runs. One
+  // readiness band feeds three surfaces — the ReadinessCard note, the hero's
   // second line and the coach quote — so the hero can never claim the body is
   // ready while the card next to it prescribes rest.
-  const recoveryBand = recoveryPct >= 80 ? "ready" : recoveryPct >= 68 ? "easy" : "rest";
-  const recoveryNote = {
-    ready: "Klar til hårdt pas",
-    easy: "Let træning anbefalet",
-    rest: "Prioritér hvile i dag",
-  }[recoveryBand];
+  const ratio = computeSnapshot(
+    runs.map((run) => ({ ...run, hrZones: null })),
+    now
+  ).trainingLoad.ratio;
+  const readiness = readinessFromRatio(ratio);
   const heroNote = {
     ready: "Kroppen er klar i dag.",
     easy: "Hold tempoet roligt i dag.",
     rest: "Kroppen har brug for hvile.",
-  }[recoveryBand];
+  }[readiness.band];
 
   // The latest run owns its own card, so the list starts at the second run —
   // unless that's the only run there is, in which case show it here rather than
@@ -388,8 +400,8 @@ export function buildHomeView(
   const routeCoords = decoded.length > 0 ? decoded : isDemo ? DEMO_ROUTE_COORDS : [];
 
   const coachQuote =
-    recoveryBand === "ready"
-      ? "Restitutionen ser stærk ud. Kør ugens tempopas som planlagt — kroppen er klar."
+    readiness.band === "ready"
+      ? "Din træningsbelastning er i balance. Kør ugens tempopas som planlagt — der er plads til kvalitet."
       : "Hold intensiteten nede i dag. En rolig snak-fart bygger form uden at koste restitution.";
 
   // Race numbers are derived, never asserted: a Riegel prediction from the
@@ -423,8 +435,8 @@ export function buildHomeView(
     avgPaceFraction,
     avgPaceDeltaLabel: deltaSeconds !== null ? paceDelta(deltaSeconds) : null,
     volumeBars,
-    recoveryPct,
-    recoveryNote,
+    readinessPct: readiness.pct,
+    readinessNote: readiness.note,
     heroNote,
     coachQuote,
     recentRuns,

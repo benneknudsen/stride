@@ -1,8 +1,10 @@
 import { GlassCard } from "@/components/cobalt/GlassCard";
 
-// "Restitution" widget (3/12, red variant): compact red gradient surface with
-// the recovery percentage in the display font, a white progress bar and a note
-// in the on-red text colour.
+// "Readiness" widget (3/12, red variant): compact red gradient surface with
+// the readiness percentage in the display font, a white progress bar and a note
+// in the on-red text colour. The number is an estimate from training load
+// (issue #126) — the caption says so, and nothing on the card signals a live
+// measurement.
 export function RecoveryCard({
   pct,
   note,
@@ -17,12 +19,9 @@ export function RecoveryCard({
       variant="red"
       className="flex flex-col justify-between gap-4 rounded-widget p-[22px]"
     >
-      <div className="flex items-center justify-between">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] opacity-85">
-          Restitution
-        </span>
-        <span className="size-2 animate-[cg-pulse-dot_1.8s_ease-in-out_infinite] rounded-full bg-onred motion-reduce:animate-none" />
-      </div>
+      <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] opacity-85">
+        Readiness
+      </span>
 
       <div className="flex items-baseline gap-2">
         <span className="font-cg-display text-[46px] font-extrabold leading-none tracking-[-0.03em]">
@@ -44,7 +43,10 @@ export function RecoveryCard({
         />
       </div>
 
-      <span className="text-[12.5px] opacity-90">{note}</span>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[12.5px] opacity-90">{note}</span>
+        <span className="text-[10.5px] opacity-70">Estimeret ud fra din træningsbelastning</span>
+      </div>
     </GlassCard>
   );
 }

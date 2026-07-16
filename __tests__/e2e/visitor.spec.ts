@@ -58,7 +58,7 @@ test.describe("browsing without a session", () => {
     await expect(header("Rute")).toBeVisible(); // RouteCard
     await expect(header("Snit-pace")).toBeVisible(); // AvgPaceRing
     await expect(header("Volumen")).toBeVisible(); // VolumeCard
-    await expect(header("Restitution")).toBeVisible(); // RecoveryCard
+    await expect(header("Readiness")).toBeVisible(); // RecoveryCard
     await expect(header("AI Coach")).toBeVisible(); // AiCoachCard
 
     // These two head their card with an <h2> instead.
