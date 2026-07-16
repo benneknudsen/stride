@@ -2,6 +2,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
+import { LandingChromeGate } from "@/components/cobalt/LandingChromeGate";
 import { NavBar } from "@/components/cobalt/NavBar";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { activityRoute, DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
@@ -9,10 +10,12 @@ import { activityRoute, DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 // Issue #86 consolidated the two coach routes into ROUTES.COACH. Both navs link
 // there, so the tab marker has to light up on that exact path — and only there.
 const pathname = vi.fn<() => string>();
+const search = vi.fn<() => string>(() => "");
 const refresh = vi.fn();
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname(),
+  useSearchParams: () => new URLSearchParams(search()),
   useRouter: () => ({ refresh }),
 }));
 
@@ -116,6 +119,46 @@ describe("visitor Hjem points at the demo, not the landing page", () => {
     render(<BottomTabBar signedIn />);
 
     expect(hjemHref()).toBe(ROUTES.HOME);
+  });
+});
+
+// The Velkommen landing ("/" for a visitor without ?demo) is a landing page and
+// drops the app chrome — it brings its own header. The demo ("/?demo=1"), the
+// other public pages and every signed-in view keep NavBar + BottomTabBar (#100).
+describe("LandingChromeGate hides the chrome on the landing page only", () => {
+  const renderGate = (signedIn: boolean) =>
+    render(
+      <LandingChromeGate signedIn={signedIn}>
+        <div data-testid="chrome" />
+      </LandingChromeGate>
+    );
+
+  test("visitor on / gets no chrome", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    search.mockReturnValue("");
+    renderGate(false);
+    expect(screen.queryByTestId("chrome")).toBeNull();
+  });
+
+  test("visitor in the demo keeps the chrome", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    search.mockReturnValue("demo=1");
+    renderGate(false);
+    expect(screen.queryByTestId("chrome")).not.toBeNull();
+  });
+
+  test("visitor on the other public pages keeps the chrome", () => {
+    pathname.mockReturnValue(ROUTES.PLAN);
+    search.mockReturnValue("");
+    renderGate(false);
+    expect(screen.queryByTestId("chrome")).not.toBeNull();
+  });
+
+  test("signed-in keeps the chrome on /", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    search.mockReturnValue("");
+    renderGate(true);
+    expect(screen.queryByTestId("chrome")).not.toBeNull();
   });
 });
 

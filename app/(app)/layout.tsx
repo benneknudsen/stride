@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { BackgroundBlobs } from "@/components/cobalt/BackgroundBlobs";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
+import { LandingChromeGate } from "@/components/cobalt/LandingChromeGate";
 import { NavBar } from "@/components/cobalt/NavBar";
 import { auth } from "@/lib/auth";
 
@@ -18,10 +20,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="relative min-h-screen bg-silver font-cg-sans text-cobalt">
       <BackgroundBlobs />
       <div className="relative mx-auto max-w-[1360px] px-4 pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)_+_96px)] md:px-7 md:pt-0 md:pb-10">
-        <NavBar userName={userName} />
+        {/* Velkommen (visitor on "/") is a landing page and drops the app chrome;
+            the gate needs the query string, so useSearchParams forces a Suspense
+            boundary around each bar. */}
+        <Suspense fallback={null}>
+          <LandingChromeGate signedIn={user !== undefined}>
+            <NavBar userName={userName} />
+          </LandingChromeGate>
+        </Suspense>
         {children}
       </div>
-      <BottomTabBar signedIn={user !== undefined} />
+      <Suspense fallback={null}>
+        <LandingChromeGate signedIn={user !== undefined}>
+          <BottomTabBar signedIn={user !== undefined} />
+        </LandingChromeGate>
+      </Suspense>
     </div>
   );
 }
