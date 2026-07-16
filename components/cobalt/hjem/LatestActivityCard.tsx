@@ -1,5 +1,6 @@
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { PaceCurve } from "@/components/cobalt/hjem/PaceCurve";
+import { PrCelebration } from "@/components/cobalt/hjem/PrCelebration";
 import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import { formatDanish } from "@/lib/cobalt/format";
 import type { LatestActivityView } from "@/lib/cobalt/hjem";
@@ -58,6 +59,13 @@ export function LatestActivityCard({
         <h2 className="m-0 font-cg-display text-[30px] font-bold tracking-[-0.03em] text-cobalt">
           {latest.name}
         </h2>
+        {/* The persistent PR mark (#122) — unlike the confetti/toast it shows
+            on every render, and under prefers-reduced-motion too. */}
+        {latest.isPersonalRecord ? (
+          <span className="rounded-pill bg-red px-[12px] py-[5px] text-[12px] font-semibold text-white">
+            🏆 Personlig rekord
+          </span>
+        ) : null}
         <span
           className={`rounded-pill px-[12px] py-[5px] text-[12px] font-medium ${
             latest.zone.tone === "red" ? "text-red" : "text-cobalt"
@@ -83,6 +91,9 @@ export function LatestActivityCard({
           <PaceCurve samples={latest.paceCurve} started={started} />
         </div>
       ) : null}
+
+      {/* One-time confetti + toast, keyed on the activity id (#122). */}
+      {latest.isPersonalRecord ? <PrCelebration activityId={latest.id} /> : null}
     </GlassCard>
   );
 }
