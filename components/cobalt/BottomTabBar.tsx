@@ -70,7 +70,7 @@ const TABS: { label: string; href: string; icon: ReactNode }[] = [
 export function BottomTabBar({
   signedIn = false,
 }: {
-  /** Without a session the Hjem tab keeps the visitor inside the demo (`?demo=1`). */
+  /** Without a session the Hjem tab keeps the visitor inside the demo (`/demo`). */
   signedIn?: boolean;
 }) {
   const pathname = usePathname() ?? "";
@@ -105,10 +105,13 @@ export function BottomTabBar({
       {tabs.map((tab) => {
         // `${"/"}/` is "//", which no pathname starts with — so the Hjem tab
         // matches "/" exactly and doesn't light up on every other page. The
-        // query is stripped first: usePathname never carries one, but the
-        // visitor's Hjem href ("/?demo=1") does.
-        const path = tab.href.split("?")[0];
-        const active = pathname === path || pathname.startsWith(`${path}/`);
+        // demo is the front page under another path (a rewrite), so the
+        // visitor's Hjem tab also lights up on legacy `/?demo=1` links, which
+        // land on "/" (usePathname carries no query string).
+        const active =
+          tab.href === DEMO_HOME_ROUTE
+            ? pathname === tab.href || pathname === ROUTES.HOME
+            : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         return (
           <Link
             key={tab.href}

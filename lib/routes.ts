@@ -15,11 +15,20 @@ export const ROUTES = {
 
 /**
  * Demo-dashboardet som destination. Forsiden viser velkomstsiden for besøgende
- * uden session, så demoen (#84) nås via `?demo=1` på samme rute — login-sidens
- * "Prøv demoen" og besøgendes Hjem-tab peger her. Signede brugere ignorerer
- * parameteren; de ser altid deres egne data.
+ * uden session; demoen (#84) bor på den rene sti `/demo`, som next.config.ts
+ * rewriter internt til `/?demo=1` — én side, to stier, ingen duplikat-rute
+ * (#100). Login-sidens "Prøv demoen" og besøgendes Hjem-tab peger her, og
+ * gamle `/?demo=1`-links virker stadig direkte. Signede brugere ignorerer
+ * demoen; de ser altid deres egne data.
  */
-export const DEMO_HOME_ROUTE = "/?demo=1";
+export const DEMO_HOME_ROUTE = "/demo";
+
+/**
+ * Den interne form af {@link DEMO_HOME_ROUTE}: query-parameteren forsiden
+ * faktisk læser. Kun rewriten (next.config.ts) og tests bør pege her — alle
+ * links bruger den rene sti.
+ */
+export const DEMO_HOME_REWRITE_TARGET = "/?demo=1";
 
 /**
  * Den gamle coach-rute. Ingen interne links peger her længere; den lever kun som
@@ -27,14 +36,6 @@ export const DEMO_HOME_ROUTE = "/?demo=1";
  * så bogmærker og delte links stadig virker.
  */
 export const LEGACY_COACH_ROUTE = "/coach";
-
-/**
- * Den gamle demo-forside. Issue #100 fjernede auth-gaten fra de fire hovedsider —
- * de har alle demo-fallback (#84) — så en separat demo-rute var en duplikat af
- * forsiden, og BottomTabBar/NavBar kunne ikke markere en aktiv tab på den. Lever
- * nu kun som kilde for den permanente redirect til {@link ROUTES.HOME}.
- */
-export const LEGACY_DEMO_ROUTE = "/demo";
 
 /**
  * Detalje-siden for én aktivitet (issue #92) — `/aktiviteter/<id>`. Id'et kommer
