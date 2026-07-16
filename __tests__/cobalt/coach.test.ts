@@ -68,15 +68,17 @@ describe("buildCoachView", () => {
     expect(view.load.bars.slice(0, -1).every((b) => !b.accent)).toBe(true);
   });
 
-  it("keeps every bar fraction within the rendered range", () => {
+  it("keeps every bar fraction honest — 0 to 1, no fabricated floor (issue #128)", () => {
     for (const bar of view.load.bars) {
-      expect(bar.fraction).toBeGreaterThanOrEqual(0.18);
+      expect(bar.fraction).toBeGreaterThanOrEqual(0);
       expect(bar.fraction).toBeLessThanOrEqual(1);
     }
+    // The window's peak day always fills the chart.
+    expect(Math.max(...view.load.bars.map((b) => b.fraction))).toBe(1);
   });
 
-  it("clamps the readiness percentage to the 60–95 band", () => {
-    expect(view.form.pct).toBeGreaterThanOrEqual(60);
+  it("clamps the readiness percentage to the 55–95 band", () => {
+    expect(view.form.pct).toBeGreaterThanOrEqual(55);
     expect(view.form.pct).toBeLessThanOrEqual(95);
   });
 

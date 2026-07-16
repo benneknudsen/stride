@@ -16,8 +16,10 @@
 
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
 import { DEFAULT_RACE_DATE } from "@/lib/coach/engine";
+import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
+import { computeSnapshot } from "@/lib/training/progression-core";
 
 const DAY_MS = 86_400_000;
 
@@ -138,8 +140,9 @@ function longestInWindow(activities: CoachActivityLike[], now: Date, days: numbe
 
 /**
  * 14 daily bars of decayed acute load (each day = today + 6 prior days,
- * 0.8-decayed) so every day carries a value and the shape reads like a rolling
- * load, not raw km.
+ * 0.8-decayed) so the shape reads like a rolling load, not raw km. The fraction
+ * is the load's honest share of the window peak (issue #128) — a zero-load day
+ * is 0, never a fabricated floor; the card decides how to *render* a zero.
  */
 function buildLoadBars(activities: CoachLoadActivityLike[], now: Date): LoadBar[] {
   const raw: number[] = [];
@@ -151,7 +154,7 @@ function buildLoadBars(activities: CoachLoadActivityLike[], now: Date): LoadBar[
   const maxLoad = Math.max(...raw, 1);
   return raw.map((load, i) => ({
     id: `d${i}`,
-    fraction: 0.18 + (load / maxLoad) * 0.82,
+    fraction: load / maxLoad,
     accent: i === raw.length - 1,
   }));
 }
@@ -237,15 +240,14 @@ export function buildCoachView(now: Date = new Date(), userName?: string): Coach
 
   const prompts = COACH_PROMPTS;
 
-  // Form (readiness): same heuristic as the Hjem "Restitution" widget so the
-  // two pages agree — lower recent HR reads as fresher legs.
-  const pct = Math.min(95, Math.max(60, Math.round(150 - latest.averageHeartrate * 0.45)));
-  const note =
-    pct >= 80
-      ? "Klar til hårdt pas"
-      : pct >= 68
-        ? "Let træning anbefalet"
-        : "Prioritér hvile i dag";
+  // Form (readiness): the shared readinessFromRatio over the same progression
+  // snapshot the Hjem readiness card reads (issue #127), so the two pages show
+  // the identical number for the same fixtures.
+  const snapshotRatio = computeSnapshot(
+    demoActivities.map((a) => ({ ...a, hrZones: null })),
+    now
+  ).trainingLoad.ratio;
+  const { pct, note } = readinessFromRatio(snapshotRatio);
 
   // Form trend: this week's volume vs. last week's.
   const thisWeek = getWeeklyVolume(demoActivities, 0);
@@ -310,16 +312,10 @@ export function buildLiveCoachView(
   const { workout, loadGauge } = dashboard;
   const ratio = loadGauge.ratio;
 
-  // Form (readiness) from the progression snapshot's acute:chronic ratio —
+  // Form (readiness) from the progression snapshot's acute:chronic ratio,
+  // through the same readinessFromRatio the Hjem card uses (issue #127) —
   // readiness peaks when the load sits right on the chronic base (ratio ≈ 1).
-  const pct =
-    ratio === null ? 72 : Math.min(95, Math.max(55, Math.round(95 - Math.abs(ratio - 1) * 45)));
-  const note =
-    pct >= 80
-      ? "Klar til hårdt pas"
-      : pct >= 68
-        ? "Let træning anbefalet"
-        : "Prioritér hvile i dag";
+  const { pct, note } = readinessFromRatio(ratio);
 
   const [trend, trendTone] =
     ratio !== null && ratio > 1.05

@@ -3,7 +3,9 @@ import type { CoachView } from "@/lib/cobalt/coach";
 
 // "Træningsbelastning · 14 dage": a 14-bar acute-load chart in the same style as
 // the Hjem "Volumen" widget. Bars grow from the bottom (scaleY) with a staggered
-// delay once `started`; today's bar (the last) reads red.
+// delay once `started`; today's bar (the last) reads red. A zero-load day keeps
+// its honest 0 fraction (issue #128) and renders as a discreet 2px baseline
+// tick — a rendering choice, never a fabricated value.
 export function TrainingLoadCard({ load, started }: { load: CoachView["load"]; started: boolean }) {
   return (
     <GlassCard className="rounded-widget px-[26px] py-[22px]">
@@ -20,12 +22,12 @@ export function TrainingLoadCard({ load, started }: { load: CoachView["load"]; s
             key={bar.id}
             className="flex-1 rounded-[4px] motion-reduce:!transition-none"
             style={{
-              height: `${(bar.fraction * 100).toFixed(1)}%`,
+              height: bar.fraction > 0 ? `${(bar.fraction * 100).toFixed(1)}%` : "2px",
               transformOrigin: "bottom",
               transform: started ? "scaleY(1)" : "scaleY(0)",
               transition: `transform 0.7s cubic-bezier(.2,.8,.2,1) ${(0.1 + i * 0.05).toFixed(2)}s`,
               background: bar.accent ? "var(--color-red)" : "var(--color-cobalt)",
-              opacity: bar.accent ? 1 : 0.25 + bar.fraction * 0.6,
+              opacity: bar.accent ? 1 : bar.fraction > 0 ? 0.35 + bar.fraction * 0.5 : 0.2,
             }}
           />
         ))}

@@ -113,11 +113,21 @@ describe("buildActivitiesView", () => {
   });
 
   it("derives the zone, category and pace tone from average heart rate", () => {
-    const view = buildActivitiesView([run({ averageHeartrate: 170 })], NOW);
+    // 175 bpm of the 190 default max ≈ 92 % — zone 5 in the shared model (#129).
+    const view = buildActivitiesView([run({ averageHeartrate: 175 })], NOW);
     const row = view.rows[0];
     expect(row.zone.level).toBe(5);
     expect(row.category).toBe("haard");
     expect(row.paceTone).toBe("red");
+  });
+
+  it("lets a genuinely easy pulse read as zone 1 (issue #129)", () => {
+    // 110 bpm of the 190 default max ≈ 58 % — below the zone-2 floor.
+    const view = buildActivitiesView([run({ averageHeartrate: 110 })], NOW);
+    const row = view.rows[0];
+    expect(row.zone.level).toBe(1);
+    expect(row.zone.label).toBe("Restitution");
+    expect(row.category).toBe("rolig");
   });
 
   it("resolves the source, defaulting a Garmin row to garmin", () => {

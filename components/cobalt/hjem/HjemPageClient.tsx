@@ -136,7 +136,7 @@ export function HjemPageClient({
             <VolumeCard bars={view.volumeBars} started={started} />
           </Bento>
           <Bento span="col-span-12 sm:col-span-6 lg:col-span-3" delay={0.36}>
-            <RecoveryCard pct={view.recoveryPct} note={view.recoveryNote} started={started} />
+            <RecoveryCard pct={view.readinessPct} note={view.readinessNote} started={started} />
           </Bento>
           <Bento span="col-span-12 lg:col-span-5" delay={0.42}>
             <AiCoachCard quote={view.coachQuote} />
