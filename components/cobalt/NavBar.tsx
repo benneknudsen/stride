@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 // red AI spark. Sync POSTs to /api/strava/sync and drives the button from the
 // response — idle → syncing → synced|error → idle — so it can be run again (#97).
 //
-// For a visitor the Hjem tab points at the demo dashboard (`?demo=1`) instead of
+// For a visitor the Hjem tab points at the demo dashboard (`/demo`) instead of
 // bare "/" — "/" shows the Velkommen landing page without a session, and a tab
 // that dropped the visitor out of the demo mid-browse would read as a bug.
 const LINKS = [
@@ -93,11 +93,12 @@ export function NavBar({
     }
   }, [onSync, router, settle]);
 
-  // usePathname carries no query string, so match on the path alone — the
-  // visitor's Hjem href ("/?demo=1") still has to light up on "/".
+  // The demo is the front page under another path (a rewrite), so the
+  // visitor's Hjem tab has to light up on both `/demo` and legacy `/?demo=1`
+  // links, which still land on "/" (usePathname carries no query string).
   const isActive = (href: string) => {
-    const path = href.split("?")[0];
-    return current === path || current.startsWith(`${path}/`);
+    if (href === DEMO_HOME_ROUTE) return current === href || current === ROUTES.HOME;
+    return current === href || current.startsWith(`${href}/`);
   };
 
   // Visitors (no identity chip) keep the demo when they tab back to Hjem.

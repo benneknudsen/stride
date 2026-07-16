@@ -33,9 +33,12 @@ export function VelkommenPage() {
           <Logo />
           <Wordmark />
         </span>
+        {/* Solid white, not cg-glass: a translucent pill sits directly on the
+            background blobs here and picks up their tint, and the bright glass
+            border reads as a rendering artifact rather than as glass. */}
         <Link
           href={ROUTES.LOGIN}
-          className="cg-interactive cg-glass rounded-pill px-5 py-2 text-[13px] font-semibold text-cobalt transition-colors hover:text-red"
+          className="cg-interactive rounded-pill bg-white px-5 py-2 text-[13px] font-semibold text-cobalt shadow-[0_8px_24px_rgba(27,41,192,0.14)] transition-colors hover:text-red"
         >
           Log ind
         </Link>
@@ -71,7 +74,7 @@ export function VelkommenPage() {
             </Link>
             <Link
               href={ROUTES.LOGIN}
-              className="cg-interactive cg-glass rounded-pill px-7 py-3 text-[14px] font-semibold text-cobalt transition-colors hover:text-red"
+              className="cg-interactive rounded-pill bg-white px-7 py-3 text-[14px] font-semibold text-cobalt shadow-[0_8px_24px_rgba(27,41,192,0.14)] transition-colors hover:text-red"
             >
               Log ind
             </Link>
@@ -197,7 +200,7 @@ export function VelkommenPage() {
             </Link>
             <Link
               href={DEMO_HOME_ROUTE}
-              className="cg-interactive rounded-pill border border-silver/40 px-7 py-3 text-[14px] font-semibold text-silver transition-colors hover:border-silver"
+              className="cg-interactive rounded-pill bg-white/12 px-7 py-3 text-[14px] font-semibold text-silver transition-colors hover:bg-white/20"
             >
               Udforsk demoen
             </Link>

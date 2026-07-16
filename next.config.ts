@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 // Relative, not the "@/" alias: next.config.ts is loaded outside the app's
 // module resolution, so the tsconfig paths don't apply here.
-import { LEGACY_COACH_ROUTE, LEGACY_DEMO_ROUTE, ROUTES } from "./lib/routes";
+import {
+  DEMO_HOME_REWRITE_TARGET,
+  DEMO_HOME_ROUTE,
+  LEGACY_COACH_ROUTE,
+  ROUTES,
+} from "./lib/routes";
 
 /**
  * The Content-Security-Policy is set in `proxy.ts`, not here: it carries a
@@ -43,10 +48,6 @@ const nextConfig: NextConfig = {
    * Issue #86 — the coach used to live at two overlapping routes. `/dashboard/coach`
    * (the one the NavBar and BottomTabBar point at, so the tab marker works) is now
    * the only one; the old `/coach` links permanently redirect here.
-   *
-   * Issue #100 — `/demo` was a second copy of the front page, kept only because the
-   * four app pages used to be auth-gated. They are not any more (they all fall back
-   * to the demo fixtures on their own), so it redirects to the front page.
    */
   async redirects() {
     return [
@@ -55,10 +56,20 @@ const nextConfig: NextConfig = {
         destination: ROUTES.COACH,
         permanent: true,
       },
+    ];
+  },
+  /**
+   * The public demo lives at the clean `/demo` (every link uses DEMO_HOME_ROUTE),
+   * but the page itself is the front page reading `?demo=1` — a rewrite, not a
+   * redirect, so the browser keeps the pretty URL and there is still only one
+   * page implementation (#100's concern). Old `/?demo=1` links keep working
+   * since the front page reads the query either way.
+   */
+  async rewrites() {
+    return [
       {
-        source: LEGACY_DEMO_ROUTE,
-        destination: ROUTES.HOME,
-        permanent: true,
+        source: DEMO_HOME_ROUTE,
+        destination: DEMO_HOME_REWRITE_TARGET,
       },
     ];
   },
