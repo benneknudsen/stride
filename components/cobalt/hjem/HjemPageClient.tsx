@@ -76,18 +76,22 @@ export function HjemPageClient({
           backdrop-filter would; z-40 keeps it under the BottomTabBar (z-50). */}
       {isDemo ? (
         <div className="sticky top-2 z-40 [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
-          <GlassCard className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-widget px-4 py-2.5 sm:px-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="rounded-pill bg-red px-2.5 py-1 font-cg-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+          {/* One line always: badge + text shrink/truncate, the login pill never
+              wraps under them — the wrapped two-line version read as broken on
+              narrow phones. The mobile copy is shorter for the same reason. */}
+          <GlassCard className="flex items-center justify-between gap-3 rounded-pill py-2 pr-2 pl-4 sm:py-2.5 sm:pr-2.5 sm:pl-5">
+            <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+              <span className="flex-none rounded-pill bg-red px-2.5 py-1 font-cg-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
                 Demo
               </span>
-              <p className="m-0 text-[13px] leading-snug text-ink">
-                Dette er en demo med eksempeldata
+              <p className="m-0 truncate text-[13px] leading-snug text-ink">
+                <span className="sm:hidden">Du kigger på eksempeldata</span>
+                <span className="hidden sm:inline">Dette er en demo med eksempeldata</span>
               </p>
             </div>
             <Link
               href={ROUTES.LOGIN}
-              className="cg-interactive rounded-pill bg-cobalt px-5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+              className="cg-interactive flex-none rounded-pill bg-cobalt px-4 py-1.5 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90 sm:px-5 sm:py-2 sm:text-[13px]"
             >
               Log ind
             </Link>

@@ -16,10 +16,11 @@ import {
 // app/(app)/coach/page.tsx. The client wrapper owns the loading choreography
 // + entrance animations.
 //
-// A visitor without `?demo=1` gets the Velkommen landing page instead of the
-// demo dashboard, so the first thing a new visitor meets is the pitch — the
-// demo itself stays one click away (DEMO_HOME_ROUTE), and the three other
-// pages remain public with their own demo fallbacks (#100).
+// A visitor without the demo flag gets the Velkommen landing page instead of
+// the demo dashboard, so the first thing a new visitor meets is the pitch —
+// the demo itself stays one click away (DEMO_HOME_ROUTE = `/demo`, which
+// next.config.ts rewrites to `?demo=1` here), and the three other pages
+// remain public with their own demo fallbacks (#100).
 //
 // force-dynamic: every value is relative to the clock and the session, so
 // every request computes fresh data.
