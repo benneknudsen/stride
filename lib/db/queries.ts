@@ -11,6 +11,7 @@ import {
   users,
 } from "../../drizzle/schema";
 import type { AnalysisScope, HrZone } from "../../types/domain";
+import { captureError } from "../observability";
 import { fromDbDate, toDbDate } from "./calendar-date";
 import { db } from "./index";
 
@@ -55,7 +56,8 @@ export const getUserByEmail = cache(async (email: string) => {
   try {
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     return user ?? null;
-  } catch {
+  } catch (err) {
+    captureError("queries.getUserByEmail", err);
     return null;
   }
 });
@@ -67,7 +69,8 @@ export const getUserById = cache(async (id: string) => {
     // Normalised here too, so every raceDate leaving this module is a
     // local-midnight calendar day regardless of which read it came from.
     return { ...user, raceDate: fromDbDate(user.raceDate) };
-  } catch {
+  } catch (err) {
+    captureError("queries.getUserById", err);
     return null;
   }
 });
@@ -87,7 +90,8 @@ export const getRacePlan = cache(async (userId: string) => {
       .limit(1);
     if (!row) return null;
     return { ...row, raceDate: fromDbDate(row.raceDate) };
-  } catch {
+  } catch (err) {
+    captureError("queries.getRacePlan", err);
     return null;
   }
 });
@@ -123,7 +127,8 @@ export const getAccountsByUserId = cache(async (userId: string) => {
       .select({ provider: accounts.provider, type: accounts.type })
       .from(accounts)
       .where(eq(accounts.userId, userId));
-  } catch {
+  } catch (err) {
+    captureError("queries.getAccountsByUserId", err);
     return [];
   }
 });
@@ -140,7 +145,8 @@ export const getStravaTokens = cache(async (userId: string) => {
       .where(eq(stravaTokens.userId, userId))
       .limit(1);
     return token ?? null;
-  } catch {
+  } catch (err) {
+    captureError("queries.getStravaTokens", err);
     return null;
   }
 });
@@ -191,7 +197,8 @@ export const getGarminTokens = cache(async (userId: string) => {
       .where(eq(garminTokens.userId, userId))
       .limit(1);
     return token ?? null;
-  } catch {
+  } catch (err) {
+    captureError("queries.getGarminTokens", err);
     return null;
   }
 });
@@ -272,7 +279,8 @@ export const getActivities = cache(async (userId: string, options: GetActivities
       .orderBy(desc(activities.startDate))
       .limit(limit)
       .offset(offset);
-  } catch {
+  } catch (err) {
+    captureError("queries.getActivities", err);
     return [];
   }
 });
@@ -337,7 +345,8 @@ export const getDashboardActivities = cache(
           // explicit-JSON convention as `Activity` in types/domain.ts — so these
           // rows can feed the coach engine's zone charts (issue #86).
           return rows.map((row) => ({ ...row, hrZones: row.hrZones as HrZone[] | null }));
-        } catch {
+        } catch (err) {
+          captureError("queries.getDashboardActivities", err);
           return [];
         }
       },
@@ -381,7 +390,8 @@ export const getUserHrMax = cache(async (userId: string): Promise<number | null>
       .from(activities)
       .where(eq(activities.userId, userId));
     return row?.hrMax ?? null;
-  } catch {
+  } catch (err) {
+    captureError("queries.getUserHrMax", err);
     return null;
   }
 });
@@ -395,7 +405,8 @@ export const getActivityById = cache(async (userId: string, activityId: string) 
       .where(and(eq(activities.id, activityId), eq(activities.userId, userId)))
       .limit(1);
     return activity ?? null;
-  } catch {
+  } catch (err) {
+    captureError("queries.getActivityById", err);
     return null;
   }
 });
@@ -419,7 +430,8 @@ export const getCachedAnalysis = cache(
         )
         .limit(1);
       return analysis ?? null;
-    } catch {
+    } catch (err) {
+      captureError("queries.getCachedAnalysis", err);
       return null;
     }
   }
@@ -463,8 +475,10 @@ export async function insertChatMessage(input: {
 }): Promise<void> {
   try {
     await db.insert(chatMessages).values(input);
-  } catch {
-    // Best-effort — the message simply isn't persisted.
+  } catch (err) {
+    // Best-effort — the message simply isn't persisted, but the failure is
+    // still surfaced so a silently-broken chat history is observable.
+    captureError("queries.insertChatMessage", err);
   }
 }
 
@@ -487,7 +501,8 @@ export async function getChatHistory(
       .orderBy(desc(chatMessages.createdAt))
       .limit(limit);
     return rows.reverse() as { role: "user" | "assistant"; content: string }[];
-  } catch {
+  } catch (err) {
+    captureError("queries.getChatHistory", err);
     return [];
   }
 }
