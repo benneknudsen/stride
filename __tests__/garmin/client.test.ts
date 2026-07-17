@@ -155,7 +155,19 @@ function redirectResponse(status: number) {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
+/**
+ * A fixed wall-clock instant for every test. The token-refresh path reads
+ * `Date.now()` internally (client.ts) while the tests seed expiry as
+ * `new Date(Date.now() + 61_000)` at setup time. Under the real clock those two
+ * reads drift by a few ms, which can tip the `Math.floor(secondsLeft)` math
+ * across the 60s refresh boundary and flake the suite (and leak wall-clock state
+ * across files). Freezing the clock makes both reads return the same instant.
+ */
+const FIXED_NOW = new Date("2026-01-15T12:00:00.000Z").getTime();
+
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FIXED_NOW);
   dbMock.reset();
   cryptoMock.decrypt.mockReset();
   cryptoMock.encrypt.mockReset();
@@ -166,6 +178,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
