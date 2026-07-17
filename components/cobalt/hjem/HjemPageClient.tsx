@@ -58,7 +58,18 @@ export function HjemPageClient({
   isDemo?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
-  const [greeting] = useState(() => greetingForHour(new Date().getHours()));
+  // The greeting follows the visitor's local clock, so it can't be resolved
+  // during SSR: the server (Vercel = UTC) and the browser (e.g. dansk tid) can
+  // land in different branches of greetingForHour, which used to hydrate as a
+  // React mismatch and a wrong first-paint greeting (#134). Start from a neutral
+  // placeholder that renders identically on both sides, then correct it to the
+  // real local-time greeting once mounted — no mismatch, no broken-punctuation
+  // flash, no layout shift (every branch is a single word on the same line).
+  const [greeting, setGreeting] = useState("Goddag");
+
+  useEffect(() => {
+    setGreeting(greetingForHour(new Date().getHours()));
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 300);
