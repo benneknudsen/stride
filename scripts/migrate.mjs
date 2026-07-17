@@ -1,9 +1,9 @@
 // Kører Drizzle-migration på Vercel-deploy
 // Drizzle-kit genererer SQL-filerne, denne kører dem mod databasen
 
+import { Pool } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { migrate } from "drizzle-orm/neon-serverless/migrator";
-import { Pool } from "@neondatabase/serverless";
 
 const connectionString = process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
 if (!connectionString) {
