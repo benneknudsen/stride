@@ -1,15 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import {
-  bricolage,
-  geistMono,
-  geistSans,
-  instrumentSans,
-  instrumentSerif,
-  spaceGrotesk,
-  splineMono,
-} from "@/lib/fonts";
+import { bricolage, instrumentSans, instrumentSerif, splineMono } from "@/lib/fonts";
 import "./globals.css";
 
 // Absolute URLs for og:image/twitter:image resolve against metadataBase.
@@ -71,7 +63,7 @@ export default async function RootLayout({
     <html
       lang="da"
       suppressHydrationWarning
-      className={`${spaceGrotesk.variable} ${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${instrumentSans.variable} ${instrumentSerif.variable} ${splineMono.variable} h-full antialiased`}
+      className={`${bricolage.variable} ${instrumentSans.variable} ${instrumentSerif.variable} ${splineMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-gradient-to-br from-bg to-bg-2">
         <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
