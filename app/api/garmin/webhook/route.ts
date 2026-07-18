@@ -1,11 +1,15 @@
 import { timingSafeEqual } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { activities, users } from "@/drizzle/schema";
+import { activities } from "@/drizzle/schema";
 import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
-import { deleteGarminTokens, revalidateDashboardActivities } from "@/lib/db/queries";
+import {
+  deleteGarminTokens,
+  getUserByGarminUserId,
+  revalidateDashboardActivities,
+} from "@/lib/db/queries";
 import { withGarminTokenRefresh } from "@/lib/garmin/client";
 import { isAllowedCallbackUrl } from "@/lib/garmin/config";
 import { mapGarminActivityToDb } from "@/lib/garmin/mappers";
@@ -70,16 +74,6 @@ function isSummary(item: GarminPushItem): item is GarminPushItem & GarminActivit
     typeof item.durationInSeconds === "number" &&
     typeof item.activityType === "string"
   );
-}
-
-/** Resolve the Stride user a Garmin push belongs to. */
-async function findUserByGarminId(garminUserId: string) {
-  const rows = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.garminUserId, garminUserId))
-    .limit(1);
-  return rows[0] ?? null;
 }
 
 async function upsertSummaries(
@@ -154,7 +148,7 @@ export async function POST(req: NextRequest) {
   // stops claiming a live connection; their synced runs stay (see
   // deleteGarminTokens).
   for (const dereg of payload.deregistrations ?? []) {
-    const user = await findUserByGarminId(dereg.userId);
+    const user = await getUserByGarminUserId(dereg.userId);
     if (user) await deleteGarminTokens(user.id);
   }
 
@@ -176,7 +170,7 @@ export async function POST(req: NextRequest) {
   let ingested = 0;
 
   for (const [garminUserId, group] of byGarminUser) {
-    const user = await findUserByGarminId(garminUserId);
+    const user = await getUserByGarminUserId(garminUserId);
     // Not our athlete (or they disconnected). Ack — retrying changes nothing.
     if (!user) continue;
 

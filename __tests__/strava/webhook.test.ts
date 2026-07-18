@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const SECRET = "strava-client-secret";
 const VERIFY_TOKEN = "strava-verify-token";
 
-const { dbMock, clientMock, mappersMock, revalidateMock } = vi.hoisted(() => {
+const { dbMock, clientMock, mappersMock, queriesMock, coachMock } = vi.hoisted(() => {
   // biome-ignore lint/suspicious/noExplicitAny: mirrors Drizzle's loosely-typed fluent builder
   type Any = any;
 
@@ -28,21 +28,17 @@ const { dbMock, clientMock, mappersMock, revalidateMock } = vi.hoisted(() => {
     calls[name] = (calls[name] ?? 0) + 1;
   };
 
-  let selectResult: Any = [];
-
+  // Writes (insert/delete/upsert) go through this thenable builder; their
+  // resolved value is ignored, so it just resolves empty. Resolving the owning
+  // user no longer touches `db` — it is mocked on @/lib/db/queries below.
   const builder: Any = {
     // biome-ignore lint/suspicious/noThenProperty: intentional thenable stubbing Drizzle's awaitable builder
-    then: (onFulfilled: Any, onRejected: Any) =>
-      Promise.resolve(selectResult).then(onFulfilled, onRejected),
+    then: (onFulfilled: Any, onRejected: Any) => Promise.resolve([]).then(onFulfilled, onRejected),
   };
   for (const m of ["from", "where", "limit", "values", "onConflictDoUpdate", "set", "returning"]) {
     builder[m] = () => builder;
   }
 
-  const select = vi.fn(() => {
-    bump("select");
-    return builder;
-  });
   const insert = vi.fn(() => {
     bump("insert");
     return builder;
@@ -59,20 +55,17 @@ const { dbMock, clientMock, mappersMock, revalidateMock } = vi.hoisted(() => {
 
   return {
     dbMock: {
-      db: { select, insert, delete: del, transaction, execute },
+      db: { insert, delete: del, transaction, execute },
       calls,
-      setUser(row: Any) {
-        selectResult = row ? [row] : [];
-      },
       reset() {
         for (const k of Object.keys(calls)) delete calls[k];
-        selectResult = [];
-        for (const fn of [select, insert, del, execute, transaction]) fn.mockClear();
+        for (const fn of [insert, del, execute, transaction]) fn.mockClear();
       },
     },
     clientMock: { getActivity: vi.fn() },
     mappersMock: { mapStravaToDb: vi.fn() },
-    revalidateMock: { revalidateProgression: vi.fn(), revalidateDashboardActivities: vi.fn() },
+    queriesMock: { getUserByStravaAthleteId: vi.fn(), revalidateDashboardActivities: vi.fn() },
+    coachMock: { revalidateProgression: vi.fn() },
   };
 });
 
@@ -82,10 +75,11 @@ vi.mock("@/lib/strava/client", () => ({
 }));
 vi.mock("@/lib/strava/mappers", () => ({ mapStravaToDb: mappersMock.mapStravaToDb }));
 vi.mock("@/lib/coach/dashboard-data", () => ({
-  revalidateProgression: revalidateMock.revalidateProgression,
+  revalidateProgression: coachMock.revalidateProgression,
 }));
 vi.mock("@/lib/db/queries", () => ({
-  revalidateDashboardActivities: revalidateMock.revalidateDashboardActivities,
+  getUserByStravaAthleteId: queriesMock.getUserByStravaAthleteId,
+  revalidateDashboardActivities: queriesMock.revalidateDashboardActivities,
 }));
 
 import { GET, POST } from "@/app/api/strava/webhook/route";
@@ -127,8 +121,10 @@ beforeEach(() => {
     stravaActivityId: 555,
     name: "Morning Run",
   });
-  revalidateMock.revalidateProgression.mockReset();
-  revalidateMock.revalidateDashboardActivities.mockReset();
+  // Default: the athlete id resolves to no user; the ingest tests override this.
+  queriesMock.getUserByStravaAthleteId.mockReset().mockResolvedValue(null);
+  queriesMock.revalidateDashboardActivities.mockReset();
+  coachMock.revalidateProgression.mockReset();
   vi.stubEnv("STRAVA_CLIENT_SECRET", SECRET);
   vi.stubEnv("STRAVA_VERIFY_TOKEN", VERIFY_TOKEN);
 });
@@ -180,7 +176,7 @@ describe("POST signature verification", () => {
   it("rejects a request with no signature header (401)", async () => {
     const res = await POST(postRequest(CREATE_EVENT, ""));
     expect(res.status).toBe(401);
-    expect(dbMock.db.select).not.toHaveBeenCalled();
+    expect(queriesMock.getUserByStravaAthleteId).not.toHaveBeenCalled();
   });
 
   it("rejects a tampered/incorrect signature (401)", async () => {
@@ -202,7 +198,7 @@ describe("POST signature verification", () => {
   });
 
   it("accepts a correctly signed body (200)", async () => {
-    dbMock.setUser({ id: "u1", stravaAthleteId: 42 });
+    queriesMock.getUserByStravaAthleteId.mockResolvedValue({ id: "u1" });
     const res = await POST(postRequest(CREATE_EVENT));
     expect(res.status).toBe(200);
   });
@@ -217,11 +213,11 @@ describe("POST event routing", () => {
     const res = await POST(postRequest({ ...CREATE_EVENT, object_type: "athlete" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(dbMock.db.select).not.toHaveBeenCalled();
+    expect(queriesMock.getUserByStravaAthleteId).not.toHaveBeenCalled();
   });
 
   it("acks (200) an activity event for an unknown athlete without ingesting", async () => {
-    dbMock.setUser(null); // no matching user
+    queriesMock.getUserByStravaAthleteId.mockResolvedValue(null); // no matching user
     const res = await POST(postRequest(CREATE_EVENT));
     expect(res.status).toBe(200);
     expect(dbMock.db.transaction).not.toHaveBeenCalled();
@@ -229,7 +225,7 @@ describe("POST event routing", () => {
   });
 
   it("ingests a create event: fetches, maps, upserts, and revalidates", async () => {
-    dbMock.setUser({ id: "u1", stravaAthleteId: 42 });
+    queriesMock.getUserByStravaAthleteId.mockResolvedValue({ id: "u1" });
     const res = await POST(postRequest(CREATE_EVENT));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -237,24 +233,24 @@ describe("POST event routing", () => {
     expect(mappersMock.mapStravaToDb).toHaveBeenCalledTimes(1);
     expect(dbMock.db.transaction).toHaveBeenCalledTimes(1);
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
-    expect(revalidateMock.revalidateProgression).toHaveBeenCalledTimes(1);
-    expect(revalidateMock.revalidateDashboardActivities).toHaveBeenCalledWith("u1");
+    expect(coachMock.revalidateProgression).toHaveBeenCalledTimes(1);
+    expect(queriesMock.revalidateDashboardActivities).toHaveBeenCalledWith("u1");
   });
 
   it("handles a delete event by removing the row, not fetching from Strava", async () => {
-    dbMock.setUser({ id: "u1", stravaAthleteId: 42 });
+    queriesMock.getUserByStravaAthleteId.mockResolvedValue({ id: "u1" });
     const res = await POST(postRequest({ ...CREATE_EVENT, aspect_type: "delete" }));
     expect(res.status).toBe(200);
     expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
     expect(clientMock.getActivity).not.toHaveBeenCalled();
-    expect(revalidateMock.revalidateProgression).toHaveBeenCalledTimes(1);
+    expect(coachMock.revalidateProgression).toHaveBeenCalledTimes(1);
   });
 
   it("returns 500 (so Strava retries) when ingestion throws", async () => {
-    dbMock.setUser({ id: "u1", stravaAthleteId: 42 });
+    queriesMock.getUserByStravaAthleteId.mockResolvedValue({ id: "u1" });
     clientMock.getActivity.mockRejectedValueOnce(new Error("Strava API error 500"));
     const res = await POST(postRequest(CREATE_EVENT));
     expect(res.status).toBe(500);
-    expect(revalidateMock.revalidateProgression).not.toHaveBeenCalled();
+    expect(coachMock.revalidateProgression).not.toHaveBeenCalled();
   });
 });

@@ -25,35 +25,20 @@ const { dbMock, clientMock, mappersMock, queriesMock, coachMock } = vi.hoisted((
     calls[name] = (calls[name] ?? 0) + 1;
   };
 
-  // Resolve findUserByGarminId by Garmin user id; unmapped ids → no user.
+  // Maps a Garmin user id → its Stride user row; drives the mocked
+  // getUserByGarminUserId below. Unmapped ids resolve to no user.
   let userByGarminId: Record<string, Any> = {};
-  let nextGarminIdInWhere: string | null = null;
 
+  // Writes (the upsert) go through this thenable builder; the resolved value is
+  // ignored, so it just resolves empty. Resolving the owning user no longer
+  // touches `db` — it is mocked on @/lib/db/queries.
   const builder: Any = {
     // biome-ignore lint/suspicious/noThenProperty: intentional thenable stubbing Drizzle's awaitable builder
-    then: (onFulfilled: Any, onRejected: Any) => {
-      const id = nextGarminIdInWhere;
-      nextGarminIdInWhere = null;
-      const row = id && userByGarminId[id] ? [userByGarminId[id]] : [];
-      return Promise.resolve(row).then(onFulfilled, onRejected);
-    },
-    from: () => builder,
-    // The route filters on eq(users.garminUserId, garminUserId); capture the value.
-    where: (cond: Any) => {
-      // drizzle's eq() builds an opaque node; the route only ever compares the
-      // garmin id here, so pull it back out of our own marker if present.
-      if (cond?.__garminId) nextGarminIdInWhere = cond.__garminId;
-      return builder;
-    },
-    limit: () => builder,
+    then: (onFulfilled: Any, onRejected: Any) => Promise.resolve([]).then(onFulfilled, onRejected),
     values: () => builder,
     onConflictDoUpdate: () => builder,
   };
 
-  const select = vi.fn(() => {
-    bump("select");
-    return builder;
-  });
   const insert = vi.fn(() => {
     bump("insert");
     return builder;
@@ -66,7 +51,7 @@ const { dbMock, clientMock, mappersMock, queriesMock, coachMock } = vi.hoisted((
 
   return {
     dbMock: {
-      db: { select, insert, transaction, execute },
+      db: { insert, transaction, execute },
       calls,
       setUsers(map: Record<string, Any>) {
         userByGarminId = map;
@@ -74,24 +59,19 @@ const { dbMock, clientMock, mappersMock, queriesMock, coachMock } = vi.hoisted((
       reset() {
         for (const k of Object.keys(calls)) delete calls[k];
         userByGarminId = {};
-        nextGarminIdInWhere = null;
-        for (const fn of [select, insert, execute, transaction]) fn.mockClear();
+        for (const fn of [insert, execute, transaction]) fn.mockClear();
       },
     },
     clientMock: { fetchCallback: vi.fn() },
     mappersMock: { mapGarminActivityToDb: vi.fn() },
-    queriesMock: { deleteGarminTokens: vi.fn(), revalidateDashboardActivities: vi.fn() },
+    queriesMock: {
+      // Reads userByGarminId (set via dbMock.setUsers) so the existing tests
+      // drive user resolution exactly as before, now through the query seam.
+      getUserByGarminUserId: vi.fn(async (id: string) => userByGarminId[id] ?? null),
+      deleteGarminTokens: vi.fn(),
+      revalidateDashboardActivities: vi.fn(),
+    },
     coachMock: { revalidateProgression: vi.fn() },
-  };
-});
-
-// Make eq(users.garminUserId, id) carry the id through to our where() capture.
-vi.mock("drizzle-orm", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("drizzle-orm")>();
-  return {
-    ...actual,
-    // biome-ignore lint/suspicious/noExplicitAny: test shim over drizzle's eq
-    eq: (_col: any, value: any) => ({ __garminId: value }),
   };
 });
 
@@ -106,6 +86,7 @@ vi.mock("@/lib/coach/dashboard-data", () => ({
   revalidateProgression: coachMock.revalidateProgression,
 }));
 vi.mock("@/lib/db/queries", () => ({
+  getUserByGarminUserId: queriesMock.getUserByGarminUserId,
   deleteGarminTokens: queriesMock.deleteGarminTokens,
   revalidateDashboardActivities: queriesMock.revalidateDashboardActivities,
 }));
@@ -165,7 +146,7 @@ describe("token verification", () => {
   it("rejects a POST with no token (401)", async () => {
     const res = await POST(postRequest({ activities: [] }));
     expect(res.status).toBe(401);
-    expect(dbMock.db.select).not.toHaveBeenCalled();
+    expect(queriesMock.getUserByGarminUserId).not.toHaveBeenCalled();
   });
 
   it("rejects a POST with the wrong token (401)", async () => {

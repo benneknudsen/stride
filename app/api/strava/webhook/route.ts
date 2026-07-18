@@ -2,10 +2,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { activities, users } from "@/drizzle/schema";
+import { activities } from "@/drizzle/schema";
 import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
-import { revalidateDashboardActivities } from "@/lib/db/queries";
+import { getUserByStravaAthleteId, revalidateDashboardActivities } from "@/lib/db/queries";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
 
@@ -91,13 +91,7 @@ export async function POST(req: NextRequest) {
   const stravaAthleteId = body.owner_id;
   const stravaActivityId = body.object_id;
 
-  const userRows = await db
-    .select()
-    .from(users)
-    .where(eq(users.stravaAthleteId, stravaAthleteId))
-    .limit(1);
-
-  const user = userRows[0];
+  const user = await getUserByStravaAthleteId(stravaAthleteId);
   if (!user) {
     return NextResponse.json({ ok: true });
   }
