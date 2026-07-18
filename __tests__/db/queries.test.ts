@@ -110,7 +110,9 @@ import {
   getRacePlan,
   getStravaTokens,
   getUserByEmail,
+  getUserByGarminUserId,
   getUserById,
+  getUserByStravaAthleteId,
   getUserHrMax,
   insertAnalysis,
   insertChatMessage,
@@ -248,6 +250,53 @@ describe("getAccountsByUserId", () => {
   it("returns an empty array when the query throws", async () => {
     mock.setError(DB_ERROR);
     expect(await getAccountsByUserId("u1")).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getUserByStravaAthleteId / getUserByGarminUserId — webhook identity
+// resolution. Unlike the getters above, these deliberately do NOT swallow a DB
+// error into null: a webhook must surface it (→ 5xx) so the provider retries,
+// rather than acking 200 and dropping the event as an "unknown athlete".
+// ---------------------------------------------------------------------------
+
+describe("getUserByStravaAthleteId", () => {
+  it("returns the owning user's id when the athlete is linked", async () => {
+    mock.setResult([{ id: "u1" }]);
+    expect(await getUserByStravaAthleteId(42)).toEqual({ id: "u1" });
+  });
+
+  it("selects only the id column", async () => {
+    mock.setResult([{ id: "u1" }]);
+    await getUserByStravaAthleteId(42);
+    expect(mock.db.select).toHaveBeenCalledWith({ id: expect.anything() });
+  });
+
+  it("returns null when no user owns the athlete id", async () => {
+    mock.setResult([]);
+    expect(await getUserByStravaAthleteId(999)).toBeNull();
+  });
+
+  it("propagates a DB error instead of swallowing it (the webhook must retry)", async () => {
+    mock.setError(DB_ERROR);
+    await expect(getUserByStravaAthleteId(42)).rejects.toThrow("connection refused");
+  });
+});
+
+describe("getUserByGarminUserId", () => {
+  it("returns the owning user's id when the Garmin id is linked", async () => {
+    mock.setResult([{ id: "u1" }]);
+    expect(await getUserByGarminUserId("garmin-1")).toEqual({ id: "u1" });
+  });
+
+  it("returns null when no user owns the Garmin id", async () => {
+    mock.setResult([]);
+    expect(await getUserByGarminUserId("ghost")).toBeNull();
+  });
+
+  it("propagates a DB error instead of swallowing it (the webhook must retry)", async () => {
+    mock.setError(DB_ERROR);
+    await expect(getUserByGarminUserId("garmin-1")).rejects.toThrow("connection refused");
   });
 });
 

@@ -134,6 +134,40 @@ export const getAccountsByUserId = cache(async (userId: string) => {
 });
 
 // ---------------------------------------------------------------------------
+// User identity resolution (by external provider id)
+//
+// The inverse of the userId-scoped reads above: the sync and webhook routes
+// only know a provider's own identifier — a Strava athlete id, a Garmin user
+// id — and need to resolve which Stride user owns it. Both columns are uniquely
+// indexed, so at most one row can match.
+//
+// Unlike the request-scoped getters, these deliberately do NOT swallow a DB
+// error into `null`. A webhook that can't tell "no such athlete" apart from "a
+// transient DB failure" would ack 200 and drop the event for good; letting the
+// error propagate makes the route answer 5xx so the provider re-delivers it.
+// ---------------------------------------------------------------------------
+
+/** Resolve the Stride user linked to a Strava athlete id (Strava webhook). */
+export const getUserByStravaAthleteId = cache(async (stravaAthleteId: number) => {
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.stravaAthleteId, stravaAthleteId))
+    .limit(1);
+  return user ?? null;
+});
+
+/** Resolve the Stride user linked to a Garmin user id (Garmin webhook). */
+export const getUserByGarminUserId = cache(async (garminUserId: string) => {
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.garminUserId, garminUserId))
+    .limit(1);
+  return user ?? null;
+});
+
+// ---------------------------------------------------------------------------
 // Strava tokens (encrypted at rest)
 // ---------------------------------------------------------------------------
 
