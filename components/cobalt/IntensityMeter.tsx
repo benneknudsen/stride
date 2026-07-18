@@ -10,7 +10,7 @@ const BAR_IDS = ["b1", "b2", "b3", "b4", "b5"];
 const TONE_COLOR: Record<IntensityTone, string> = {
   cobalt: "var(--color-cobalt)",
   red: "var(--color-red)",
-  inactive: "rgba(27, 41, 192, 0.15)",
+  inactive: "color-mix(in srgb, var(--color-cobalt) 15%, transparent)",
 };
 
 export function IntensityMeter({
@@ -37,7 +37,7 @@ export function IntensityMeter({
         width: size,
         height: size,
         background: "rgba(255, 255, 255, 0.55)",
-        borderColor: "rgba(27, 41, 192, 0.15)",
+        borderColor: "color-mix(in srgb, var(--color-cobalt) 15%, transparent)",
       }}
     >
       {BAR_HEIGHTS.map((height, i) => (

@@ -99,7 +99,8 @@ export function BottomTabBar({
           border: "1px solid rgba(255,255,255,0.85)",
           backdropFilter: "blur(28px)",
           WebkitBackdropFilter: "blur(28px)",
-          boxShadow: "0 12px 36px rgba(27,41,192,0.18), inset 0 1px 0 rgba(255,255,255,0.9)",
+          boxShadow:
+            "0 12px 36px color-mix(in srgb, var(--color-cobalt) 18%, transparent), inset 0 1px 0 rgba(255,255,255,0.9)",
         }}
       />
       {tabs.map((tab) => {

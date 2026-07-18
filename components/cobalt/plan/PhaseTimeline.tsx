@@ -5,8 +5,9 @@ import type { PhaseMarker, PhaseSegment } from "@/lib/cobalt/plan";
 // show progress through the current phase.
 const SEGMENT_STYLE: Record<PhaseSegment["fill"], string> = {
   done: "var(--color-cobalt)",
-  active: "linear-gradient(90deg, var(--color-cobalt) 55%, rgba(27,41,192,0.15) 55%)",
-  upcoming: "rgba(27,41,192,0.15)",
+  active:
+    "linear-gradient(90deg, var(--color-cobalt) 55%, color-mix(in srgb, var(--color-cobalt) 15%, transparent) 55%)",
+  upcoming: "color-mix(in srgb, var(--color-cobalt) 15%, transparent)",
 };
 
 // Label colour per phase state.

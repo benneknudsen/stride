@@ -12,7 +12,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         className={cn(
           "max-w-[78%] px-[18px] py-[14px] text-[14.5px] leading-[1.55]",
           "[animation:cg-fade-up_0.4s_ease_both] motion-reduce:[animation:none]",
-          "shadow-[0_4px_18px_rgba(27,41,192,0.08)]",
+          "shadow-[0_4px_18px_color-mix(in_srgb,var(--color-cobalt)_8%,transparent)]",
           isUser
             ? "rounded-[18px_18px_6px_18px] border border-cobalt/90 bg-cobalt text-silver"
             : "rounded-[18px_18px_18px_6px] border border-white/85 bg-white/60 text-cobalt"

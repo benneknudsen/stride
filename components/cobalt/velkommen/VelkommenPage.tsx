@@ -38,7 +38,7 @@ export function VelkommenPage() {
             border reads as a rendering artifact rather than as glass. */}
         <Link
           href={ROUTES.LOGIN}
-          className="cg-interactive rounded-pill bg-white px-5 py-2 text-[13px] font-semibold text-cobalt shadow-[0_8px_24px_rgba(27,41,192,0.14)] transition-colors hover:text-red"
+          className="cg-interactive rounded-pill bg-white px-5 py-2 text-[13px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red"
         >
           Log ind
         </Link>
@@ -68,13 +68,13 @@ export function VelkommenPage() {
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link
               href={DEMO_HOME_ROUTE}
-              className="cg-interactive rounded-pill bg-cobalt px-7 py-3 text-[14px] font-semibold text-white shadow-[0_12px_36px_rgba(27,41,192,0.35)] transition-opacity hover:opacity-90"
+              className="cg-interactive rounded-pill bg-cobalt px-7 py-3 text-[14px] font-semibold text-white shadow-[0_12px_36px_color-mix(in_srgb,var(--color-cobalt)_35%,transparent)] transition-opacity hover:opacity-90"
             >
               Udforsk demoen
             </Link>
             <Link
               href={ROUTES.LOGIN}
-              className="cg-interactive rounded-pill bg-white px-7 py-3 text-[14px] font-semibold text-cobalt shadow-[0_8px_24px_rgba(27,41,192,0.14)] transition-colors hover:text-red"
+              className="cg-interactive rounded-pill bg-white px-7 py-3 text-[14px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red"
             >
               Log ind
             </Link>

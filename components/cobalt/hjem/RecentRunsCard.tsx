@@ -21,7 +21,10 @@ export function RecentRunsCard({ runs }: { runs: RecentRunView[] }) {
             className={`flex items-center gap-4 rounded-card px-2 py-3 transition-colors hover:bg-white/50 ${
               i > 0 ? "border-t" : ""
             }`}
-            style={{ borderColor: i > 0 ? "rgba(27,41,192,0.08)" : undefined }}
+            style={{
+              borderColor:
+                i > 0 ? "color-mix(in srgb, var(--color-cobalt) 8%, transparent)" : undefined,
+            }}
           >
             <IntensityMeter level={run.zone.level} label={`Intensitet: ${run.zone.label}`} />
 

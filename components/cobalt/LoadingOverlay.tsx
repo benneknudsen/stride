@@ -45,7 +45,7 @@ export function LoadingOverlay({
         className
       )}
       style={{
-        background: "rgba(233, 234, 229, 0.4)",
+        background: "color-mix(in srgb, var(--color-silver) 40%, transparent)",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
       }}
