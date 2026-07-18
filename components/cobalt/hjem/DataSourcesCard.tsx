@@ -20,7 +20,7 @@ import { ROUTES } from "@/lib/routes";
 // A plain-language zone legend sits at the bottom — no "Z2"/"Z4" codes anywhere.
 const ZONE_LEGEND = [
   { label: "Rolig snak-fart", color: "var(--color-cobalt)" },
-  { label: "Moderat tempo", color: "rgba(27,41,192,0.6)" },
+  { label: "Moderat tempo", color: "color-mix(in srgb, var(--color-cobalt) 60%, transparent)" },
   { label: "Hårdt tempo", color: "var(--color-red)" },
 ];
 
@@ -173,7 +173,10 @@ export function DataSourcesCard({
         ) : null}
       </div>
 
-      <div className="mt-5 border-t pt-4" style={{ borderColor: "rgba(27,41,192,0.1)" }}>
+      <div
+        className="mt-5 border-t pt-4"
+        style={{ borderColor: "color-mix(in srgb, var(--color-cobalt) 10%, transparent)" }}
+      >
         <div className="mb-2.5 font-cg-mono text-[9.5px] uppercase tracking-[0.16em] text-ink">
           Zoner i klartekst
         </div>

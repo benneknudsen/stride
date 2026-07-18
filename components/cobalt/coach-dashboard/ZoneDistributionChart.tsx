@@ -32,7 +32,7 @@ export function ZoneDistributionChart({ data }: { data: ZoneWeek[] }) {
               tickFormatter={(v: number) => `${v}%`}
             />
             <Tooltip
-              cursor={{ fill: "rgba(27, 41, 192, 0.05)" }}
+              cursor={{ fill: "color-mix(in srgb, var(--color-cobalt) 5%, transparent)" }}
               contentStyle={{
                 backgroundColor: "#ffffff",
                 border: "1px solid #dfe1ea",

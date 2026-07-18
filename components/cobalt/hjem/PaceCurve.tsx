@@ -33,8 +33,11 @@ export function PaceCurve({ samples, started }: { samples: number[]; started: bo
       />
       <defs>
         <linearGradient id="cg-pace-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(27,41,192,0.18)" />
-          <stop offset="100%" stopColor="rgba(27,41,192,0)" />
+          {/* Relative color keeps the fade on the cobalt hue; color-mix() to
+              transparent collapses the end stop to transparent black and grays
+              the mid-tones. */}
+          <stop offset="0%" stopColor="rgb(from var(--color-cobalt) r g b / 0.18)" />
+          <stop offset="100%" stopColor="rgb(from var(--color-cobalt) r g b / 0)" />
         </linearGradient>
       </defs>
       <path

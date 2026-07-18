@@ -93,7 +93,7 @@ export function PaceTrendCard({
                       x2={W - PAD_X}
                       y1={y(pace)}
                       y2={y(pace)}
-                      stroke="rgba(85,96,168,0.18)"
+                      stroke="color-mix(in srgb, var(--color-ink) 18%, transparent)"
                       strokeWidth={1}
                     />
                     <text
@@ -118,8 +118,11 @@ export function PaceTrendCard({
             />
             <defs>
               <linearGradient id="cg-pace-trend-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgba(27,41,192,0.14)" />
-                <stop offset="100%" stopColor="rgba(27,41,192,0)" />
+                {/* Relative color keeps the fade on the cobalt hue; color-mix()
+                    to transparent collapses the end stop to transparent black
+                    and grays the mid-tones. */}
+                <stop offset="0%" stopColor="rgb(from var(--color-cobalt) r g b / 0.14)" />
+                <stop offset="100%" stopColor="rgb(from var(--color-cobalt) r g b / 0)" />
               </linearGradient>
             </defs>
 
@@ -186,7 +189,7 @@ export function PaceTrendCard({
                 top: `${(coords[hovered ?? 0][1] / H) * 100}%`,
                 background: "rgba(255,255,255,0.92)",
                 border: "1px solid rgba(255,255,255,0.9)",
-                boxShadow: "0 6px 20px rgba(27,41,192,0.16)",
+                boxShadow: "0 6px 20px color-mix(in srgb, var(--color-cobalt) 16%, transparent)",
               }}
             >
               {active.dateLabel} · <span className="font-semibold">{active.paceLabel}</span> /km ·{" "}

@@ -45,7 +45,7 @@ export function PlanStrip({
         </span>
         <div
           className="h-[8px] flex-1 overflow-hidden rounded-pill"
-          style={{ background: "rgba(27, 41, 192, 0.12)" }}
+          style={{ background: "color-mix(in srgb, var(--color-cobalt) 12%, transparent)" }}
         >
           <div
             className="h-full rounded-pill motion-reduce:!transition-none"
@@ -65,7 +65,7 @@ export function PlanStrip({
       <Link
         href={ROUTES.PLAN}
         className="cg-interactive inline-flex min-h-[44px] items-center rounded-pill border px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
-        style={{ borderColor: "rgba(27, 41, 192, 0.3)" }}
+        style={{ borderColor: "color-mix(in srgb, var(--color-cobalt) 30%, transparent)" }}
       >
         Se plan →
       </Link>

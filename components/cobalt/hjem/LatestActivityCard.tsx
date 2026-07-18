@@ -71,7 +71,10 @@ export function LatestActivityCard({
             latest.zone.tone === "red" ? "text-red" : "text-cobalt"
           }`}
           style={{
-            background: latest.zone.tone === "red" ? "rgba(238,36,24,0.1)" : "rgba(27,41,192,0.09)",
+            background:
+              latest.zone.tone === "red"
+                ? "color-mix(in srgb, var(--color-red) 10%, transparent)"
+                : "color-mix(in srgb, var(--color-cobalt) 9%, transparent)",
           }}
         >
           Zone {latest.zone.level} · {latest.zone.label}
