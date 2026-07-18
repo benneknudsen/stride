@@ -15,6 +15,7 @@ import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
+import { useStartupReveal } from "@/hooks/useStartupReveal";
 import { greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
 import { ROUTES } from "@/lib/routes";
 
@@ -57,7 +58,7 @@ export function HjemPageClient({
   /** True only for a visitor on `?demo=1` (#124) — never for a signed-in user. */
   isDemo?: boolean;
 }) {
-  const [loading, setLoading] = useState(true);
+  const { loading, started } = useStartupReveal();
   // The greeting follows the visitor's clock, but `new Date()` during SSR reads
   // the server's clock (Vercel = UTC), so seeding it here would let server and
   // client render different branches of greetingForHour → hydration mismatch and
@@ -70,13 +71,6 @@ export function HjemPageClient({
   useEffect(() => {
     setGreeting(greetingForHour(new Date().getHours()));
   }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const started = !loading;
 
   return (
     <main>
