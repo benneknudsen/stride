@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
 import { PhaseTimeline } from "@/components/cobalt/plan/PhaseTimeline";
 import { PlanHeader } from "@/components/cobalt/plan/PlanHeader";
@@ -8,6 +8,7 @@ import { RaceDateDialog } from "@/components/cobalt/plan/RaceDateDialog";
 import { RaceDayCard } from "@/components/cobalt/plan/RaceDayCard";
 import { UpcomingWeeks } from "@/components/cobalt/plan/UpcomingWeeks";
 import { WeekCalendar } from "@/components/cobalt/plan/WeekCalendar";
+import { useStartupReveal } from "@/hooks/useStartupReveal";
 import type { PlanView } from "@/lib/cobalt/plan";
 
 // Plan — the Cobalt Glass training-plan page. Owns the client-only loading
@@ -32,15 +33,8 @@ export function PlanPageClient({
   /** The user has picked their own race (users.race_date is set). */
   hasOwnRace?: boolean;
 }) {
-  const [loading, setLoading] = useState(true);
+  const { loading, started } = useStartupReveal();
   const [dialogOpen, setDialogOpen] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const started = !loading;
   const openDialog = () => setDialogOpen(true);
 
   return (

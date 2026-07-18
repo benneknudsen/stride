@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ActivitiesHeader } from "@/components/cobalt/aktiviteter/ActivitiesHeader";
 import { ActivityRow } from "@/components/cobalt/aktiviteter/ActivityRow";
 import { FilterChips } from "@/components/cobalt/aktiviteter/FilterChips";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
+import { useStartupReveal } from "@/hooks/useStartupReveal";
 import type { ActivitiesView, ActivityFilter } from "@/lib/cobalt/aktiviteter";
 
 // Aktiviteter (Activities) — the Cobalt Glass list page. Owns the client-only
@@ -14,15 +15,8 @@ import type { ActivitiesView, ActivityFilter } from "@/lib/cobalt/aktiviteter";
 // sequence. The view itself is built server-side (demo or live) and arrives as
 // a plain-JSON prop.
 export function AktiviteterPageClient({ view }: { view: ActivitiesView }) {
-  const [loading, setLoading] = useState(true);
+  const { loading, started } = useStartupReveal();
   const [filter, setFilter] = useState<ActivityFilter>("alle");
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const started = !loading;
   const rows = filter === "alle" ? view.rows : view.rows.filter((r) => r.category === filter);
 
   return (

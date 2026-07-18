@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
 import { ChatPanel } from "@/components/cobalt/coach/ChatPanel";
 import { FormStatusCard } from "@/components/cobalt/coach/FormStatusCard";
 import { TrainingLoadCard } from "@/components/cobalt/coach/TrainingLoadCard";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
+import { useStartupReveal } from "@/hooks/useStartupReveal";
 import type { CoachView } from "@/lib/cobalt/coach";
 
 // Widget wrapper applying the staggered fadeUp entrance to a right-column panel.
@@ -30,14 +30,7 @@ function Panel({ delay, children }: { delay: number; children: ReactNode }) {
 // 14-day load bars animate in. The view itself is built server-side (demo or
 // live) and arrives as a plain-JSON prop.
 export function CoachConsole({ view }: { view: CoachView }) {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const started = !loading;
+  const { loading, started } = useStartupReveal();
 
   return (
     <div className="relative">
