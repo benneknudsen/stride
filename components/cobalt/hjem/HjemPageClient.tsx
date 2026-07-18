@@ -58,7 +58,18 @@ export function HjemPageClient({
   isDemo?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
-  const [greeting] = useState(() => greetingForHour(new Date().getHours()));
+  // The greeting follows the visitor's clock, but `new Date()` during SSR reads
+  // the server's clock (Vercel = UTC), so seeding it here would let server and
+  // client render different branches of greetingForHour → hydration mismatch and
+  // a wrong first paint. Instead render a neutral placeholder ("Goddag") that's
+  // identical on both sides, then swap in the real, local-clock greeting in an
+  // effect after mount (#134). The placeholder shares the greeting's length range,
+  // so the swap doesn't shift layout.
+  const [greeting, setGreeting] = useState("Goddag");
+
+  useEffect(() => {
+    setGreeting(greetingForHour(new Date().getHours()));
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 300);
