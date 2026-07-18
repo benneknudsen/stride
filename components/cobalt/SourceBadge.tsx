@@ -17,7 +17,7 @@ export function SourceBadge({ source, className }: { source: ActivitySource; cla
         "inline-flex items-center gap-1.5 rounded-pill border px-[10px] py-[3px] font-cg-mono text-[9.5px] tracking-[0.08em] text-ink",
         className
       )}
-      style={{ borderColor: "rgba(27, 41, 192, 0.18)" }}
+      style={{ borderColor: "color-mix(in srgb, var(--color-cobalt) 18%, transparent)" }}
     >
       <span className="size-[5px] rounded-full" style={{ background: dot }} />
       {label}

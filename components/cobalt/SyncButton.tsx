@@ -23,7 +23,7 @@ export function SyncButton({
           "inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-cobalt",
           className
         )}
-        style={{ borderColor: "rgba(27, 41, 192, 0.25)" }}
+        style={{ borderColor: "color-mix(in srgb, var(--color-cobalt) 25%, transparent)" }}
       >
         <span className="size-[7px] animate-[cg-pulse-dot_0.8s_ease-in-out_infinite] rounded-full bg-red motion-reduce:animate-none" />
         SYNCER…
@@ -38,7 +38,7 @@ export function SyncButton({
           "inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-success-ink",
           className
         )}
-        style={{ borderColor: "rgba(43, 168, 74, 0.35)" }}
+        style={{ borderColor: "color-mix(in srgb, var(--color-success) 35%, transparent)" }}
       >
         <span className="size-[7px] rounded-full bg-success" />
         SYNCED
@@ -56,7 +56,7 @@ export function SyncButton({
           "cg-interactive inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-red transition-colors hover:bg-red/8",
           className
         )}
-        style={{ borderColor: "rgba(238, 36, 24, 0.35)" }}
+        style={{ borderColor: "color-mix(in srgb, var(--color-red) 35%, transparent)" }}
       >
         <span className="size-[7px] rounded-full bg-red" />
         PRØV IGEN
@@ -72,7 +72,7 @@ export function SyncButton({
         "cg-interactive inline-flex items-center gap-2 rounded-pill bg-cobalt px-[18px] py-2 text-[12.5px] font-semibold text-silver transition-colors hover:bg-cobalt-light",
         className
       )}
-      style={{ boxShadow: "0 6px 20px rgba(27, 41, 192, 0.25)" }}
+      style={{ boxShadow: "0 6px 20px color-mix(in srgb, var(--color-cobalt) 25%, transparent)" }}
     >
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path

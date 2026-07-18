@@ -32,7 +32,7 @@ export function RecoveryCard({
 
       <div
         className="h-[7px] overflow-hidden rounded-pill"
-        style={{ background: "rgba(253, 243, 238, 0.3)" }}
+        style={{ background: "color-mix(in srgb, var(--color-onred) 30%, transparent)" }}
       >
         <div
           className="h-full rounded-pill bg-onred motion-reduce:!transition-none"
