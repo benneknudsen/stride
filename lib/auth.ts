@@ -7,6 +7,7 @@ import { accounts, sessions, users, verificationTokens } from "@/drizzle/schema"
 import { getDb } from "@/lib/db";
 import { sendVerificationRequest } from "@/lib/email";
 import { persistGarminTokens } from "@/lib/garmin/client";
+import { captureError } from "@/lib/observability";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -77,7 +78,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .set({ garminUserId: account.providerAccountId, updatedAt: new Date() })
           .where(eq(users.id, user.id));
       } catch (error) {
-        console.error("[auth] Failed to persist Garmin tokens", error);
+        // Log-safe: captureError serialises only name/message/cause, never the
+        // raw thrown value, so a DB/crypto failure here cannot spill token or
+        // connection fields into the logs (issue #143).
+        captureError("auth.signIn.persistGarminTokens", error);
       }
     },
   },

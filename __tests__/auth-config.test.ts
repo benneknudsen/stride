@@ -30,6 +30,15 @@ describe("auth.config jwt callback (session-fixation rotation)", () => {
   });
 });
 
+describe("auth.config host trust (issue #143)", () => {
+  it("pins trustHost so self-hosted production is not left to platform inference", () => {
+    // Without this, @auth/core infers trustHost=false when no VERCEL/AUTH_URL/
+    // AUTH_TRUST_HOST is set in a production build, and every request — the edge
+    // proxy's session read included — fails assertConfig with UntrustedHost.
+    expect(authConfig.trustHost).toBe(true);
+  });
+});
+
 describe("auth.config session callback", () => {
   it("copies token.sub onto session.user.id", async () => {
     const result = (await session?.({

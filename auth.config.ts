@@ -95,6 +95,22 @@ if (isDev) {
 const authConfig = {
   providers,
   session: { strategy: "jwt" as const },
+  /**
+   * Trust the deployment's `Host`/`X-Forwarded-Host` header explicitly (issue
+   * #143). Auth.js otherwise *infers* this, defaulting to `true` only when it
+   * recognises the platform — `VERCEL`/`AUTH_URL`/`AUTH_TRUST_HOST`/`CF_PAGES`
+   * set, or `NODE_ENV !== "production"` (see @auth/core `setEnvDefaults`). A
+   * self-hosted production build sets none of those, so the inference lands on
+   * `false` and every request fails `assertConfig` with `UntrustedHost` — the
+   * edge proxy's session read included, since it runs that check before any
+   * action. Pinning it here hardens *both* auth instances built from this config
+   * (the edge one in proxy.ts and the Node one in lib/auth.ts that spreads it).
+   *
+   * Set `AUTH_URL` to the canonical origin in production (see .env.example): when
+   * present, Auth.js builds callback and magic-link URLs from it and ignores the
+   * request host, which neutralises host-header spoofing even with trust on.
+   */
+  trustHost: true,
   callbacks: {
     /**
      * Session-fixation mitigation. On initial sign-in (`user` present) and on
