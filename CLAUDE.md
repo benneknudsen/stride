@@ -20,8 +20,8 @@ npm run db:generate  # Drizzle generate migrations
 npm run db:migrate   # Drizzle apply migrations
 npm run db:studio    # Drizzle Studio
 npm test             # Vitest (npm run test:watch for watch mode)
+npm run test:e2e     # Playwright e2e (4 .spec.ts files in __tests__/e2e)
 ```
-No e2e tests yet — `npm run test:e2e` intentionally exits 1.
 
 ## Code conventions
 - TypeScript strict mode — no `any` without explicit justification
@@ -59,5 +59,5 @@ The chat coach (Phase 2) is live at `/dashboard/coach` via `app/api/ai/chat`.
 - **Colors:** Cobalt `#1b29c0` (primary), Red `#ee2418` (accent), Silver `#e9eae5` (background), Ink `#5560a8` (muted text)
 - **Typography:** Bricolage Grotesque (display), Instrument Sans (UI), Instrument Serif (heroes — always italic), Spline Sans Mono (data/labels) — loaded in `lib/fonts.ts`
 - **Components:** `Logo.tsx`, `Wordmark.tsx`, `RunnerLoader.tsx` in `components/cobalt/`
-- Legacy "Volt" system (`StrideLogo.tsx`, `StrideLoader.tsx` in `components/ui/`, Space Grotesk/Geist fonts) is still in the repo but unused
+- Legacy "Volt" system (`StrideLogo.tsx`, `StrideLoader.tsx`, Space Grotesk/Geist fonts) has been **removed** — do not reference it.
 - See `docs/design_handoff_cobalt_glass/` for the full redesign spec
