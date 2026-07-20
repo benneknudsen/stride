@@ -108,7 +108,9 @@ const authConfig = {
    *
    * Set `AUTH_URL` to the canonical origin in production (see .env.example): when
    * present, Auth.js builds callback and magic-link URLs from it and ignores the
-   * request host, which neutralises host-header spoofing even with trust on.
+   * request host, which neutralises host-header spoofing even with trust on. As
+   * defence in depth, `assertTrustedMagicLinkUrl` in lib/email.ts refuses to send
+   * a magic link whose host is not `AUTH_URL`'s in production (issue #168).
    */
   trustHost: true,
   callbacks: {
