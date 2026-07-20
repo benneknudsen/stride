@@ -11,19 +11,6 @@
   --color-foreground: var(--foreground);
   --font-mono: var(--font-spline-mono), ui-monospace, monospace;
   --font-heading: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -52,11 +39,13 @@
   --color-sub: var(--stride-sub);
   --color-muted: var(--stride-muted);
 
-  /* Brand colors stay constant across themes */
+  /* Brand colors stay constant across themes.
+     NOTE: volt / volt-dim remain live — bg-volt / bg-volt-dim back the
+     default Button variant (components/ui/button.tsx) and Input selection
+     (components/ui/input.tsx). Removing them requires migrating those
+     shadcn primitives to Cobalt Glass tokens first (see issue #160). */
   --color-volt: #c6f432;
   --color-volt-dim: #9fc718;
-  --color-signal: #ff5b41;
-  --color-aqua: #33e0cb;
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -70,7 +59,6 @@
   --radius-pill: 999px;
 
   --shadow-float: 0 24px 60px -20px rgb(0 0 0 / 0.7);
-  --shadow-volt: 0 24px 60px -22px rgb(198 244 50 / 0.45);
 }
 
 /* ── Stride Light Theme (default before next-themes resolves) ── */
@@ -95,20 +83,7 @@
   --border: #e4e4e7;
   --input: #e4e4e7;
   --ring: #c6f432;
-  --chart-1: #9fc718;
-  --chart-2: #14b8a6;
-  --chart-3: #ff5b41;
-  --chart-4: #52525b;
-  --chart-5: #71717a;
   --radius: 0.75rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #18181b;
-  --sidebar-primary: #c6f432;
-  --sidebar-primary-foreground: #0b0d11;
-  --sidebar-accent: #f4f4f5;
-  --sidebar-accent-foreground: #18181b;
-  --sidebar-border: #e4e4e7;
-  --sidebar-ring: #c6f432;
 
   /* Stride custom token values (light) */
   --stride-bg: #fafafa;
@@ -142,19 +117,6 @@
   --border: #262c35;
   --input: #262c35;
   --ring: #c6f432;
-  --chart-1: #c6f432;
-  --chart-2: #33e0cb;
-  --chart-3: #ff5b41;
-  --chart-4: #a6adb9;
-  --chart-5: #79828f;
-  --sidebar: #0f1217;
-  --sidebar-foreground: #e9ecf1;
-  --sidebar-primary: #c6f432;
-  --sidebar-primary-foreground: #0b0d11;
-  --sidebar-accent: #1a1f26;
-  --sidebar-accent-foreground: #e9ecf1;
-  --sidebar-border: #262c35;
-  --sidebar-ring: #c6f432;
 
   /* Stride custom token values (dark) */
   --stride-bg: #0b0d11;
@@ -176,40 +138,8 @@
     @apply bg-background text-foreground antialiased;
   }
   ::selection {
-    background: var(--color-volt);
-    color: var(--color-bg);
-  }
-}
-
-/* ── Typography utilities ── */
-.tabular {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Stride Loader Keyframes ── */
-@keyframes strideWave {
-  0%,
-  100% {
-    transform: scaleY(0.4);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-@keyframes strideStep {
-  0%,
-  55%,
-  100% {
-    transform: scaleY(0.32);
-  }
-  22% {
-    transform: scaleY(1);
-  }
-}
-@keyframes strideShimmer {
-  to {
-    background-position: -200% 0;
+    background: var(--color-cobalt);
+    color: var(--color-onred);
   }
 }
 
