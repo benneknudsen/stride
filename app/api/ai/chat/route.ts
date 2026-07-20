@@ -352,11 +352,16 @@ export async function POST(req: NextRequest) {
   // both into the tools. The demo fixtures are the fallback for users with
   // nothing synced yet (the #84 pattern) — flagged to the model so it never
   // presents demo numbers as the user's own training.
-  const [racePlan, rows] = await Promise.all([
+  // Persisted history is the canonical context (issue #74) — the client only
+  // holds the current session's transcript. When the DB has nothing (new user,
+  // or best-effort read failed) fall back to the client transcript so the
+  // model still sees this session. Cap to the newest MAX_CONTEXT_MESSAGES.
+  const [racePlan, rows, history] = await Promise.all([
     getRacePlan(userId),
     // Best-effort like the chat history reads: a cache/DB outage degrades the
     // coach to the demo fixtures, it never breaks the route.
     getDashboardActivities(userId).catch(() => []),
+    getChatHistory(userId, MAX_CONTEXT_MESSAGES).catch(() => []),
   ]);
   const usingDemoData = rows.length === 0;
   const activities: CoachChatActivity[] = usingDemoData ? demoActivities : rows;
@@ -365,11 +370,6 @@ export async function POST(req: NextRequest) {
   const incoming = parsed.data.messages;
   const latest = incoming[incoming.length - 1];
 
-  // Persisted history is the canonical context (issue #74) — the client only
-  // holds the current session's transcript. When the DB has nothing (new user,
-  // or best-effort read failed) fall back to the client transcript so the
-  // model still sees this session. Cap to the newest MAX_CONTEXT_MESSAGES.
-  const history = await getChatHistory(userId, MAX_CONTEXT_MESSAGES);
   const messages = (history.length > 0 ? [...history, latest] : incoming).slice(
     -MAX_CONTEXT_MESSAGES
   );
