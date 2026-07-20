@@ -143,4 +143,27 @@ describe("POST /api/ai/chat", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("rejects a message whose content exceeds the length cap (#169)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+
+    const oversize: ChatMessage[] = [{ role: "user", content: "a".repeat(4001) }];
+    const res = await POST(chatRequest({ messages: oversize }));
+
+    expect(res.status).toBe(400);
+    expect(streamTextMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a request with too many messages (#169)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+
+    const tooMany: ChatMessage[] = Array.from({ length: 51 }, () => ({
+      role: "user" as const,
+      content: "Hej",
+    }));
+    const res = await POST(chatRequest({ messages: tooMany }));
+
+    expect(res.status).toBe(400);
+    expect(streamTextMock).not.toHaveBeenCalled();
+  });
 });
