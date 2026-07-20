@@ -17,7 +17,7 @@ const glassCardVariants = cva("relative rounded-widget", {
 });
 
 interface GlassCardProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends React.ComponentPropsWithRef<"div">,
     VariantProps<typeof glassCardVariants> {}
 
 export function GlassCard({ className, variant, children, ...props }: GlassCardProps) {
