@@ -223,7 +223,7 @@ describe("parseFeedLine — stream reassembly", () => {
     });
     const block = parseFeedLine(line);
     expect(block).not.toBeNull();
-    expect(block!.tool).toBe("coachInsight");
+    expect(block?.tool).toBe("coachInsight");
   });
 
   test("trims whitespace before parsing", () => {
@@ -237,7 +237,7 @@ describe("parseFeedLine — stream reassembly", () => {
     })}  `;
     const block = parseFeedLine(line);
     expect(block).not.toBeNull();
-    expect(block!.tool).toBe("trendCallout");
+    expect(block?.tool).toBe("trendCallout");
   });
 
   test("returns null for a blank line (no content between newlines)", () => {
@@ -283,8 +283,8 @@ describe("parseFeedLine — stream reassembly", () => {
 
     const blocks = lines.map(parseFeedLine).filter(Boolean);
     expect(blocks).toHaveLength(2);
-    expect(blocks[0]!.tool).toBe("insightCard");
-    expect(blocks[1]!.tool).toBe("trendCallout");
+    expect(blocks[0]?.tool).toBe("insightCard");
+    expect(blocks[1]?.tool).toBe("trendCallout");
   });
 });
 
@@ -317,11 +317,11 @@ describe("CoachFeed — render states", () => {
 
   test("renders streaming state on mount (loading indicator)", async () => {
     // Return a promise that never resolves — keeps status = "streaming"
-    let neverResolve: () => void;
+    let neverResolve: (() => void) | undefined;
     const pending = new Promise<Response>((_resolve) => {
       neverResolve = () => {};
     });
-    vi.spyOn(globalThis, "fetch").mockReturnValue(pending as any);
+    vi.spyOn(globalThis, "fetch").mockReturnValue(pending as Promise<Response>);
 
     render(<CoachFeed activities={sampleActivities} />);
 
@@ -330,7 +330,7 @@ describe("CoachFeed — render states", () => {
     // The regenerate button should read "Analyserer…"
     expect(screen.getByText("Analyserer…")).toBeDefined();
 
-    neverResolve!();
+    neverResolve?.();
   });
 
   test("renders error state when fetch fails", async () => {
@@ -412,7 +412,7 @@ describe("CoachFeed — render states", () => {
     });
     const split = Math.floor(json.length / 2);
     const chunk1 = json.slice(0, split);
-    const chunk2 = json.slice(split) + "\n";
+    const chunk2 = `${json.slice(split)}\n`;
 
     const stream = new ReadableStream({
       start(controller) {
