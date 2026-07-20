@@ -59,13 +59,18 @@ export const maxDuration = 60;
 // Request schema
 // ---------------------------------------------------------------------------
 
+/** Upper bound on a single message's content length (issue #169). */
+const MAX_MESSAGE_LENGTH = 4000;
+/** Upper bound on messages accepted per request (issue #169). */
+const MAX_REQUEST_MESSAGES = 50;
+
 const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string(),
+  content: z.string().max(MAX_MESSAGE_LENGTH),
 });
 
 const requestSchema = z.object({
-  messages: z.array(chatMessageSchema).min(1),
+  messages: z.array(chatMessageSchema).min(1).max(MAX_REQUEST_MESSAGES),
 });
 
 // ---------------------------------------------------------------------------
