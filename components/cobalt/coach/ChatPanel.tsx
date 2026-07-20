@@ -8,9 +8,11 @@ import type { ChatMessage as ApiChatMessage, ChatReply } from "@/types/chat";
 // Left column: the chat UI. Owns its own transcript, draft and typing state.
 // Sending a message (typed, or via a quick-prompt chip) appends the user
 // bubble, shows the 3-dot typing indicator and streams the coach's answer from
-// /api/ai/chat — NDJSON, one `ChatReply` fragment per line, concatenated into
-// a single coach bubble when the stream ends. On failure an error bubble with
-// a "Prøv igen" button re-sends the same transcript.
+// /api/ai/chat — NDJSON, one `ChatReply` fragment per line. The first fragment
+// swaps the typing indicator for an empty coach bubble; each further fragment
+// grows that bubble's text live, so the answer appears as it arrives. On
+// failure an error bubble with a "Prøv igen" button re-sends the same
+// transcript.
 export function ChatPanel({
   initialMessages,
   prompts,
@@ -55,12 +57,33 @@ export function ChatPanel({
     }
   };
 
-  /** POST the transcript, accumulate the stream, land it as one coach bubble. */
+  /** POST the transcript, stream the coach's answer live into one coach bubble. */
   const streamReply = async (transcript: ChatMessage[]) => {
     const controller = new AbortController();
     abortRef.current = controller;
     setFailed(false);
     setTyping(true);
+    // Reserve this coach turn's id up-front so every fragment update targets
+    // the same bubble.
+    idRef.current += 1;
+    const assistantTurnId = `c${idRef.current}`;
+    let started = false;
+
+    // Render the answer-so-far: the first non-empty fragment drops the typing
+    // indicator and appends an empty coach bubble; later fragments patch it.
+    const render = (answer: string) => {
+      if (!answer) return; // nothing yet — keep the typing indicator up
+      if (!started) {
+        started = true;
+        setTyping(false);
+        setMessages((prev) => [...prev, { id: assistantTurnId, role: "coach", text: answer }]);
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantTurnId ? { ...m, text: answer } : m))
+      );
+    };
+
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
@@ -83,14 +106,12 @@ export function ChatPanel({
           answer += parseLine(buffer.slice(0, newline));
           buffer = buffer.slice(newline + 1);
           newline = buffer.indexOf("\n");
+          render(answer);
         }
       }
       answer += parseLine(buffer);
       if (!answer.trim()) throw new Error("empty_reply");
-
-      idRef.current += 1;
-      setMessages((prev) => [...prev, { id: `c${idRef.current}`, role: "coach", text: answer }]);
-      setTyping(false);
+      render(answer);
     } catch {
       // Unmounted mid-stream — never touch state after abort.
       if (controller.signal.aborted) return;
