@@ -40,10 +40,10 @@
   --color-muted: var(--stride-muted);
 
   /* Brand colors stay constant across themes.
-     NOTE: volt / volt-dim remain live — bg-volt / bg-volt-dim back the
-     default Button variant (components/ui/button.tsx) and Input selection
-     (components/ui/input.tsx). Removing them requires migrating those
-     shadcn primitives to Cobalt Glass tokens first (see issue #160). */
+     NOTE: volt remains live — selection:bg-volt still backs the Input
+     selection color (components/ui/input.tsx). The default Button variant
+     migrated to Cobalt tokens (#161); volt-dim is no longer referenced but
+     is kept alongside volt until Input is migrated too. */
   --color-volt: #c6f432;
   --color-volt-dim: #9fc718;
 
