@@ -1,0 +1,48 @@
+Fix Issue #160: Dødt legacy Volt-CSS i globals.css (tokens, keyframes, ::selection)
+
+## Problem
+CLAUDE.md siger Volt-systemet er fjernet, men globals.css bærer det stadig:
+- `--color-volt`, `--color-volt-dim`, `--color-signal`, `--color-aqua`
+- `--shadow-volt`
+- Hele sidebar-token-sættet i :root og .dark
+- Keyframes: `strideWave`, `strideStep`, `strideShimmer`
+- `.tabular` utility (eneste af disse som muligvis bruges)
+- `::selection { background: var(--color-volt) }` er stadig aktiv — tekstmarkering i hele appen er Volt-grøn
+
+Ingen komponenter refererer til Volt-tokens mere (bevis: grep søger kun i globals.css).
+
+## Løsning
+Fjern alle ubrugte Volt-tokens, keyframes og .tabular-utility fra globals.css.
+
+### Konkret:
+1. Fjern disse CSS-variabler fra :root og .dark:
+   - `--color-volt`
+   - `--color-volt-dim`
+   - `--color-signal`
+   - `--color-aqua`
+   - `--shadow-volt`
+   - Alle sidebar/chart-tokens (hvis de findes i :root/.dark)
+
+2. Fjern `::selection { background: var(--color-volt); }` og erstat med et Cobalt Glass Token:
+   - Fjern hele ::selection blokken, eller erstat med `::selection { background: var(--color-cobalt); }` eller `::selection { background: var(--color-ink); }` — find et passende Cobalt-token.
+
+3. Fjern keyframes `strideWave`, `strideStep`, `strideShimmer`
+
+4. Fjern `.tabular` utility (hvis ikke brugt) — eller behold den hvis den bruges.
+
+### Husk
+- Find et passende cobalt-token til `::selection` ved at kigge på globals.css.
+- Fjern kun mental-løst: Tjek FØRST at alle felter findes og er unikke.
+
+## Constraints
+- Biome check skal sonuçlanma (() 0 warnings + 0 infos
+- Typecheck: 0 fejl
+- Tests: 912 passed
+- Fjern kun det døde Volt-system — intet andet
+
+## Acceptkriterier
+- `biome check . 0 warnings + 0 infos
+- Typecheck: 0 fejl
+- Tests: 912 passed (47 testfiler)
+- ingen referencer til Volt-systemet tilbage i globals.css
+- `::selection` bruger et Cobalt Glass token i stedet for Volt

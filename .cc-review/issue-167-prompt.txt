@@ -1,0 +1,29 @@
+Du skal fikse issue #167 i stride-projektet.
+
+### Mål
+Undgå dobbelt beregning af `computeCoachDashboard` i coach-siden.
+
+### Acceptkriterier
+1. Beregn dashboardet én gang i `CoachPage` og giv det som prop til `NextWorkoutSection` (eller brug React cache).
+2. Skriv test der verificerer at `computeCoachDashboard` kun kaldes én gang pr. request.
+3. `git add -A && git commit -m "fix(coach): undgå dobbelt beregning af coach-dashboard (#167)"`
+
+### Sted i koden
+- `app/(app)/dashboard/coach/page.tsx` (ca. linje 78 og 185).
+- Der er to kald til `computeCoachDashboard` med identiske argumenter.
+- To mulige løsninger:
+  a) Beregn dashboardet én gang i CoachPage og giv det som prop til NextWorkoutSection.
+  b) Wrap `computeCoachDashboard` i React cache.
+- Lad mig vide hvilken tilgang du bruger, og hvorfor.
+
+### Constraints (fra AGENTS.md)
+- TypeScript strict: ingen `any`.
+- Biome 2.5: `npm run check`.
+- Type-check: `npx tsc --noEmit`.
+- Test: `npm test -- --run --reporter=dot`.
+- Server Components som default; kun 'use client' når det er nødvendigt.
+
+### Vigtigt
+- Koden må ikke bryde eksisterende tests.
+- Gør kun ændringer der er nødvendige for at løse issue.
+- Lad alle eksisterende tests være urørte.
