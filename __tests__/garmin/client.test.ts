@@ -392,7 +392,7 @@ describe("persistGarminTokens", () => {
         refreshExpiresAt: new Date(now + 7776000 * 1000),
         scope: "activity:read",
       },
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -405,7 +405,7 @@ describe("persistGarminTokens", () => {
 
     expect(queriesMock.saveGarminTokens).toHaveBeenCalledWith(
       expect.objectContaining({ refreshExpiresAt: null }),
-      expect.anything(),
+      expect.anything()
     );
   });
 
@@ -417,7 +417,7 @@ describe("persistGarminTokens", () => {
 
     expect(queriesMock.saveGarminTokens).toHaveBeenCalledWith(
       expect.objectContaining({ scope: null }),
-      expect.anything(),
+      expect.anything()
     );
   });
 });

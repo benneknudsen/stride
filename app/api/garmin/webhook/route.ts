@@ -14,6 +14,7 @@ import { withGarminTokenRefresh } from "@/lib/garmin/client";
 import { isAllowedCallbackUrl } from "@/lib/garmin/config";
 import { mapGarminActivityToDb } from "@/lib/garmin/mappers";
 import type { GarminActivitySummary, GarminPushItem, GarminPushPayload } from "@/lib/garmin/types";
+import { captureError } from "@/lib/observability";
 
 /**
  * Garmin push/ping webhook (issue #35) — the Garmin counterpart to the Strava
@@ -64,6 +65,20 @@ function verifyToken(req: NextRequest): boolean {
   if (providedBuf.length !== expectedBuf.length) return false;
 
   return timingSafeEqual(providedBuf, expectedBuf);
+}
+
+/**
+ * Redact a `token` query parameter before a string reaches a log sink (#172).
+ *
+ * The webhook's own URL carries `?token=<GARMIN_WEBHOOK_SECRET>` (see
+ * verifyToken), and callbackURLs are attacker-controlled body input that can
+ * carry a `token` of their own. Either way the secret must never be written to
+ * an access/proxy log line — that is precisely the leak this endpoint guards
+ * against — so scrub it to `[REDACTED]` before logging any request-derived
+ * string.
+ */
+function scrubToken(value: string): string {
+  return value.replace(/([?&]token=)[^&#\s]*/gi, "$1[REDACTED]");
 }
 
 /** A push item is a full summary when it carries the id the DB dedups on. */
@@ -147,7 +162,20 @@ export async function POST(req: NextRequest) {
   // The athlete revoked access in Garmin Connect. Drop the tokens so the UI
   // stops claiming a live connection; their synced runs stay (see
   // deleteGarminTokens).
-  for (const dereg of payload.deregistrations ?? []) {
+  //
+  // Garmin sends deregistrations one at a time, so a request carrying more than
+  // one is malformed — and a bulk list is exactly what a leaked `?token=` URL
+  // would be abused with to wipe many athletes' Garmin tokens at once (#172).
+  // Reject the whole request rather than partially applying it; 400 is a client
+  // error Garmin will not retry.
+  const deregistrations = payload.deregistrations ?? [];
+  if (deregistrations.length > 1) {
+    console.warn(
+      `[garmin-webhook] Rejecting request with ${deregistrations.length} deregistrations (max 1)`
+    );
+    return new NextResponse("Bad Request", { status: 400 });
+  }
+  for (const dereg of deregistrations) {
     const user = await getUserByGarminUserId(dereg.userId);
     if (user) await deleteGarminTokens(user.id);
   }
@@ -194,7 +222,9 @@ export async function POST(req: NextRequest) {
         if (isAllowedCallbackUrl(url)) {
           allowed.push(url);
         } else {
-          console.warn(`[garmin-webhook] Dropped ping with non-Garmin callbackURL: ${url}`);
+          console.warn(
+            `[garmin-webhook] Dropped ping with non-Garmin callbackURL: ${scrubToken(url)}`
+          );
         }
       }
 
@@ -215,8 +245,10 @@ export async function POST(req: NextRequest) {
       // Fail loudly, exactly as the Strava webhook does (#87): a 2xx tells Garmin
       // the event was delivered and it is never re-sent, so a transient DB or API
       // error would silently lose the activity forever. A 5xx puts it back in
-      // Garmin's retry queue.
-      console.error(`[garmin-webhook] Failed to ingest for user ${user.id}:`, error);
+      // Garmin's retry queue. Route through captureError so only the error's
+      // name/message/cause are serialised — never a raw value that might carry
+      // a token or connection string (#135, #172).
+      captureError(`garmin-webhook.ingest[user ${user.id}]`, error);
       return new NextResponse("Internal Server Error", { status: 500 });
     }
   }
