@@ -211,6 +211,48 @@ describe("deregistrations", () => {
     expect(res.status).toBe(200);
     expect(queriesMock.deleteGarminTokens).not.toHaveBeenCalled();
   });
+
+  it("rejects a request with more than one deregistration (400) and drops no tokens", async () => {
+    // A leaked ?token= URL could be abused to bulk-wipe athletes' Garmin
+    // tokens. Garmin only ever sends one at a time, so reject the whole batch
+    // before touching the DB (#172).
+    dbMock.setUsers({ "garmin-1": { id: "u1" }, "garmin-2": { id: "u2" } });
+    const res = await POST(
+      postRequest(
+        { deregistrations: [{ userId: "garmin-1" }, { userId: "garmin-2" }] },
+        { token: SECRET }
+      )
+    );
+    expect(res.status).toBe(400);
+    expect(queriesMock.deleteGarminTokens).not.toHaveBeenCalled();
+    expect(queriesMock.getUserByGarminUserId).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Token scrubbing in log output (#172)
+// ===========================================================================
+
+describe("token scrubbing", () => {
+  it("never writes the secret to a log line when dropping a token-bearing callbackURL", async () => {
+    dbMock.setUsers({ "garmin-1": { id: "u1" } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // A forged ping whose non-allowlisted callbackURL smuggles the secret in a
+    // token query param — the drop log must not echo it back verbatim.
+    const ping = {
+      userId: "garmin-1",
+      callbackURL: `https://evil.example.com/steal?token=${SECRET}`,
+    };
+
+    const res = await POST(postRequest({ activities: [ping] }, { token: SECRET }));
+
+    expect(res.status).toBe(200);
+    expect(clientMock.fetchCallback).not.toHaveBeenCalled();
+    const logged = warn.mock.calls.map((args) => args.join(" ")).join("\n");
+    expect(logged).not.toContain(SECRET);
+    expect(logged).toContain("[REDACTED]");
+    warn.mockRestore();
+  });
 });
 
 // ===========================================================================
