@@ -11,7 +11,7 @@ import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
 import { SectionHeading } from "@/components/cobalt/SectionHeading";
 import { auth } from "@/lib/auth";
-import type { CoachActivityInput } from "@/lib/coach/dashboard";
+import type { CoachActivityInput, CoachDashboardData } from "@/lib/coach/dashboard";
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
@@ -66,16 +66,12 @@ function SectionLoader({ height }: { height: number }) {
 }
 
 // ── 1. Næste pas (real-time) ────────────────────────────────────────────────
-async function NextWorkoutSection({
-  activities,
-  raceDate,
-  userId,
-}: {
-  activities: CoachPageActivity[];
-  raceDate?: Date;
-  userId?: string;
-}) {
-  const { workout, weekStrip } = computeCoachDashboard(activities, raceDate, userId);
+// Takes the already-computed dashboard as a prop (issue #167): CoachPage runs
+// computeCoachDashboard once and shares the result with the coach console, so
+// the workout card and the console can never disagree and the engine runs a
+// single time per request.
+async function NextWorkoutSection({ dashboard }: { dashboard: CoachDashboardData }) {
+  const { workout, weekStrip } = dashboard;
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 lg:col-span-7">
@@ -176,13 +172,12 @@ export default async function CoachPage() {
   // the developer's).
   const user = session?.user;
   const userName = user?.name?.trim() || user?.email?.split("@")[0] || undefined;
+  // Issue #167: run the engine once and share the result. The workout card
+  // (NextWorkoutSection) and the console's chat + cards both read this single
+  // dashboard, so they stay consistent and the computation never doubles up.
+  const dashboard = computeCoachDashboard(activities, raceDate, userId);
   const coachView = user
-    ? buildLiveCoachView(
-        computeCoachDashboard(activities, raceDate, userId),
-        activities,
-        new Date(),
-        userName
-      )
+    ? buildLiveCoachView(dashboard, activities, new Date(), userName)
     : buildCoachView();
 
   return (
@@ -198,7 +193,7 @@ export default async function CoachPage() {
       <section>
         <SectionHeading index="01" title="Næste pas" hint="Realtid" />
         <Suspense fallback={<SectionLoader height={280} />}>
-          <NextWorkoutSection activities={activities} raceDate={raceDate} userId={userId} />
+          <NextWorkoutSection dashboard={dashboard} />
         </Suspense>
       </section>
 
