@@ -368,11 +368,15 @@ export async function POST(req: NextRequest) {
   const tools = buildCoachTools(userId, now, racePlan, activities);
   const systemPrompt = usingDemoData ? COACH_SYSTEM_PROMPT + DEMO_DATA_NOTE : COACH_SYSTEM_PROMPT;
   const incoming = parsed.data.messages;
-  const latest = incoming[incoming.length - 1];
+  // The client may send role: "assistant" messages (schema allows it for
+  // diagnostics/audit), but those must never be trusted as model context —
+  // only the client's own "user" turns and the DB-persisted history are.
+  const clientContextMessages = incoming.filter((message) => message.role === "user");
+  const latest = clientContextMessages[clientContextMessages.length - 1];
 
-  const messages = (history.length > 0 ? [...history, latest] : incoming).slice(
-    -MAX_CONTEXT_MESSAGES
-  );
+  const messages = (
+    history.length > 0 && latest ? [...history, latest] : clientContextMessages
+  ).slice(-MAX_CONTEXT_MESSAGES);
 
   const encoder = new TextEncoder();
 

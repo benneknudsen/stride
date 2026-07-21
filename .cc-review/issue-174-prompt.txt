@@ -1,0 +1,26 @@
+Du skal fikse issue #174 i stride-projektet.
+
+### Mål
+- Forhindre at klient-leverede "assistant"-beskeder bliver brugt som kontekst til modellen.
+
+### Acceptkriterier
+1. Klientens `role: "assistant"` beskeder skal filtreres fra I konteksten der sendes til modellen.
+2. Diagram:brugeren skal stadig kunne sende assistant-beskeder (schemaet skal stadig acceptere dem), men de skal ikke indgå i modelkonteksten.
+3. Den afventerende `incoming`-variable inkluderer stadig alle beskeder, men `messages`-variablen (som sendes til modellen) skal kun indeholde `role: "user"` beskeder fra klienten + de gemte fra DB.
+4. `git add -A && git commit -m "fix(chat): filtrer klient-assistant-beskeder fra kontekst (#174)"`
+
+### Sted i koden
+- `app/api/ai/chat/route.ts:62-65` (schema), `355-375` (kontekstkonstruktion).
+- Ændr `messages`-variablen til at filtrere klientens assistant-beskeder.
+- Schemaet skal stadig tillade `role: "assistant"` (diagnosticering/audit), men de skal ikke bruges som kontekst.
+
+### Constraints (fra AGENTS.md)
+- TypeScript strict: ingen `any`.
+- Biome 2.5: `npm run check`.
+- Type-check: `npx tsc --noEmit`.
+- Test: `npm test -- --run --reporter=dot`.
+
+### Vigtigt
+- Koden må ikke bryde eksisterende tests.
+- Gør kun ændringer der er nødvendige for at løse issue.
+- Brug `fable`-modellen og `medium` effort.

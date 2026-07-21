@@ -1,0 +1,26 @@
+Du skal fikse issue #162 i stride-projektet.
+
+### Mål
+- Stop den evige typewriter-loop i CoachTeaser-komponenten, især når den er off-screen.
+
+### Acceptkriterier
+1. Typewriter-animationen pauser automatisk når kortet ikke er synligt (IntersectionObserver).
+2. Animationen stopper efter første gennemspilning (eller reducerer CPU-brug væsentligt).
+3. Brugere med `prefers-reduced-motion` skal stadig undtages korrekt.
+4. Skriv test der verificerer at animationen pause/rstopper korrekt (IntersectionObserver mock).
+5. `git add -A && git commit -m "fix(landing): stop typewriter-loop off-screen (#162)"`
+
+### Sted i koden
+- Filer: `components/cobalt/velkommen/CoachTeaser.tsx` (ca. linje 33-57).
+- Test: `__tests__/cobalt/` eller tilsvarende.
+
+### Constraints (fra AGENTS.md)
+- TypeScript strict: ingen `any`.
+- Biome 2.5: `npm run check`.
+- Type-check: `npx tsc --noEmit`.
+- Test: `npm test -- --run --reporter=dot`.
+- Server Components som default; kun `'use client'` når det er nødvendigt.
+
+### Vigtigt
+- Koden må ikke bryde eksisterende tests.
+- Gør kun ændringer der er nødvendige for at løse issue.

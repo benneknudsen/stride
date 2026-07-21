@@ -1,0 +1,28 @@
+Du skal fikse issue #166 i stride-projektet.
+
+### Mål
+Erstat det gentagne mono-label-mønster (`font-cg-mono text-[10-11px] uppercase tracking-[0.14-0.2em] text-ink`) med en fælles `cg-label` utility.
+
+### Acceptkriterier
+1. Tilføj `@utility cg-label` (og evt. `cg-label-sm`) i `app/globals.css`.
+2. Erstat alle ~89 forekomster af det gentagne mønster med den nye utility.
+3. Normalisér de tilfældige tracking/size-afvigelser (9.5/10/10.5/11px, 0.12-0.2em) til en standard (f.eks. `text-[10px] tracking-[0.14em]`).
+4. `git add -A && git commit -m "fix(ui): erstat gentaget mono-label-mønster med cg-label (#166)"`
+
+### Sted i koden
+- `globals.css` (tilføj @utility cg-label — se allerede eksisterende cg-glass/cg-interactive som reference).
+- `components/cobalt/**/*.tsx` — herunder: SectionHeading.tsx, hjem/VolumeCard.tsx, plan/WeekCalendar.tsx, coach-dashboard/*, aktiviteter/*
+- Mønsteret ser sådan ud: `font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink` (og varianter med 11px, 0.18em osv.)
+- Erstat med f.eks.: `className="cg-label"` i stedet for klasse-kæden.
+
+### Constraints (fra AGENTS.md)
+- Biome 2.5: `npm run check`
+- Type-check: `npx tsc --noEmit`
+- Test: `npm test -- --run --reporter=dot`
+- Tailwind CSS + shadcn/ui (new-york style, zinc base)
+
+### Vigtigt
+- Koden må ikke bryde eksisterende tests.
+- Gør kun ændringer der er nødvendige for at løse issue.
+- Ikke behov for transforms eller store restructurering — bare erstat klasse-kæder.
+- Lad alle mine тестові filer være urørte (ingen nye tests nødvendige unless du mener det er relevant).
