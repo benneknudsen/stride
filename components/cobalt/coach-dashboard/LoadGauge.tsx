@@ -55,9 +55,7 @@ export function LoadGauge({ gauge }: { gauge: LoadGaugeView }) {
           {gauge.ratio === null ? "–" : gauge.ratio.toFixed(2)}
         </text>
       </svg>
-      <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-        Akut / kronisk ratio
-      </span>
+      <span className="cg-label">Akut / kronisk ratio</span>
       <span className="text-[13px] font-medium" style={{ color }}>
         {gauge.label}
       </span>

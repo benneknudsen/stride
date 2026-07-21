@@ -27,9 +27,7 @@ function Metric({
         {value}
         <span className="ml-1 text-[15px] font-semibold text-ink">{unit}</span>
       </div>
-      <div className="mt-1.5 font-cg-mono text-[9.5px] uppercase tracking-[0.16em] text-ink">
-        {label}
-      </div>
+      <div className="mt-1.5 cg-label-sm tracking-[0.16em]">{label}</div>
     </div>
   );
 }
@@ -44,12 +42,10 @@ export function LatestActivityCard({
   return (
     <GlassCard className="flex flex-col gap-5 rounded-widget p-[26px]">
       <div className="flex items-center justify-between gap-3">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink">
-          Seneste aktivitet
-        </span>
+        <span className="cg-label tracking-[0.18em]">Seneste aktivitet</span>
         <div className="flex items-center gap-3">
           <SourceBadge source={latest.source} />
-          <span className="font-cg-mono text-[9.5px] uppercase tracking-[0.14em] text-ink">
+          <span className="cg-label-sm">
             {latest.dayLabel} · {latest.clock}
           </span>
         </div>

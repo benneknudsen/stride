@@ -62,11 +62,7 @@ function ConnectControl({
   onConnect: () => void;
 }) {
   if (connected) {
-    return (
-      <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-success-ink">
-        Forbundet
-      </span>
-    );
+    return <span className="cg-label text-success-ink">Forbundet</span>;
   }
 
   if (!signedIn) {
@@ -177,9 +173,7 @@ export function DataSourcesCard({
         className="mt-5 border-t pt-4"
         style={{ borderColor: "color-mix(in srgb, var(--color-cobalt) 10%, transparent)" }}
       >
-        <div className="mb-2.5 font-cg-mono text-[9.5px] uppercase tracking-[0.16em] text-ink">
-          Zoner i klartekst
-        </div>
+        <div className="mb-2.5 cg-label-sm tracking-[0.16em]">Zoner i klartekst</div>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {ZONE_LEGEND.map((zone) => (
             <span key={zone.label} className="flex items-center gap-2 text-[12px] text-ink">

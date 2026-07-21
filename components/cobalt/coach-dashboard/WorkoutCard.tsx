@@ -24,10 +24,8 @@ export function WorkoutCard({ workout }: { workout: WorkoutCardView }) {
   return (
     <GlassCard variant="cobalt" className="flex flex-col gap-5 p-[26px]">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.2em] text-silver/90">
-          Næste pas
-        </span>
-        <span className="rounded-pill bg-silver/15 px-3 py-1 font-cg-mono text-[10.5px] uppercase tracking-[0.14em] text-silver">
+        <span className="cg-label tracking-[0.2em] text-silver/90">Næste pas</span>
+        <span className="rounded-pill bg-silver/15 px-3 py-1 cg-label text-[10.5px] text-silver">
           {TYPE_LABELS[workout.type]}
         </span>
       </div>
@@ -40,29 +38,21 @@ export function WorkoutCard({ workout }: { workout: WorkoutCardView }) {
             <div className="font-cg-display text-[34px] leading-none text-silver">
               {workout.distanceKm} km
             </div>
-            <div className="mt-1 font-cg-mono text-[10.5px] uppercase tracking-[0.14em] text-silver/70">
-              Distance
-            </div>
+            <div className="mt-1 cg-label text-[10.5px] text-silver/70">Distance</div>
           </div>
           <div>
             <div className="font-cg-mono text-[19px] text-silver">
               {workout.paceRange.min}–{workout.paceRange.max}
             </div>
-            <div className="mt-1 font-cg-mono text-[10.5px] uppercase tracking-[0.14em] text-silver/70">
-              Pace /km
-            </div>
+            <div className="mt-1 cg-label text-[10.5px] text-silver/70">Pace /km</div>
           </div>
           <div>
             <div className="font-cg-mono text-[19px] text-silver">≤ {workout.heartRateCap}</div>
-            <div className="mt-1 font-cg-mono text-[10.5px] uppercase tracking-[0.14em] text-silver/70">
-              Puls bpm
-            </div>
+            <div className="mt-1 cg-label text-[10.5px] text-silver/70">Puls bpm</div>
           </div>
           <div>
             <div className="text-[15px] text-silver">{SHOE_LABELS[workout.shoe]}</div>
-            <div className="mt-1 font-cg-mono text-[10.5px] uppercase tracking-[0.14em] text-silver/70">
-              Sko
-            </div>
+            <div className="mt-1 cg-label text-[10.5px] text-silver/70">Sko</div>
           </div>
         </div>
       )}

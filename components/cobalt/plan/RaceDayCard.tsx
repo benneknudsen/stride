@@ -6,9 +6,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div>
       <div className="font-cg-display text-[30px] font-extrabold leading-none">{value}</div>
-      <div className="mt-1.5 font-cg-mono text-[9.5px] uppercase tracking-[0.14em] opacity-85">
-        {label}
-      </div>
+      <div className="mt-1.5 cg-label-sm text-onred opacity-85">{label}</div>
     </div>
   );
 }
@@ -34,20 +32,18 @@ export function RaceDayCard({
   return (
     <GlassCard variant="red" className="px-[26px] py-[22px] text-onred" data-testid="race-day-card">
       <div className="mb-3 flex items-start justify-between">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] opacity-85">
-          Race day
-        </span>
+        <span className="cg-label text-onred tracking-[0.18em] opacity-85">Race day</span>
         <span className="flex items-center gap-3">
           {onEdit ? (
             <button
               type="button"
               onClick={onEdit}
-              className="cg-interactive rounded-pill border border-current/40 px-2.5 py-0.5 font-cg-mono text-[9.5px] uppercase tracking-[0.12em] opacity-85 transition-opacity hover:opacity-100"
+              className="cg-interactive rounded-pill border border-current/40 px-2.5 py-0.5 cg-label-sm text-onred tracking-[0.12em] opacity-85 transition-opacity hover:opacity-100"
             >
               Skift race
             </button>
           ) : null}
-          <span className="font-cg-mono text-[11px] font-semibold uppercase tracking-[0.12em]">
+          <span className="cg-label text-onred text-[11px] font-semibold tracking-[0.12em]">
             {daysToRace} dage
           </span>
         </span>
@@ -66,9 +62,7 @@ export function RaceDayCard({
         >
           <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0 opacity-85" />
           <div>
-            <div className="font-cg-mono text-[9.5px] uppercase tracking-[0.14em] opacity-85">
-              Estimat låst
-            </div>
+            <div className="cg-label-sm text-onred opacity-85">Estimat låst</div>
             <p className="mt-1.5 max-w-[38ch] text-[13px] leading-[1.45]">{race.lock.message}</p>
           </div>
         </div>

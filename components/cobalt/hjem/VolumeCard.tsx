@@ -18,12 +18,8 @@ export function VolumeCard({
   return (
     <GlassCard className="flex flex-col justify-between gap-5 rounded-widget p-[22px]">
       <div className="flex items-center justify-between">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink">
-          Volumen
-        </span>
-        <span className="font-cg-mono text-[9.5px] uppercase tracking-[0.14em] text-ink">
-          Seneste 10 ture
-        </span>
+        <span className="cg-label tracking-[0.18em]">Volumen</span>
+        <span className="cg-label-sm">Seneste 10 ture</span>
       </div>
 
       <div className="flex h-[120px] items-end gap-[6px]">
@@ -52,9 +48,7 @@ export function VolumeCard({
         <span className="font-cg-display text-[26px] font-bold leading-none tracking-[-0.03em] text-cobalt">
           {formatDanish(total, 1)}
         </span>
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-          km i alt
-        </span>
+        <span className="cg-label">km i alt</span>
       </div>
     </GlassCard>
   );

@@ -60,12 +60,7 @@ export function RunnerLoader({
         />
       </svg>
       {label ? (
-        <span
-          className={cn(
-            "font-cg-mono text-[11px] uppercase tracking-[0.22em] text-cobalt",
-            labelClassName
-          )}
-        >
+        <span className={cn("cg-label text-[11px] tracking-[0.22em] text-cobalt", labelClassName)}>
           {label}
         </span>
       ) : null}

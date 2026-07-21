@@ -85,7 +85,7 @@ export function HjemPageClient({
               stacked heavily right under the NavBar. One line always: the text
               truncates and the login pill never wraps under it. */}
           <GlassCard className="flex max-w-full items-center gap-3 rounded-pill py-1.5 pr-1.5 pl-4 sm:gap-4 sm:py-2 sm:pr-2">
-            <span className="flex-none rounded-pill bg-red px-2.5 py-1 font-cg-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+            <span className="flex-none rounded-pill bg-red px-2.5 py-1 cg-label tracking-[0.18em] font-semibold text-white">
               Demo
             </span>
             <p className="m-0 min-w-0 truncate text-[13px] leading-snug text-ink">

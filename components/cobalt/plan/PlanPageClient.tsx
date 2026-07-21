@@ -53,7 +53,7 @@ export function PlanPageClient({
           <button
             type="button"
             onClick={openDialog}
-            className="cg-interactive rounded-pill border border-cobalt/30 px-[16px] py-[6px] font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
+            className="cg-interactive rounded-pill border border-cobalt/30 px-[16px] py-[6px] cg-label text-[10.5px] tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
           >
             Demo-plan — vælg din egen race →
           </button>
@@ -65,7 +65,7 @@ export function PlanPageClient({
           <button
             type="button"
             onClick={openDialog}
-            className="cg-interactive rounded-pill border border-red/40 px-[16px] py-[6px] font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-red transition-colors hover:bg-red/8"
+            className="cg-interactive rounded-pill border border-red/40 px-[16px] py-[6px] cg-label text-[10.5px] tracking-[0.12em] text-red transition-colors hover:bg-red/8"
           >
             Race gennemført — vælg din næste race →
           </button>

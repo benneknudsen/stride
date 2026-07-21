@@ -109,9 +109,7 @@ export function RaceDateDialog({
         aria-labelledby="race-dialog-title"
         className="relative w-full max-w-[420px] px-[26px] py-[24px] [animation:cg-fade-up_0.3s_ease_both] motion-reduce:[animation:none]"
       >
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-red">
-          Din race
-        </span>
+        <span className="cg-label tracking-[0.18em] text-red">Din race</span>
         <h2
           id="race-dialog-title"
           className="mt-1 mb-4 font-cg-serif text-[24px] italic leading-[1.15] text-cobalt"
@@ -127,9 +125,7 @@ export function RaceDateDialog({
           className="flex flex-col gap-4"
         >
           <label className="flex flex-col gap-1.5">
-            <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-              Race-dato
-            </span>
+            <span className="cg-label">Race-dato</span>
             <input
               type="date"
               required
@@ -140,9 +136,7 @@ export function RaceDateDialog({
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-              Racenavn (valgfrit)
-            </span>
+            <span className="cg-label">Racenavn (valgfrit)</span>
             <input
               type="text"
               maxLength={80}
@@ -175,14 +169,14 @@ export function RaceDateDialog({
             <button
               type="button"
               onClick={onClose}
-              className="cg-interactive rounded-pill px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-ink transition-colors hover:bg-cobalt/8"
+              className="cg-interactive rounded-pill px-[18px] py-[7px] cg-label text-[11px] tracking-[0.12em] transition-colors hover:bg-cobalt/8"
             >
               Annullér
             </button>
             <button
               type="submit"
               disabled={pending}
-              className="cg-interactive rounded-pill bg-cobalt px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-silver transition-opacity disabled:opacity-60"
+              className="cg-interactive rounded-pill bg-cobalt px-[18px] py-[7px] cg-label text-[11px] tracking-[0.12em] text-silver transition-opacity disabled:opacity-60"
             >
               {pending ? "Gemmer…" : "Gem race"}
             </button>

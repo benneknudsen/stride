@@ -18,9 +18,7 @@ function DayCard({ day }: { day: DayPlan }) {
         className={`${base} border border-dashed border-cobalt/25`}
         style={{ background: "rgba(255,255,255,0.28)" }}
       >
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-          {day.dow}
-        </span>
+        <span className="cg-label">{day.dow}</span>
         <div className="text-[13.5px] font-semibold text-ink">{day.name}</div>
         <div className="text-[11.5px] text-ink">{day.zoneLabel}</div>
       </div>
@@ -31,9 +29,7 @@ function DayCard({ day }: { day: DayPlan }) {
     return (
       <div className={`cg-glass-cobalt ${base} text-silver`}>
         <div className="flex items-center justify-between">
-          <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-silver/70">
-            {day.dow}
-          </span>
+          <span className="cg-label text-silver/70">{day.dow}</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z"
@@ -61,11 +57,7 @@ function DayCard({ day }: { day: DayPlan }) {
       style={today ? { border: "1.5px solid var(--color-cobalt)" } : undefined}
     >
       <div className="flex items-center justify-between">
-        <span
-          className={`font-cg-mono text-[10px] uppercase tracking-[0.14em] ${
-            today ? "font-semibold text-cobalt" : "text-ink"
-          }`}
-        >
+        <span className={`cg-label ${today ? "font-semibold text-cobalt" : "text-ink"}`}>
           {day.dow}
         </span>
         {/* The ✓ marks a session that was actually run — never one still ahead. */}
@@ -114,7 +106,7 @@ export function WeekCalendar({
         <span className="font-cg-serif text-[24px] italic text-cobalt">
           Denne uge — uge {weekOfPlan}
         </span>
-        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink">
+        <span className="cg-label text-[10.5px] tracking-[0.12em]">
           {plannedKm} km planlagt · {doneLabel} gennemført
         </span>
       </div>

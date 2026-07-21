@@ -33,7 +33,7 @@ export function FilterChips({
             className={cn(
               // min-h-[44px]: the 11px mono label + py-2 lands around 33px, under
               // the 44px touch-target minimum these chips are tapped at (#97).
-              "cg-interactive inline-flex min-h-[44px] shrink-0 items-center rounded-pill px-[18px] py-2 font-cg-mono text-[11px] uppercase tracking-[0.16em] transition-colors",
+              "cg-interactive inline-flex min-h-[44px] shrink-0 items-center rounded-pill px-[18px] py-2 cg-label text-[11px] tracking-[0.16em] transition-colors",
               isActive
                 ? "border border-cobalt bg-cobalt text-silver"
                 : "cg-glass text-ink hover:text-cobalt"

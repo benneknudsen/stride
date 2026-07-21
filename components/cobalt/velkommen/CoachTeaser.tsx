@@ -94,16 +94,14 @@ export function CoachTeaser() {
   return (
     <GlassCard ref={cardRef} className="rounded-widget p-[26px]">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <span className="flex items-center gap-2 font-cg-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-cobalt">
+        <span className="flex items-center gap-2 cg-label text-[11px] font-semibold text-cobalt">
           <span
             aria-hidden="true"
             className="size-2 rounded-full bg-red [animation:cg-pulse-dot_1.4s_ease-in-out_infinite] motion-reduce:[animation:none]"
           />
           AI-coachen · Eksempel på analyse
         </span>
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-          Tempo Tuesday · 10,0 km · 4:27 /km
-        </span>
+        <span className="cg-label">Tempo Tuesday · 10,0 km · 4:27 /km</span>
       </div>
 
       <div className="relative mt-5">

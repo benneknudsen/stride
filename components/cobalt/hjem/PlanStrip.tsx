@@ -40,7 +40,7 @@ export function PlanStrip({
       </div>
 
       <div className="flex min-w-0 flex-1 items-center gap-4">
-        <span className="hidden font-cg-mono text-[10px] uppercase tracking-[0.16em] text-ink sm:inline">
+        <span className="hidden cg-label tracking-[0.16em] sm:inline">
           Uge {weekOfPlan} af {totalWeeks}
         </span>
         <div
@@ -58,13 +58,13 @@ export function PlanStrip({
         </div>
       </div>
 
-      <span className="font-cg-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-red">
+      <span className="cg-label text-[12px] tracking-[0.12em] font-semibold text-red">
         {daysToRace} dage til race
       </span>
 
       <Link
         href={ROUTES.PLAN}
-        className="cg-interactive inline-flex min-h-[44px] items-center rounded-pill border px-[18px] py-[7px] font-cg-mono text-[11px] uppercase tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
+        className="cg-interactive inline-flex min-h-[44px] items-center rounded-pill border px-[18px] py-[7px] cg-label text-[11px] tracking-[0.12em] text-cobalt transition-colors hover:bg-cobalt/8"
         style={{ borderColor: "color-mix(in srgb, var(--color-cobalt) 30%, transparent)" }}
       >
         Se plan →

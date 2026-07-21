@@ -222,6 +222,26 @@
   box-shadow: var(--cg-glass-shadow-cobalt);
 }
 
+/* Mono eyebrow/label utility — the repeated Spline-Mono kicker treatment used
+   across cards, headers and chips. Defaults to the modal geometry (10px /
+   0.14em tracking) and Ink color; override color/size/tracking/weight on top
+   (e.g. `cg-label text-red`, `cg-label tracking-[0.18em]`) — later utilities
+   win the cascade. `cg-label-sm` is the 9.5px variant. */
+@utility cg-label {
+  font-family: var(--font-cg-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-ink);
+}
+@utility cg-label-sm {
+  font-family: var(--font-cg-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--color-ink);
+}
+
 /* Shared keyboard-focus + touch-feedback affordance for interactive elements. */
 @utility cg-interactive {
   transition: transform 150ms ease;

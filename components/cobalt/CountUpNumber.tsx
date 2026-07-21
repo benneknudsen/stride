@@ -71,11 +71,7 @@ export function CountUpNumber({
       >
         {formatValue(run ? display : 0)}
       </span>
-      {label ? (
-        <span className="mt-3 font-cg-mono text-[11px] uppercase tracking-[0.2em] text-ink">
-          {label}
-        </span>
-      ) : null}
+      {label ? <span className="mt-3 cg-label text-[11px] tracking-[0.2em]">{label}</span> : null}
     </div>
   );
 }
