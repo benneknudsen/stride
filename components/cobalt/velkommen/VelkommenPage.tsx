@@ -47,7 +47,7 @@ export function VelkommenPage() {
       {/* ── Hero ── */}
       <section className="px-3 pt-14 pb-12 text-center md:pt-20 md:pb-16">
         <Reveal delay={0}>
-          <div className="mb-4 font-cg-mono text-[11px] uppercase tracking-[0.22em] text-red">
+          <div className="mb-4 cg-label text-[11px] tracking-[0.22em] text-red">
             AI-drevet løbetræning
           </div>
         </Reveal>
@@ -81,7 +81,7 @@ export function VelkommenPage() {
           </div>
         </Reveal>
         <Reveal delay={0.32}>
-          <p className="mt-5 font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink/70">
+          <p className="mt-5 cg-label tracking-[0.18em] text-ink/70">
             Demoen kræver ingen konto · 30 løbeture venter
           </p>
         </Reveal>
@@ -129,11 +129,11 @@ export function VelkommenPage() {
           <Reveal delay={0.26} className="col-span-12">
             <GlassCard className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3 rounded-widget px-[26px] py-[18px]">
               <div className="flex items-center gap-4">
-                <span className="flex items-center gap-2 font-cg-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-cobalt">
+                <span className="flex items-center gap-2 cg-label text-[11px] font-semibold text-cobalt">
                   <span className="size-2 rounded-full bg-strava" aria-hidden="true" />
                   Strava
                 </span>
-                <span className="flex items-center gap-2 font-cg-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-cobalt">
+                <span className="flex items-center gap-2 cg-label text-[11px] font-semibold text-cobalt">
                   <span className="size-2 rounded-full bg-garmin" aria-hidden="true" />
                   Garmin
                 </span>
@@ -206,7 +206,7 @@ export function VelkommenPage() {
             </Link>
           </div>
         </GlassCard>
-        <p className="mt-8 text-center font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink/60">
+        <p className="mt-8 text-center cg-label tracking-[0.18em] text-ink/60">
           Bygget med Next.js · TypeScript · Drizzle · Vercel AI SDK
         </p>
       </section>

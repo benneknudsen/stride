@@ -93,7 +93,7 @@ function FeedCard({ view }: { view: FeedCardView }) {
       <div className="flex items-center justify-between gap-3">
         <span
           className={cn(
-            "font-cg-mono text-[10px] uppercase tracking-[0.18em]",
+            "cg-label tracking-[0.18em]",
             cobaltSurface ? "text-silver/90" : "text-ink"
           )}
         >
@@ -193,9 +193,7 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <RunnerGlyph size={20} stroke="var(--color-cobalt)" head="var(--color-red)" />
-          <span className="font-cg-mono text-[10px] uppercase tracking-[0.2em] text-ink">
-            Coach-feed
-          </span>
+          <span className="cg-label tracking-[0.2em]">Coach-feed</span>
         </div>
         <button
           type="button"

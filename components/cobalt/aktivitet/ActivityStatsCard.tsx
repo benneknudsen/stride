@@ -11,9 +11,7 @@ export function ActivityStatsCard({ stats }: { stats: ActivityStatView[] }) {
       <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
         {stats.map((stat) => (
           <div key={stat.key}>
-            <div className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-              {stat.label}
-            </div>
+            <div className="cg-label">{stat.label}</div>
             <div
               className={cn(
                 "mt-1.5 font-cg-display text-[26px] font-bold leading-none tracking-[-0.02em]",

@@ -58,12 +58,8 @@ export function PaceTrendCard({
   return (
     <GlassCard className="flex flex-col justify-between gap-4 rounded-widget p-[22px]">
       <div className="flex items-center justify-between">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink">
-          Snit-pace
-        </span>
-        <span className="font-cg-mono text-[9.5px] uppercase tracking-[0.14em] text-ink">
-          Seneste 10 ture
-        </span>
+        <span className="cg-label tracking-[0.18em]">Snit-pace</span>
+        <span className="cg-label-sm">Seneste 10 ture</span>
       </div>
 
       {n >= 2 ? (
@@ -219,7 +215,7 @@ export function PaceTrendCard({
           </table>
         </div>
       ) : (
-        <div className="flex h-[86px] items-center justify-center text-center font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
+        <div className="flex h-[86px] items-center justify-center text-center cg-label">
           for få ture til en trend
         </div>
       )}
@@ -229,9 +225,7 @@ export function PaceTrendCard({
           <span className="font-cg-display text-[26px] font-bold leading-none tracking-[-0.03em] text-cobalt">
             {paceLabel}
           </span>
-          <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">
-            /km · snit 7 dage
-          </span>
+          <span className="cg-label">/km · snit 7 dage</span>
         </div>
         {deltaLabel !== null ? (
           <div>

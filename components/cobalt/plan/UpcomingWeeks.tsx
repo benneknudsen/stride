@@ -15,7 +15,7 @@ export function UpcomingWeeks({ weeks }: { weeks: UpcomingWeek[] }) {
             i < weeks.length - 1 ? "border-b border-cobalt/15" : ""
           }`}
         >
-          <span className="w-14 flex-none font-cg-mono text-[11px] uppercase text-ink">
+          <span className="w-14 flex-none cg-label text-[11px] tracking-normal">
             Uge {week.week}
           </span>
           <span className="flex-1 text-[14px] font-medium text-cobalt">{week.focus}</span>

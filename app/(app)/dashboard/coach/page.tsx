@@ -143,12 +143,8 @@ function ChartCard({
   return (
     <GlassCard className={`${className} p-[20px]`}>
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.16em] text-ink">
-          {title}
-        </span>
-        <span className="font-cg-mono text-[9.5px] uppercase tracking-[0.12em] text-ink/70">
-          {hint}
-        </span>
+        <span className="cg-label tracking-[0.16em]">{title}</span>
+        <span className="cg-label-sm tracking-[0.12em] text-ink/70">{hint}</span>
       </div>
       {children}
     </GlassCard>
@@ -192,7 +188,7 @@ export default async function CoachPage() {
   return (
     <main className="flex flex-col gap-8 pt-4 pb-4">
       <header className="flex flex-col gap-1">
-        <span className="font-cg-mono text-[11px] uppercase tracking-[0.2em] text-red">Træner</span>
+        <span className="cg-label text-[11px] tracking-[0.2em] text-red">Træner</span>
         <h1 className="m-0 font-cg-display text-[32px] leading-none text-cobalt">Coach</h1>
         <p className="m-0 text-[13.5px] text-ink">
           Dit næste pas, din progression og din AI-coach — samlet på ét sted.

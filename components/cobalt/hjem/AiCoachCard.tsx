@@ -14,9 +14,7 @@ export function AiCoachCard({ quote }: { quote: string }) {
     >
       <div className="flex items-center gap-2.5">
         <RunnerGlyph size={22} stroke="var(--color-silver)" head="var(--color-red)" />
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.2em] text-silver/90">
-          AI Coach
-        </span>
+        <span className="cg-label tracking-[0.2em] text-silver/90">AI Coach</span>
       </div>
 
       <p className="m-0 font-cg-serif text-[22px] italic leading-[1.28] text-silver">»{quote}«</p>

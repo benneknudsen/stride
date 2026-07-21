@@ -18,9 +18,7 @@ const DAY_LABELS: Record<WeekStripDay["weekday"], string> = {
 export function WeekStrip({ days }: { days: WeekStripDay[] }) {
   return (
     <GlassCard className="p-[18px]">
-      <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink">
-        Ugens plan
-      </span>
+      <span className="cg-label tracking-[0.18em]">Ugens plan</span>
       <div className="mt-3 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-7 sm:overflow-visible">
         {days.map((day) => {
           const isRest = day.type === "rest";
@@ -35,7 +33,7 @@ export function WeekStrip({ days }: { days: WeekStripDay[] }) {
                 day.isToday && !day.isNext && "ring-2 ring-cobalt"
               )}
             >
-              <span className="font-cg-mono text-[10px] uppercase tracking-[0.12em]">
+              <span className="cg-label text-inherit tracking-[0.12em]">
                 {DAY_LABELS[day.weekday]}
               </span>
               <span className="text-[11.5px] font-medium leading-tight">{day.description}</span>

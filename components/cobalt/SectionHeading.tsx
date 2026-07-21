@@ -14,7 +14,7 @@ export function SectionHeading({
     <div className="mb-3 flex items-baseline gap-3">
       <span className="font-cg-mono text-[11px] text-red">{index}</span>
       <h2 className="m-0 font-cg-display text-[20px] leading-none text-cobalt">{title}</h2>
-      <span className="font-cg-mono text-[10px] uppercase tracking-[0.14em] text-ink">{hint}</span>
+      <span className="cg-label">{hint}</span>
     </div>
   );
 }

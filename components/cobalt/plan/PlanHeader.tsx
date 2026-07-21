@@ -26,9 +26,7 @@ export function PlanHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5 px-3 pt-[38px] pb-1.5">
       <div className="[animation:cg-fade-up_0.7s_ease_both] motion-reduce:[animation:none]">
-        <div className="mb-3 font-cg-mono text-[11px] uppercase tracking-[0.2em] text-red">
-          {planTitle}
-        </div>
+        <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red">{planTitle}</div>
         <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
           {totalWeeks} uger.
           <br />
@@ -43,9 +41,7 @@ export function PlanHeader({
             run={started}
             className="items-end text-[44px] text-cobalt"
           />
-          <span className="mt-2 font-cg-mono text-[10px] uppercase tracking-[0.16em] text-ink">
-            Uge af {totalWeeks}
-          </span>
+          <span className="mt-2 cg-label tracking-[0.16em]">Uge af {totalWeeks}</span>
         </div>
         <div className="flex flex-col items-end">
           <CountUpNumber
@@ -53,9 +49,7 @@ export function PlanHeader({
             run={started}
             className="items-end text-[44px] text-red"
           />
-          <span className="mt-2 font-cg-mono text-[10px] uppercase tracking-[0.16em] text-ink">
-            Dage til race
-          </span>
+          <span className="mt-2 cg-label tracking-[0.16em]">Dage til race</span>
         </div>
       </div>
     </header>

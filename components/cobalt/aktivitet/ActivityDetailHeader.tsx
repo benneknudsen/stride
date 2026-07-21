@@ -14,14 +14,14 @@ export function ActivityDetailHeader({ view }: { view: ActivityDetailView }) {
     <header className="px-3 pt-[26px] pb-2">
       <Link
         href={ROUTES.AKTIVITETER}
-        className="cg-interactive inline-flex min-h-[44px] items-center gap-2 font-cg-mono text-[11px] uppercase tracking-[0.16em] text-ink transition-colors hover:text-cobalt"
+        className="cg-interactive inline-flex min-h-[44px] items-center gap-2 cg-label text-[11px] tracking-[0.16em] transition-colors hover:text-cobalt"
       >
         <span aria-hidden="true">←</span> Alle aktiviteter
       </Link>
 
       <div className="mt-2 flex flex-wrap items-end justify-between gap-x-8 gap-y-6">
         <div className="min-w-0 [animation:cg-fade-up_0.7s_ease_both] motion-reduce:[animation:none]">
-          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 font-cg-mono text-[11px] uppercase tracking-[0.2em] text-red">
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 cg-label text-[11px] tracking-[0.2em] text-red">
             <span>
               {view.typeLabel} · {view.dateLabel}
             </span>
@@ -87,7 +87,7 @@ function HeadlineStat({
       >
         {value}
       </div>
-      <div className="font-cg-mono text-[11px] uppercase tracking-[0.14em] text-ink">{label}</div>
+      <div className="cg-label text-[11px]">{label}</div>
     </div>
   );
 }

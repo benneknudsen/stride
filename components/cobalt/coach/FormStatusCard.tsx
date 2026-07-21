@@ -9,9 +9,7 @@ export function FormStatusCard({ form, started }: { form: CoachView["form"]; sta
   return (
     <GlassCard className="rounded-widget px-[26px] py-[22px]">
       <div className="mb-3.5 flex items-baseline justify-between">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink">
-          Form-status
-        </span>
+        <span className="cg-label tracking-[0.18em]">Form-status</span>
         <span
           className={cn(
             "font-cg-mono text-[10.5px]",

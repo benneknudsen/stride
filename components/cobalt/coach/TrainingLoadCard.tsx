@@ -10,9 +10,7 @@ export function TrainingLoadCard({ load, started }: { load: CoachView["load"]; s
   return (
     <GlassCard className="rounded-widget px-[26px] py-[22px]">
       <div className="mb-4 flex items-baseline justify-between">
-        <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] text-ink">
-          Træningsbelastning · 14 dage
-        </span>
+        <span className="cg-label tracking-[0.18em]">Træningsbelastning · 14 dage</span>
         <span className="font-cg-mono text-[10.5px] text-cobalt">{load.status}</span>
       </div>
 

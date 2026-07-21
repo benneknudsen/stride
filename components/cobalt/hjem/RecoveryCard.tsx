@@ -19,9 +19,7 @@ export function RecoveryCard({
       variant="red"
       className="flex flex-col justify-between gap-4 rounded-widget p-[22px]"
     >
-      <span className="font-cg-mono text-[10px] uppercase tracking-[0.18em] opacity-85">
-        Readiness
-      </span>
+      <span className="cg-label tracking-[0.18em] text-onred opacity-85">Readiness</span>
 
       <div className="flex items-baseline gap-2">
         <span className="font-cg-display text-[46px] font-extrabold leading-none tracking-[-0.03em]">
