@@ -63,9 +63,28 @@ const dbMock = vi.hoisted(() => {
     record("select", args);
     return builder;
   });
+  const execute = vi.fn((...args: Any[]) => {
+    record("execute", args);
+    return Promise.resolve();
+  });
+
+  // A transaction handle exposing the same select() the top-level db does, plus
+  // execute() (for `pg_advisory_xact_lock`). Real Postgres serializes callers
+  // that take the same advisory lock; this mock mirrors that by queuing
+  // transaction callbacks so only one runs at a time — letting tests assert
+  // that a second concurrent caller observes the first caller's persisted
+  // write instead of racing it.
+  const tx = { select, execute };
+  let transactionQueue: Promise<Any> = Promise.resolve();
+  const transaction = vi.fn((cb: Any) => {
+    const run = () => cb(tx);
+    const settled = transactionQueue.then(run, run);
+    transactionQueue = settled.catch(() => {});
+    return settled;
+  });
 
   return {
-    db: { select },
+    db: { select, transaction },
     calls,
     setResult(r: Any) {
       result = r;
@@ -81,6 +100,9 @@ const dbMock = vi.hoisted(() => {
       result = [];
       rejection = null;
       select.mockClear();
+      execute.mockClear();
+      transaction.mockClear();
+      transactionQueue = Promise.resolve();
     },
   };
 });
@@ -359,16 +381,19 @@ describe("persistGarminTokens", () => {
       JSON.stringify({ access_token: "fresh-access", refresh_token: "fresh-refresh" })
     );
     expect(queriesMock.saveGarminTokens).toHaveBeenCalledTimes(1);
-    expect(queriesMock.saveGarminTokens).toHaveBeenCalledWith({
-      userId: "u1",
-      accessTokenEnc: "enc-x",
-      refreshTokenEnc: "", // both tokens live in accessTokenEnc
-      iv: "iv-x",
-      authTag: "tag-x",
-      expiresAt: new Date(now + 3600 * 1000),
-      refreshExpiresAt: new Date(now + 7776000 * 1000),
-      scope: "activity:read",
-    });
+    expect(queriesMock.saveGarminTokens).toHaveBeenCalledWith(
+      {
+        userId: "u1",
+        accessTokenEnc: "enc-x",
+        refreshTokenEnc: "", // both tokens live in accessTokenEnc
+        iv: "iv-x",
+        authTag: "tag-x",
+        expiresAt: new Date(now + 3600 * 1000),
+        refreshExpiresAt: new Date(now + 7776000 * 1000),
+        scope: "activity:read",
+      },
+      expect.anything(),
+    );
   });
 
   it("stores a null refreshExpiresAt when the response omits refresh_token_expires_in", async () => {
@@ -379,7 +404,8 @@ describe("persistGarminTokens", () => {
     await persistGarminTokens("u1", noRefreshExpiry, now);
 
     expect(queriesMock.saveGarminTokens).toHaveBeenCalledWith(
-      expect.objectContaining({ refreshExpiresAt: null })
+      expect.objectContaining({ refreshExpiresAt: null }),
+      expect.anything(),
     );
   });
 
@@ -390,7 +416,8 @@ describe("persistGarminTokens", () => {
     await persistGarminTokens("u1", noScope, 3_000_000);
 
     expect(queriesMock.saveGarminTokens).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: null })
+      expect.objectContaining({ scope: null }),
+      expect.anything(),
     );
   });
 });
@@ -498,6 +525,42 @@ describe("withGarminTokenRefresh — expired access token: refresh → persist �
 
     await expect(withGarminTokenRefresh("u1")).rejects.toThrow("token refresh failed");
     expect(queriesMock.saveGarminTokens).not.toHaveBeenCalled();
+  });
+});
+
+describe("withGarminTokenRefresh — concurrent refresh calls are serialized", () => {
+  it("only performs one refresh when two calls race on the same expired token", async () => {
+    cryptoMock.encrypt.mockReturnValue({ iv: "new-iv", authTag: "new-tag", encrypted: "new-enc" });
+    seedTokenRow(new Date(Date.now() - 1000)); // access expired
+    decryptedTokens("old-access", "old-refresh");
+
+    // Once the "in-progress" refresh completes, the row it persisted is what a
+    // caller waiting on the advisory lock would re-read — simulate that by
+    // updating the seeded row/decrypt result as a side effect of the refresh
+    // call resolving, exactly as a concurrent writer's commit would.
+    oauthMock.refreshAccessToken.mockImplementationOnce(async () => {
+      seedTokenRow(new Date(Date.now() + 3_600_000));
+      decryptedTokens("fresh-access", "fresh-refresh");
+      return tokensResponse;
+    });
+
+    const [clientA, clientB] = await Promise.all([
+      withGarminTokenRefresh("u1"),
+      withGarminTokenRefresh("u1"),
+    ]);
+
+    expect(oauthMock.refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(queriesMock.saveGarminTokens).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockResolvedValue(okJson([]));
+    await clientA.getActivities(0, 1);
+    await clientB.getActivities(0, 1);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, expect.any(String), {
+      headers: { Authorization: "Bearer fresh-access" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, expect.any(String), {
+      headers: { Authorization: "Bearer fresh-access" },
+    });
   });
 });
 

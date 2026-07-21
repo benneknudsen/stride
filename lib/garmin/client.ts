@@ -1,6 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { garminTokens } from "../../drizzle/schema";
 import { decrypt, encrypt } from "../crypto";
+import type { DbOrTx } from "../db";
 import { db } from "../db";
 import { saveGarminTokens } from "../db/queries";
 import { GARMIN_API_BASE, isAllowedCallbackUrl } from "./config";
@@ -98,7 +99,8 @@ export type GarminClient = ReturnType<typeof createGarminClient>;
 export async function persistGarminTokens(
   userId: string,
   tokens: GarminTokensResponse,
-  now: number = Date.now()
+  now: number = Date.now(),
+  dbClient: DbOrTx = db
 ): Promise<void> {
   const blob = encrypt(
     JSON.stringify({
@@ -107,18 +109,21 @@ export async function persistGarminTokens(
     })
   );
 
-  await saveGarminTokens({
-    userId,
-    accessTokenEnc: blob.encrypted,
-    refreshTokenEnc: "", // unused — both tokens live in accessTokenEnc
-    iv: blob.iv,
-    authTag: blob.authTag,
-    expiresAt: expiresAtFrom(tokens, now),
-    refreshExpiresAt: tokens.refresh_token_expires_in
-      ? new Date(now + tokens.refresh_token_expires_in * 1000)
-      : null,
-    scope: tokens.scope ?? null,
-  });
+  await saveGarminTokens(
+    {
+      userId,
+      accessTokenEnc: blob.encrypted,
+      refreshTokenEnc: "", // unused — both tokens live in accessTokenEnc
+      iv: blob.iv,
+      authTag: blob.authTag,
+      expiresAt: expiresAtFrom(tokens, now),
+      refreshExpiresAt: tokens.refresh_token_expires_in
+        ? new Date(now + tokens.refresh_token_expires_in * 1000)
+        : null,
+      scope: tokens.scope ?? null,
+    },
+    dbClient
+  );
 }
 
 /**
@@ -151,8 +156,45 @@ export async function withGarminTokenRefresh(userId: string): Promise<GarminClie
     throw new Error(`Garmin refresh token expired for user ${userId} — reconnect required`);
   }
 
-  const refreshed = await refreshAccessToken(parsed.refresh_token);
-  await persistGarminTokens(userId, refreshed, now);
+  // Serialize the refresh+persist against other concurrent callers for the same
+  // user (webhook fanout, manual sync). Garmin rotates refresh tokens, so if two
+  // callers both refreshed with the same (now-consumed) refresh token, the
+  // slower writer would persist a token that can never refresh again. The
+  // advisory lock is released when the transaction commits; a caller that was
+  // waiting on it re-reads the row afterwards and — if another caller already
+  // refreshed it — uses that token instead of refreshing again.
+  const accessToken = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
 
-  return createGarminClient(refreshed.access_token);
+    const lockedRows = await tx
+      .select()
+      .from(garminTokens)
+      .where(eq(garminTokens.userId, userId))
+      .limit(1);
+    const lockedRow = lockedRows[0];
+    if (!lockedRow) throw new Error(`No Garmin tokens found for user ${userId}`);
+
+    const lockedTokens = JSON.parse(
+      decrypt(lockedRow.accessTokenEnc, lockedRow.iv, lockedRow.authTag)
+    ) as { access_token: string; refresh_token: string };
+
+    const lockedNow = Date.now();
+    const lockedSecondsLeft = Math.floor((lockedRow.expiresAt.getTime() - lockedNow) / 1000);
+    if (lockedSecondsLeft > REFRESH_MARGIN_SECONDS) {
+      // Another caller already refreshed while we waited for the lock — use
+      // the token it persisted instead of refreshing (and burning) it again.
+      return lockedTokens.access_token;
+    }
+
+    if (lockedRow.refreshExpiresAt && lockedRow.refreshExpiresAt.getTime() <= lockedNow) {
+      throw new Error(`Garmin refresh token expired for user ${userId} — reconnect required`);
+    }
+
+    const refreshed = await refreshAccessToken(lockedTokens.refresh_token);
+    await persistGarminTokens(userId, refreshed, lockedNow, tx);
+
+    return refreshed.access_token;
+  });
+
+  return createGarminClient(accessToken);
 }
