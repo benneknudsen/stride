@@ -13,6 +13,7 @@ import {
 import type { AnalysisScope, HrZone } from "../../types/domain";
 import { captureError } from "../observability";
 import { fromDbDate, toDbDate } from "./calendar-date";
+import type { DbOrTx } from "./index";
 import { db } from "./index";
 
 /**
@@ -248,8 +249,8 @@ type UpsertGarminTokensInput = {
   scope?: string | null;
 };
 
-export async function saveGarminTokens(input: UpsertGarminTokensInput) {
-  const [token] = await db
+export async function saveGarminTokens(input: UpsertGarminTokensInput, dbClient: DbOrTx = db) {
+  const [token] = await dbClient
     .insert(garminTokens)
     .values(input)
     .onConflictDoUpdate({

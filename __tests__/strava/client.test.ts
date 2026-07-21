@@ -64,9 +64,28 @@ const dbMock = vi.hoisted(() => {
     record("update", args);
     return builder;
   });
+  const execute = vi.fn((...args: Any[]) => {
+    record("execute", args);
+    return Promise.resolve();
+  });
+
+  // A transaction handle exposing the same select()/update() the top-level db
+  // does, plus execute() (for `pg_advisory_xact_lock`). Real Postgres
+  // serializes callers that take the same advisory lock; this mock mirrors
+  // that by queuing transaction callbacks so only one runs at a time — letting
+  // tests assert that a second concurrent caller observes the first caller's
+  // persisted write instead of racing it.
+  const tx = { select, update, execute };
+  let transactionQueue: Promise<Any> = Promise.resolve();
+  const transaction = vi.fn((cb: Any) => {
+    const run = () => cb(tx);
+    const settled = transactionQueue.then(run, run);
+    transactionQueue = settled.catch(() => {});
+    return settled;
+  });
 
   return {
-    db: { select, update },
+    db: { select, update, transaction },
     calls,
     setResult(r: Any) {
       result = r;
@@ -83,6 +102,9 @@ const dbMock = vi.hoisted(() => {
       rejection = null;
       select.mockClear();
       update.mockClear();
+      execute.mockClear();
+      transaction.mockClear();
+      transactionQueue = Promise.resolve();
     },
   };
 });
@@ -451,6 +473,39 @@ describe("withTokenRefresh — expired token: refresh → persist → retry", ()
     await expect(withTokenRefresh("u1")).rejects.toThrow("token refresh failed");
     expect(dbMock.db.update).not.toHaveBeenCalled();
     expect(cryptoMock.encrypt).not.toHaveBeenCalled();
+  });
+});
+
+describe("withTokenRefresh — concurrent refresh calls are serialized", () => {
+  it("only performs one refresh when two calls race on the same expired token", async () => {
+    cryptoMock.encrypt.mockReturnValue({ iv: "new-iv", authTag: "new-tag", encrypted: "new-enc" });
+    seedTokenRow(new Date(Date.now() - 1000)); // already expired
+    decryptedTokens("old-access", "old-refresh");
+
+    // Once the "in-progress" refresh completes, the row it persisted is what a
+    // caller waiting on the advisory lock would re-read — simulate that by
+    // updating the seeded row/decrypt result as a side effect of the refresh
+    // call resolving, exactly as a concurrent writer's commit would.
+    oauthMock.refreshAccessToken.mockImplementationOnce(async () => {
+      seedTokenRow(new Date(Date.now() + 3_600_000));
+      decryptedTokens("fresh-access", "fresh-refresh");
+      return refreshedTokens;
+    });
+
+    const [clientA, clientB] = await Promise.all([withTokenRefresh("u1"), withTokenRefresh("u1")]);
+
+    expect(oauthMock.refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(dbMock.db.update).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockResolvedValue(okJson([]));
+    await clientA.getActivities();
+    await clientB.getActivities();
+    expect(fetchMock).toHaveBeenNthCalledWith(1, expect.any(String), {
+      headers: { Authorization: "Bearer fresh-access" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, expect.any(String), {
+      headers: { Authorization: "Bearer fresh-access" },
+    });
   });
 });
 
