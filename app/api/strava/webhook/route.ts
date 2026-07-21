@@ -2,12 +2,29 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { activities } from "@/drizzle/schema";
 import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
 import { getUserByStravaAthleteId, revalidateDashboardActivities } from "@/lib/db/queries";
+import { captureError } from "@/lib/observability";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
+
+/**
+ * Shape of a Strava webhook event payload. A signed but malformed/unexpected
+ * body (e.g. missing `owner_id`) used to throw once it was cast and read,
+ * surfacing as an uncaught 500 that Strava then retries for ~24h (issue #170).
+ * Validating the shape up-front lets us reject it with a 400 the retry queue
+ * treats as terminal.
+ */
+const webhookEventSchema = z.object({
+  object_type: z.string(),
+  object_id: z.number(),
+  aspect_type: z.string(),
+  owner_id: z.number(),
+  updates: z.record(z.string(), z.unknown()).optional(),
+});
 
 /**
  * The shared secret Strava echoes back during webhook subscription validation.
@@ -75,13 +92,26 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const body = JSON.parse(rawBody) as {
-    object_type: string;
-    object_id: number;
-    aspect_type: string;
-    owner_id: number;
-    updates?: Record<string, unknown>;
-  };
+  // Parse and validate the (already signature-verified) body. A 400 here is
+  // terminal for Strava's retry queue, unlike the 500 an uncaught throw gave.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch (error) {
+    captureError("strava-webhook.parse", error);
+    return new NextResponse("Invalid JSON", { status: 400 });
+  }
+
+  const result = webhookEventSchema.safeParse(parsed);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    const field = issue.path.join(".") || "body";
+    const message = `Invalid webhook payload: ${field} — ${issue.message}`;
+    captureError("strava-webhook.validate", new Error(message));
+    return new NextResponse(message, { status: 400 });
+  }
+
+  const body = result.data;
 
   // Only handle activity create/update events
   if (body.object_type !== "activity") {

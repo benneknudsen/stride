@@ -101,6 +101,15 @@ function postRequest(body: unknown, signature?: string): NextRequest {
   });
 }
 
+/** Build a signed POST from a raw (possibly non-JSON) body string. */
+function postRawRequest(raw: string): NextRequest {
+  return new NextRequest("http://localhost/api/strava/webhook", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-hub-signature-256": sign(raw) },
+    body: raw,
+  });
+}
+
 function getRequest(params: Record<string, string>): NextRequest {
   const qs = new URLSearchParams(params).toString();
   return new NextRequest(`http://localhost/api/strava/webhook?${qs}`);
@@ -244,6 +253,29 @@ describe("POST event routing", () => {
     expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
     expect(clientMock.getActivity).not.toHaveBeenCalled();
     expect(coachMock.revalidateProgression).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a malformed JSON body with 400 (terminal, no Strava retries)", async () => {
+    const res = await POST(postRawRequest("{not valid json"));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe("Invalid JSON");
+    expect(queriesMock.getUserByStravaAthleteId).not.toHaveBeenCalled();
+  });
+
+  it("rejects a payload missing owner_id with a descriptive 400", async () => {
+    const { owner_id, ...noOwner } = CREATE_EVENT;
+    const res = await POST(postRequest(noOwner));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("owner_id");
+    expect(queriesMock.getUserByStravaAthleteId).not.toHaveBeenCalled();
+  });
+
+  it("rejects a payload missing object_type with a descriptive 400", async () => {
+    const { object_type, ...noType } = CREATE_EVENT;
+    const res = await POST(postRequest(noType));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("object_type");
+    expect(queriesMock.getUserByStravaAthleteId).not.toHaveBeenCalled();
   });
 
   it("returns 500 (so Strava retries) when ingestion throws", async () => {
