@@ -4,11 +4,17 @@
 // dot pinned to the final sample.
 const W = 320;
 const H = 96;
+// SVGs are clipped to their viewBox by default (UA stylesheet sets
+// `overflow: hidden` on the root <svg>). The end dot sits exactly on the last
+// sample, so without inset its right half got cut off flush against the card
+// edge. Insetting both ends keeps the dot — and the round line cap — fully
+// on-canvas while the area fill still closes out to the true edges.
+const PAD_X = 6;
 
 export function PaceCurve({ samples, started }: { samples: number[]; started: boolean }) {
   const n = samples.length;
   const points = samples.map((s, i) => {
-    const x = (i / (n - 1)) * W;
+    const x = PAD_X + (i / (n - 1)) * (W - 2 * PAD_X);
     const y = H - 8 - s * (H - 20);
     return [x, y] as const;
   });
@@ -52,6 +58,21 @@ export function PaceCurve({ samples, started }: { samples: number[]; started: bo
         strokeDashoffset={started ? 0 : 100}
         className="motion-reduce:!transition-none"
         style={{ transition: "stroke-dashoffset 1.8s cubic-bezier(.4,0,.2,1)" }}
+      />
+      {/* Halo ring — expands and fades behind the dot so it reads as a live
+          pulse rather than a flat flicker. Hidden under reduced motion. */}
+      <circle
+        cx={endX}
+        cy={endY}
+        r={4}
+        fill="var(--color-red)"
+        opacity={started ? 1 : 0}
+        className="animate-[cg-ping-dot_1.6s_ease-out_infinite] motion-reduce:hidden"
+        style={{
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          transition: "opacity 0.4s ease 1.4s",
+        }}
       />
       <circle
         cx={endX}
