@@ -24,5 +24,5 @@ export function LandingChromeGate({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const onLanding = !signedIn && pathname === ROUTES.HOME && !searchParams?.has("demo");
-  return onLanding ? null : <>{children}</>;
+  return onLanding ? null : children;
 }
