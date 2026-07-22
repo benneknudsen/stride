@@ -11,7 +11,11 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      "correctness": {},
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "warn",
+        "noUnusedFunctionParameters": "warn"
+      },
       "suspicious": {}
     }
   },
