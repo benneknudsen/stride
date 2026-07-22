@@ -5,10 +5,11 @@ import { Logo } from "@/components/cobalt/Logo";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { SectionHeading } from "@/components/cobalt/SectionHeading";
 import { CoachTeaser } from "@/components/cobalt/velkommen/CoachTeaser";
+import { LoginLink } from "@/components/cobalt/velkommen/LoginLink";
 import { PreviewShowcase } from "@/components/cobalt/velkommen/PreviewShowcase";
 import { Wordmark } from "@/components/cobalt/Wordmark";
 import { buildHomeView } from "@/lib/cobalt/hjem";
-import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
+import { DEMO_HOME_ROUTE } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 // Velkommen — the landing page a visitor without a session meets on "/". It
@@ -36,12 +37,9 @@ export function VelkommenPage() {
         {/* Solid white, not cg-glass: a translucent pill sits directly on the
             background blobs here and picks up their tint, and the bright glass
             border reads as a rendering artifact rather than as glass. */}
-        <Link
-          href={ROUTES.LOGIN}
-          className="cg-interactive rounded-pill bg-white px-5 py-2 text-[13px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red"
-        >
+        <LoginLink className="cg-interactive rounded-pill bg-white px-5 py-2 text-[13px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red">
           Log ind
-        </Link>
+        </LoginLink>
       </header>
 
       {/* ── Hero ── */}
@@ -72,12 +70,9 @@ export function VelkommenPage() {
             >
               Udforsk demoen
             </Link>
-            <Link
-              href={ROUTES.LOGIN}
-              className="cg-interactive rounded-pill bg-white px-7 py-3 text-[14px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red"
-            >
+            <LoginLink className="cg-interactive rounded-pill bg-white px-7 py-3 text-[14px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red">
               Log ind
-            </Link>
+            </LoginLink>
           </div>
         </Reveal>
         <Reveal delay={0.32}>
@@ -192,12 +187,9 @@ export function VelkommenPage() {
             Log ind med Google eller Garmin — eller kig dig omkring i demoen først.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href={ROUTES.LOGIN}
-              className="cg-interactive rounded-pill bg-silver px-7 py-3 text-[14px] font-semibold text-cobalt transition-opacity hover:opacity-90"
-            >
+            <LoginLink className="cg-interactive rounded-pill bg-silver px-7 py-3 text-[14px] font-semibold text-cobalt transition-opacity hover:opacity-90">
               Kom i gang
-            </Link>
+            </LoginLink>
             <Link
               href={DEMO_HOME_ROUTE}
               className="cg-interactive rounded-pill bg-white/12 px-7 py-3 text-[14px] font-semibold text-silver transition-colors hover:bg-white/20"

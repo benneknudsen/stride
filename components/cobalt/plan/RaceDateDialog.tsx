@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@vercel/analytics";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { saveRacePlan } from "@/actions/race";
@@ -89,6 +90,9 @@ export function RaceDateDialog({
         setError(result.error);
         return;
       }
+      // saveRacePlan is a Server Action, so track() runs here on the client
+      // instead. Anonymous — the chosen date and name are never sent.
+      track("racedato_sat");
       router.refresh();
       onClose();
     });

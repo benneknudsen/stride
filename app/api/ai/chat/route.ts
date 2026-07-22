@@ -22,6 +22,7 @@
  * Keys never reach the browser — the model is only touched server-side here.
  */
 
+import { track } from "@vercel/analytics/server";
 import { stepCountIs, streamText, tool } from "ai";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
@@ -353,6 +354,10 @@ export async function POST(req: NextRequest) {
       { status: 429, headers: { "retry-after": String(retryAfterSeconds) } }
     );
   }
+
+  // The message is authorized (provider up, authed, within rate limit) and about
+  // to be answered — an anonymous count of coach turns, no user id or content.
+  track("coach_besked_sendt").catch(() => {});
 
   const now = new Date();
   // Resolve the user's race AND their real synced activities once, and bind
