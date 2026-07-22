@@ -39,14 +39,6 @@
   --color-sub: var(--stride-sub);
   --color-muted: var(--stride-muted);
 
-  /* Brand colors stay constant across themes.
-     NOTE: volt remains live — selection:bg-volt still backs the Input
-     selection color (components/ui/input.tsx). The default Button variant
-     migrated to Cobalt tokens (#161); volt-dim is no longer referenced but
-     is kept alongside volt until Input is migrated too. */
-  --color-volt: #c6f432;
-  --color-volt-dim: #9fc718;
-
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
