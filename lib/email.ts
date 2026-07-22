@@ -1,4 +1,5 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+import { captureError } from "@/lib/observability";
 
 /**
  * Guard the magic-link URL against host-header poisoning (issue #168).
@@ -44,17 +45,11 @@ export async function sendVerificationRequest(params: {
 
   assertTrustedMagicLinkUrl(url);
 
-  const transport = nodemailer.createTransport({
-    host: "smtp.resend.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: "resend",
-      pass: process.env.RESEND_API_KEY,
-    },
-  });
+  // Resend's HTTP API instead of SMTP (issues #154/#155) — drops the nodemailer
+  // dependency (and its transitive advisory) while keeping the same mail shape.
+  const resend = new Resend(process.env.RESEND_API_KEY);
 
-  await transport.sendMail({
+  const { error } = await resend.emails.send({
     to: identifier,
     from: provider.from ?? "Stride <noreply@stride.run>",
     subject: `Sign in to Stride`,
@@ -63,4 +58,13 @@ export async function sendVerificationRequest(params: {
 <p><a href="${url}" style="display:inline-block;padding:12px 24px;background:#f97316;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Sign in</a></p>
 <p style="color:#6b7280;font-size:14px;">This link expires in 10 minutes.</p>`,
   });
+
+  // The SDK resolves with an `error` object rather than throwing on API
+  // failures. Surface it so Auth.js reports the sign-in as failed instead of
+  // silently pretending the mail went out. `captureError` sanitises before
+  // logging — the recipient address never lands in the log line.
+  if (error) {
+    captureError("email.sendVerificationRequest", error);
+    throw new Error(`Resend failed to send the magic-link email: ${error.name}`);
+  }
 }
