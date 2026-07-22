@@ -324,6 +324,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // The schema permits role: "assistant" turns (diagnostics/audit), so a
+  // payload of only assistant messages parses. Reject it here: without a user
+  // turn there is nothing to answer, and `latest` would be undefined downstream.
+  if (!parsed.data.messages.some((message) => message.role === "user")) {
+    return Response.json({ error: "user_message_required" }, { status: 400 });
+  }
+
   // No provider → scripted notice for the public demo, no auth required.
   if (!isAIConfigured()) {
     return ndjsonResponse([NOT_CONFIGURED_REPLY]);
@@ -421,7 +428,7 @@ export async function POST(req: NextRequest) {
       // Only on a real model answer — the scripted floor stays out of history
       // so a retried question doesn't accumulate duplicate user turns.
       if (answer.length > 0) {
-        if (latest.role === "user") {
+        if (latest?.role === "user") {
           await insertChatMessage({ userId, role: "user", content: latest.content });
         }
         await insertChatMessage({ userId, role: "assistant", content: answer });
