@@ -1,3 +1,5 @@
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { ThemeProvider } from "@/components/providers/theme-provider";
@@ -67,6 +69,8 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-gradient-to-br from-bg to-bg-2">
         <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
