@@ -23,6 +23,7 @@
     "@base-ui/react": "^1.6.0",
     "@neondatabase/serverless": "^1.1.0",
     "@paralleldrive/cuid2": "^3.3.0",
+    "@sentry/nextjs": "^10.67.0",
     "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
