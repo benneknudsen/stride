@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 // global-error replaces the root layout when the layout itself throws, so it
@@ -13,7 +14,10 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
+    // global-error catches failures in the root layout itself — the most severe
+    // class of crash — so report it to Sentry as well as the console (#178).
     console.error(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

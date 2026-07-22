@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 // Relative, not the "@/" alias: next.config.ts is loaded outside the app's
 // module resolution, so the tsconfig paths don't apply here.
@@ -75,4 +76,16 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wraps the config so Sentry can upload source maps and auto-instrument the app
+// (#178). Options are kept minimal: `silent` in CI keeps build logs clean, and
+// source-map upload only activates when SENTRY_AUTH_TOKEN/org/project are set,
+// so builds without those env vars stay green.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  // Widen the client bundle upload but skip framework internals' noise.
+  widenClientFileUpload: true,
+  // Route Sentry requests through the app to dodge ad-blockers.
+  tunnelRoute: "/monitoring",
+});
