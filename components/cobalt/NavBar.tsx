@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@vercel/analytics";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -121,6 +122,8 @@ export function NavBar({
               key={link.href}
               href={link.href}
               aria-current={active ? "page" : undefined}
+              // Anonymous nav event: the tab label is the only property, no PII.
+              onClick={() => track("navigeret_til_side", { side: link.label })}
               style={glassTabStyle(active)}
               className={cn(
                 "cg-interactive flex items-center gap-1.5 rounded-pill border border-solid px-[18px] py-2.5",

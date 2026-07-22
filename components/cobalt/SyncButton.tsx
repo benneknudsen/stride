@@ -1,5 +1,7 @@
 "use client";
 
+import { track } from "@vercel/analytics";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 export type SyncState = "idle" | "syncing" | "synced" | "error";
@@ -16,6 +18,13 @@ export function SyncButton({
   onSync?: () => void;
   className?: string;
 }) {
+  // Anonymous analytics: a sync reaching the "synced" state means the parent's
+  // fetch succeeded. Keyed on state so it fires once per completed sync (the
+  // state drops back to "idle" after the terminal window), no PII attached.
+  useEffect(() => {
+    if (state === "synced") track("sync_udført");
+  }, [state]);
+
   if (state === "syncing") {
     return (
       <span
