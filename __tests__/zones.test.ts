@@ -103,6 +103,6 @@ describe("formatZoneTime", () => {
 describe("ZONES record", () => {
   test("is keyed by zone number", () => {
     expect(ZONES[2].name).toBe("Aerobic");
-    expect(ZONES[2].color).toBe("#C6F432");
+    expect(ZONES[2].color).toBe("#2536d8");
   });
 });
