@@ -7,7 +7,7 @@ export type ZoneKey = "z1" | "z2" | "z3" | "z4" | "z5";
 
 export const ZONE_COLOR: Record<ZoneKey, string> = {
   z1: "#9CA3AF",
-  z2: "#C6F432",
+  z2: "#2536d8",
   z3: "#06B6D4",
   z4: "#F97316",
   z5: "#EF4444",

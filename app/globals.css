@@ -63,8 +63,8 @@
   --card-foreground: #18181b;
   --popover: #ffffff;
   --popover-foreground: #18181b;
-  --primary: #c6f432;
-  --primary-foreground: #0b0d11;
+  --primary: #1b29c0;
+  --primary-foreground: #fdf3ee;
   --secondary: #f4f4f5;
   --secondary-foreground: #18181b;
   --muted: #f4f4f5;
@@ -74,7 +74,7 @@
   --destructive: #ef4444;
   --border: #e4e4e7;
   --input: #e4e4e7;
-  --ring: #c6f432;
+  --ring: #1b29c0;
   --radius: 0.75rem;
 
   /* Stride custom token values (light) */
@@ -97,8 +97,8 @@
   --card-foreground: #e9ecf1;
   --popover: #14181e;
   --popover-foreground: #e9ecf1;
-  --primary: #c6f432;
-  --primary-foreground: #0b0d11;
+  --primary: #1b29c0;
+  --primary-foreground: #fdf3ee;
   --secondary: #20262f;
   --secondary-foreground: #e9ecf1;
   --muted: #20262f;
@@ -108,7 +108,7 @@
   --destructive: #ff5b41;
   --border: #262c35;
   --input: #262c35;
-  --ring: #c6f432;
+  --ring: #1b29c0;
 
   /* Stride custom token values (dark) */
   --stride-bg: #0b0d11;
@@ -142,9 +142,9 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   Cobalt Glass — redesign design tokens (ADDITIVE; coexists with "Volt")
+   Cobalt Glass — redesign design tokens (ADDITIVE)
    Static brand values, deliberately namespaced so they never clobber the
-   legacy shadcn/Volt tokens above. Utilities: bg-cobalt, text-red,
+   legacy shadcn tokens above. Utilities: bg-cobalt, text-red,
    bg-silver, text-ink, font-cg-*, rounded-widget/-tile, cg-glass*.
    ══════════════════════════════════════════════════════════════════════ */
 @theme {

@@ -29,7 +29,7 @@ export interface ZoneMeta {
 
 /**
  * Zone metadata, ordered 1 → 5 (recovery → maximal). Colours map to the Stride
- * brand tokens called out in issue #26: gray, volt, aqua, signal, red.
+ * Cobalt Glass brand tokens: gray, cobalt, aqua, signal, red.
  */
 export const ZONES: Record<ZoneNumber, ZoneMeta> = {
   1: { zone: 1, key: "z1", name: "Recovery", description: "Recovery", color: "#9CA3AF", ideal: 20 },
@@ -38,7 +38,7 @@ export const ZONES: Record<ZoneNumber, ZoneMeta> = {
     key: "z2",
     name: "Aerobic",
     description: "Aerobic / Easy",
-    color: "#C6F432",
+    color: "#2536d8",
     ideal: 50,
   },
   3: { zone: 3, key: "z3", name: "Tempo", description: "Tempo", color: "#33E0CB", ideal: 15 },
