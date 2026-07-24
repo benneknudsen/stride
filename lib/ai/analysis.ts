@@ -22,7 +22,21 @@ import type { AnalysisBlock, AnalysisBlockOf } from "./tools";
 // Input shaping
 // ---------------------------------------------------------------------------
 
-/** The minimal per-activity fields the analysis reasons over. */
+/**
+ * The minimal per-activity fields the analysis reasons over.
+ *
+ * Deliberately source-agnostic (issue #184). The `activities` table *does*
+ * differentiate provider — it carries a `source` column plus mutually-exclusive
+ * `strava_activity_id` / `garmin_summary_id` keys — but both providers'
+ * mappers (`lib/strava/mappers.ts`, `lib/garmin/mappers.ts`) normalise into the
+ * exact same physical columns and unit conventions (distance in metres, times in
+ * seconds, speed in m/s, HR in bpm, single-leg cadence). The reads that feed the
+ * AI (`getActivities`, `getDashboardActivities`) filter by `userId` only, never
+ * by `source`, so the coach already sees every synced run regardless of origin.
+ * That is why nothing here needs a `source` field: a Garmin run and a Strava run
+ * are indistinguishable — and correctly so — once mapped. Add provider-specific
+ * inputs here only if a metric ever becomes source-dependent.
+ */
 export interface AnalysisActivity {
   startDate: Date;
   /** Distance in meters. */
