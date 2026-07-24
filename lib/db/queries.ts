@@ -6,14 +6,12 @@ import {
   activities,
   aiAnalyses,
   chatMessages,
-  garminTokens,
   stravaTokens,
   users,
 } from "../../drizzle/schema";
 import type { AnalysisScope, HrZone } from "../../types/domain";
 import { captureError } from "../observability";
 import { fromDbDate, toDbDate } from "./calendar-date";
-import type { DbOrTx } from "./index";
 import { db } from "./index";
 
 /**
@@ -138,11 +136,11 @@ export const getAccountsByUserId = cache(async (userId: string) => {
 // User identity resolution (by external provider id)
 //
 // The inverse of the userId-scoped reads above: the sync and webhook routes
-// only know a provider's own identifier — a Strava athlete id, a Garmin user
-// id — and need to resolve which Stride user owns it. Both columns are uniquely
-// indexed, so at most one row can match.
+// only know a provider's own identifier — a Strava athlete id — and need to
+// resolve which Stride user owns it. The column is uniquely indexed, so at most
+// one row can match.
 //
-// Unlike the request-scoped getters, these deliberately do NOT swallow a DB
+// Unlike the request-scoped getters, this deliberately does NOT swallow a DB
 // error into `null`. A webhook that can't tell "no such athlete" apart from "a
 // transient DB failure" would ack 200 and drop the event for good; letting the
 // error propagate makes the route answer 5xx so the provider re-delivers it.
@@ -154,16 +152,6 @@ export const getUserByStravaAthleteId = cache(async (stravaAthleteId: number) =>
     .select({ id: users.id })
     .from(users)
     .where(eq(users.stravaAthleteId, stravaAthleteId))
-    .limit(1);
-  return user ?? null;
-});
-
-/** Resolve the Stride user linked to a Garmin user id (Garmin webhook). */
-export const getUserByGarminUserId = cache(async (garminUserId: string) => {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.garminUserId, garminUserId))
     .limit(1);
   return user ?? null;
 });
@@ -214,74 +202,6 @@ export async function upsertStravaTokens(input: UpsertStravaTokensInput) {
     })
     .returning();
   return token;
-}
-
-// ---------------------------------------------------------------------------
-// Garmin tokens (encrypted at rest) — issue #35.
-//
-// Same shape as the Strava trio above: both tokens are encrypted together as a
-// single JSON blob under one IV (see lib/garmin/client.ts), so `refreshTokenEnc`
-// stays empty and exists only for column parity.
-// ---------------------------------------------------------------------------
-
-export const getGarminTokens = cache(async (userId: string) => {
-  try {
-    const [token] = await db
-      .select()
-      .from(garminTokens)
-      .where(eq(garminTokens.userId, userId))
-      .limit(1);
-    return token ?? null;
-  } catch (err) {
-    captureError("queries.getGarminTokens", err);
-    return null;
-  }
-});
-
-type UpsertGarminTokensInput = {
-  userId: string;
-  accessTokenEnc: string;
-  refreshTokenEnc: string;
-  iv: string;
-  authTag: string;
-  expiresAt: Date;
-  refreshExpiresAt?: Date | null;
-  scope?: string | null;
-};
-
-export async function saveGarminTokens(input: UpsertGarminTokensInput, dbClient: DbOrTx = db) {
-  const [token] = await dbClient
-    .insert(garminTokens)
-    .values(input)
-    .onConflictDoUpdate({
-      target: garminTokens.userId,
-      set: {
-        accessTokenEnc: input.accessTokenEnc,
-        refreshTokenEnc: input.refreshTokenEnc,
-        iv: input.iv,
-        authTag: input.authTag,
-        expiresAt: input.expiresAt,
-        refreshExpiresAt: input.refreshExpiresAt,
-        scope: input.scope,
-        updatedAt: new Date(),
-      },
-    })
-    .returning();
-  return token;
-}
-
-/**
- * Drop a user's Garmin connection. Called when the athlete revokes access from
- * Garmin Connect (the webhook's `deregistrations` event) and from the disconnect
- * action. The synced activities are left in place — the athlete's training
- * history is theirs, and deleting it on a disconnect would be a surprise.
- */
-export async function deleteGarminTokens(userId: string): Promise<void> {
-  await db.delete(garminTokens).where(eq(garminTokens.userId, userId));
-  await db
-    .update(users)
-    .set({ garminUserId: null, updatedAt: new Date() })
-    .where(eq(users.id, userId));
 }
 
 // ---------------------------------------------------------------------------

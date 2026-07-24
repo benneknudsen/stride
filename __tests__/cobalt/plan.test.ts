@@ -349,7 +349,7 @@ describe("buildPlanView — locked race card (issue #117)", () => {
     const view = buildPlanView([], NOW, RACE, RACE_NAME, true);
     expect(view.dataDriven).toBe(false);
     expect(view.race.lock?.reason).toBe("no-runs");
-    expect(view.race.lock?.message).toMatch(/Strava|Garmin/);
+    expect(view.race.lock?.message).toMatch(/Strava/);
   });
 
   it("locks it when every run is too short to anchor a prediction", () => {

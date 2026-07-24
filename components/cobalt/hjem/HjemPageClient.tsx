@@ -46,14 +46,12 @@ export function HjemPageClient({
   view,
   userName,
   stravaConnected,
-  garminConnected,
   signedIn,
   isDemo = false,
 }: {
   view: HomeView;
   userName?: string;
   stravaConnected: boolean;
-  garminConnected: boolean;
   signedIn: boolean;
   /** True only for a visitor on `?demo=1` (#124) — never for a signed-in user. */
   isDemo?: boolean;
@@ -155,11 +153,7 @@ export function HjemPageClient({
             </Bento>
           ) : null}
           <Bento span="col-span-12 lg:col-span-5" delay={0.54}>
-            <DataSourcesCard
-              stravaConnected={stravaConnected}
-              garminConnected={garminConnected}
-              signedIn={signedIn}
-            />
+            <DataSourcesCard stravaConnected={stravaConnected} signedIn={signedIn} />
           </Bento>
         </div>
 

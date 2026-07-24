@@ -7,7 +7,7 @@ import { useState } from "react";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { DEMO_HOME_ROUTE } from "@/lib/routes";
 
-type OAuthProvider = "google" | "garmin";
+type OAuthProvider = "google";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -122,22 +122,6 @@ export default function LoginPage() {
           Fortsæt med Google
         </button>
 
-        {/* Garmin (#35). Signing in here also grants the Activity API scope, so
-            the athlete's runs start syncing without a second connect step. */}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => handleOAuth("garmin")}
-          className="cg-interactive mt-3 flex w-full items-center justify-center gap-2 rounded-card border border-cobalt/15 bg-white px-4 py-2.5 text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.03] disabled:opacity-50"
-        >
-          {oauthLoading === "garmin" ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <GarminIcon />
-          )}
-          Fortsæt med Garmin
-        </button>
-
         <p className="mt-6 text-center text-[13px] text-ink/60">
           Kigger du bare?{" "}
           <Link
@@ -149,14 +133,6 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
-  );
-}
-
-// Garmin's triangle brand mark in Garmin blue (public/garmin-icon.svg).
-function GarminIcon() {
-  return (
-    // biome-ignore lint/performance/noImgElement: static 16px SVG asset — next/image adds nothing here
-    <img src="/garmin-icon.svg" width={16} height={16} alt="" aria-hidden="true" />
   );
 }
 

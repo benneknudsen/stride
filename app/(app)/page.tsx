@@ -2,12 +2,7 @@ import { HjemPageClient } from "@/components/cobalt/hjem/HjemPageClient";
 import { VelkommenPage } from "@/components/cobalt/velkommen/VelkommenPage";
 import { auth } from "@/lib/auth";
 import { buildHomeView } from "@/lib/cobalt/hjem";
-import {
-  getDashboardActivities,
-  getGarminTokens,
-  getRacePlan,
-  getStravaTokens,
-} from "@/lib/db/queries";
+import { getDashboardActivities, getRacePlan, getStravaTokens } from "@/lib/db/queries";
 
 // Hjem (issue #84) — a Server Component that builds the view-model per
 // request: authenticated users get live data (getDashboardActivities) and
@@ -39,14 +34,13 @@ export default async function HjemPage({
     return <VelkommenPage />;
   }
 
-  const [activities, racePlan, stravaTokens, garminTokens] = userId
+  const [activities, racePlan, stravaTokens] = userId
     ? await Promise.all([
         getDashboardActivities(userId),
         getRacePlan(userId),
         getStravaTokens(userId),
-        getGarminTokens(userId),
       ])
-    : [[], null, null, null];
+    : [[], null, null];
   const raceDate = racePlan?.raceDate ?? undefined;
   const raceName = racePlan?.raceName ?? (raceDate ? "Din race" : undefined);
 
@@ -62,7 +56,6 @@ export default async function HjemPage({
       view={view}
       userName={user?.name?.trim() || user?.email?.split("@")[0] || undefined}
       stravaConnected={stravaTokens !== null}
-      garminConnected={garminTokens !== null}
       signedIn={userId !== undefined}
       isDemo={userId === undefined && demo !== undefined}
     />

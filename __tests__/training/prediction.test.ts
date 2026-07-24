@@ -198,7 +198,7 @@ describe("predictRace — locked result (issue #117)", () => {
     const empty = predictRace([], NOW);
     expect(empty.prediction).toBeNull();
     expect(empty.reason).toBe("no-runs");
-    expect(empty.message).toMatch(/Strava|Garmin/);
+    expect(empty.message).toMatch(/Strava/);
 
     // A ride is not a run — the runner still has nothing to predict from.
     expect(predictRace([run(3, 20, 280, "Ride")], NOW).reason).toBe("no-runs");

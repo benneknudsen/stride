@@ -100,23 +100,19 @@ vi.mock("@/lib/db/index", () => ({ db: mock.db }));
 
 import { fromDbDate, toDbDate } from "@/lib/db/calendar-date";
 import {
-  deleteGarminTokens,
   getAccountsByUserId,
   getActivities,
   getActivityById,
   getCachedAnalysis,
   getChatHistory,
-  getGarminTokens,
   getRacePlan,
   getStravaTokens,
   getUserByEmail,
-  getUserByGarminUserId,
   getUserById,
   getUserByStravaAthleteId,
   getUserHrMax,
   insertAnalysis,
   insertChatMessage,
-  saveGarminTokens,
   updateRacePlan,
   upsertStravaTokens,
 } from "@/lib/db/queries";
@@ -254,10 +250,6 @@ describe("getAccountsByUserId", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getUserByStravaAthleteId / getUserByGarminUserId — webhook identity
-// resolution. Unlike the getters above, these deliberately do NOT swallow a DB
-// error into null: a webhook must surface it (→ 5xx) so the provider retries,
-// rather than acking 200 and dropping the event as an "unknown athlete".
 // ---------------------------------------------------------------------------
 
 describe("getUserByStravaAthleteId", () => {
@@ -280,23 +272,6 @@ describe("getUserByStravaAthleteId", () => {
   it("propagates a DB error instead of swallowing it (the webhook must retry)", async () => {
     mock.setError(DB_ERROR);
     await expect(getUserByStravaAthleteId(42)).rejects.toThrow("connection refused");
-  });
-});
-
-describe("getUserByGarminUserId", () => {
-  it("returns the owning user's id when the Garmin id is linked", async () => {
-    mock.setResult([{ id: "u1" }]);
-    expect(await getUserByGarminUserId("garmin-1")).toEqual({ id: "u1" });
-  });
-
-  it("returns null when no user owns the Garmin id", async () => {
-    mock.setResult([]);
-    expect(await getUserByGarminUserId("ghost")).toBeNull();
-  });
-
-  it("propagates a DB error instead of swallowing it (the webhook must retry)", async () => {
-    mock.setError(DB_ERROR);
-    await expect(getUserByGarminUserId("garmin-1")).rejects.toThrow("connection refused");
   });
 });
 
@@ -573,88 +548,6 @@ describe("updateRacePlan", () => {
     await expect(updateRacePlan("u1", { raceDate: null, raceName: null })).rejects.toThrow(
       "connection refused"
     );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getGarminTokens (read — mirrors getStravaTokens)
-// ---------------------------------------------------------------------------
-
-describe("getGarminTokens", () => {
-  it("returns the token row for the user", async () => {
-    const token = { userId: "u1", accessTokenEnc: "enc", iv: "iv", authTag: "tag" };
-    mock.setResult([token]);
-    expect(await getGarminTokens("u1")).toEqual(token);
-    expect(mock.calls.limit?.[0]?.[0]).toBe(1);
-  });
-
-  it("returns null when the user has no stored Garmin tokens", async () => {
-    mock.setResult([]);
-    expect(await getGarminTokens("u1")).toBeNull();
-  });
-
-  it("returns null when the query throws", async () => {
-    mock.setError(DB_ERROR);
-    expect(await getGarminTokens("u1")).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// saveGarminTokens (write — upsert on userId)
-// ---------------------------------------------------------------------------
-
-describe("saveGarminTokens", () => {
-  const input = {
-    userId: "u1",
-    accessTokenEnc: "a-enc",
-    refreshTokenEnc: "",
-    iv: "iv",
-    authTag: "tag",
-    expiresAt: new Date("2026-09-01T00:00:00.000Z"),
-    refreshExpiresAt: new Date("2026-12-01T00:00:00.000Z"),
-    scope: "activity",
-  };
-
-  it("inserts the values and returns the upserted row", async () => {
-    const row = { id: "g1", ...input };
-    mock.setResult([row]);
-    expect(await saveGarminTokens(input)).toEqual(row);
-    expect(mock.db.insert).toHaveBeenCalledTimes(1);
-    expect(mock.calls.values?.[0]?.[0]).toEqual(input);
-    expect(mock.calls.onConflictDoUpdate).toHaveLength(1);
-    expect(mock.calls.returning).toHaveLength(1);
-  });
-
-  it("accepts a null refreshExpiresAt and scope", async () => {
-    const partial = { ...input, refreshExpiresAt: null, scope: null };
-    const row = { id: "g1", ...partial };
-    mock.setResult([row]);
-    expect(await saveGarminTokens(partial)).toEqual(row);
-  });
-
-  it("propagates database errors (no swallowing on writes)", async () => {
-    mock.setError(DB_ERROR);
-    await expect(saveGarminTokens(input)).rejects.toThrow("connection refused");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// deleteGarminTokens (write — drops tokens and clears users.garminUserId)
-// ---------------------------------------------------------------------------
-
-describe("deleteGarminTokens", () => {
-  it("deletes the token row and clears the user's garminUserId", async () => {
-    mock.setResult([]);
-    await expect(deleteGarminTokens("u1")).resolves.toBeUndefined();
-    // Two statements: delete from garmin_tokens, then update users.
-    expect(mock.db.delete).toHaveBeenCalledTimes(1);
-    expect(mock.db.update).toHaveBeenCalledTimes(1);
-    expect(mock.calls.set?.[0]?.[0]).toMatchObject({ garminUserId: null });
-  });
-
-  it("propagates database errors (no swallowing on writes)", async () => {
-    mock.setError(DB_ERROR);
-    await expect(deleteGarminTokens("u1")).rejects.toThrow("connection refused");
   });
 });
 
