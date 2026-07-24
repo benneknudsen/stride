@@ -67,7 +67,7 @@ Live data is default (#84): authed users get their own synced activities + race 
 - `lib/observability.ts` exports `captureError` (serializes only `name`/`message`/`cause` — never raw thrown values). Use it in catch blocks; never `console.log(error)` with token/connection data (#135, #143).
 
 ## Tests
-- `__tests__/` mirrors `lib/` and feature dirs (`db/`, `cobalt/`, `ai/`, `garmin/`, `strava/`, `hooks/`, `coach/`, `training/`, `actions/`, `e2e/`).
+- `__tests__/` mirrors `lib/` and feature dirs (`db/`, `cobalt/`, `ai/`, `strava/`, `hooks/`, `coach/`, `training/`, `actions/`, `e2e/`).
 - `vitest.config.ts`: node env, `@` alias, **excludes `__tests__/e2e/**`**, coverage threshold ~82%.
 - `npm run test:e2e` runs Playwright (4 specs) — not a stub.
 - Validate changes with: `biome check . && tsc --noEmit && vitest run`.
@@ -81,4 +81,4 @@ A fresh `git worktree add` has **no `node_modules`**. Symlink the main checkout'
 - Legacy "Volt" system (`StrideLogo`/`StrideLoader`, Geist/Space Grotesk) has been **removed** — do not reference it.
 
 ## Env vars (see `.env.example`)
-`DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID/SECRET`, `RESEND_API_KEY`, `GARMIN_*`, `STRAVA_*`, `ENCRYPTION_KEY` (AES-256-GCM), `UPSTASH_REDIS_REST_URL/TOKEN`, `OPENROUTER_API_KEY`, `AI_PRIMARY`/`AI_FALLBACK`.
+`DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID/SECRET`, `RESEND_API_KEY`, `STRAVA_*`, `ENCRYPTION_KEY` (AES-256-GCM), `UPSTASH_REDIS_REST_URL/TOKEN`, `OPENROUTER_API_KEY`, `AI_PRIMARY`/`AI_FALLBACK`.

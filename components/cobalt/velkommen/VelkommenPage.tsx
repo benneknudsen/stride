@@ -146,7 +146,7 @@ export function VelkommenPage() {
             delay={0.05}
             step="01"
             title="Forbind din data"
-            body="Log ind og forbind Strava eller Garmin — dine seneste ture lander i dashboardet med det samme."
+            body="Log ind og forbind Strava — dine seneste ture lander i dashboardet med det samme."
           />
           <StepCard
             delay={0.12}
@@ -180,7 +180,7 @@ export function VelkommenPage() {
             Klar til din næste PR?
           </h2>
           <p className="mx-auto mt-4 max-w-[440px] text-[14.5px] leading-relaxed text-silver/80">
-            Log ind med Google eller Garmin — eller kig dig omkring i demoen først.
+            Log ind med Google — eller kig dig omkring i demoen først.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <LoginLink className="cg-interactive rounded-pill bg-silver px-7 py-3 text-[14px] font-semibold text-cobalt transition-opacity hover:opacity-90">
