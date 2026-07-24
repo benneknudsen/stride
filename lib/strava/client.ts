@@ -3,9 +3,106 @@ import { stravaTokens } from "../../drizzle/schema";
 import { decrypt, encrypt } from "../crypto";
 import { db } from "../db";
 import { refreshAccessToken } from "./oauth";
-import type { DetailedActivity, SummaryActivity } from "./types";
+import type { DetailedActivity, StravaWebhookSubscription, SummaryActivity } from "./types";
 
 const STRAVA_API_BASE = "https://www.strava.com/api/v3";
+
+// ---------------------------------------------------------------------------
+// Push (webhook) subscription management — issue #183.
+//
+// A push subscription is application-scoped: there is one per Strava app, not
+// one per athlete. Strava therefore authenticates these endpoints with the
+// *application* credentials (`client_id` + `client_secret`) rather than an
+// athlete's bearer token — a per-user access token returns 401 here. See
+// https://developers.strava.com/docs/webhooks/. The callback + verify token are
+// the same pair the webhook route validates against (`STRAVA_VERIFY_TOKEN`,
+// GET /api/strava/webhook), so a subscription created here can complete Strava's
+// challenge handshake.
+// ---------------------------------------------------------------------------
+
+const STRAVA_PUSH_SUBSCRIPTION_URL = `${STRAVA_API_BASE}/push_subscriptions`;
+
+/** Default public callback the webhook route is deployed at (env-overridable). */
+const DEFAULT_WEBHOOK_CALLBACK_URL = "https://stride-ochre-five.vercel.app/api/strava/webhook";
+
+/** The URL Strava will POST activity events to; verified via `hub.challenge`. */
+function getWebhookCallbackUrl(): string {
+  return process.env.STRAVA_WEBHOOK_CALLBACK_URL || DEFAULT_WEBHOOK_CALLBACK_URL;
+}
+
+/** Shared secret Strava echoes back during the subscription validation handshake. */
+function getVerifyToken(): string {
+  const token = process.env.STRAVA_VERIFY_TOKEN;
+  if (!token) throw new Error("STRAVA_VERIFY_TOKEN is not set");
+  return token;
+}
+
+/** The application credentials Strava's subscription API authenticates against. */
+function requireStravaAppCredentials(): { clientId: string; clientSecret: string } {
+  const clientId = process.env.STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  if (!clientId) throw new Error("Missing environment variable: STRAVA_CLIENT_ID");
+  if (!clientSecret) throw new Error("Missing environment variable: STRAVA_CLIENT_SECRET");
+  return { clientId, clientSecret };
+}
+
+/**
+ * Create the application's push subscription. Idempotency is the caller's job —
+ * Strava rejects a second POST while one already exists (HTTP 400), so callers
+ * should check {@link getWebhookSubscription} first (see the manage route).
+ */
+export async function createWebhookSubscription(): Promise<StravaWebhookSubscription> {
+  const { clientId, clientSecret } = requireStravaAppCredentials();
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    callback_url: getWebhookCallbackUrl(),
+    verify_token: getVerifyToken(),
+  });
+
+  const res = await fetch(STRAVA_PUSH_SUBSCRIPTION_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Strava subscription create failed (${res.status}): ${text}`);
+  }
+  return res.json() as Promise<StravaWebhookSubscription>;
+}
+
+/**
+ * Read the application's current push subscription, or `null` when none exists.
+ * GET /push_subscriptions returns an array of zero or one subscription.
+ */
+export async function getWebhookSubscription(): Promise<StravaWebhookSubscription | null> {
+  const { clientId, clientSecret } = requireStravaAppCredentials();
+  const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
+
+  const res = await fetch(`${STRAVA_PUSH_SUBSCRIPTION_URL}?${params.toString()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Strava subscription read failed (${res.status}): ${text}`);
+  }
+  const subscriptions = (await res.json()) as StravaWebhookSubscription[];
+  return subscriptions[0] ?? null;
+}
+
+/** Delete the application's push subscription by its Strava-assigned id. */
+export async function deleteWebhookSubscription(id: number): Promise<void> {
+  const { clientId, clientSecret } = requireStravaAppCredentials();
+  const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
+
+  const res = await fetch(`${STRAVA_PUSH_SUBSCRIPTION_URL}/${id}?${params.toString()}`, {
+    method: "DELETE",
+  });
+  // Strava answers 204 No Content on success.
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Strava subscription delete failed (${res.status}): ${text}`);
+  }
+}
 
 export function createStravaClient(accessToken: string) {
   async function request<T>(path: string): Promise<T> {

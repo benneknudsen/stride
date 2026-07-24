@@ -17,6 +17,19 @@ export type RefreshTokenResponse = {
   refresh_token: string;
 };
 
+/**
+ * A Strava push (webhook) subscription. There is exactly one per application, so
+ * the list endpoint returns an array of zero or one of these.
+ * See https://developers.strava.com/docs/webhooks/.
+ */
+export type StravaWebhookSubscription = {
+  id: number;
+  application_id?: number;
+  callback_url: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type StravaAthlete = {
   id: number;
   username: string | null;

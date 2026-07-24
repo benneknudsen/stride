@@ -7,7 +7,9 @@ import { auth } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { upsertStravaTokens } from "@/lib/db/queries";
+import { captureError } from "@/lib/observability";
 import { exchangeCodeForTokens, generatePkce, getAuthorizationUrl } from "@/lib/strava/oauth";
+import { syncStravaActivities } from "@/lib/strava/sync";
 
 const STRAVA_COOKIE = "strava_oauth";
 const COOKIE_MAX_AGE = 600; // 10 minutes
@@ -67,5 +69,16 @@ export async function handleStravaCallback(code: string, codeVerifier: string): 
       .update(users)
       .set({ stravaAthleteId: tokens.athlete.id, updatedAt: new Date() })
       .where(eq(users.id, userId));
+  }
+
+  // Kick off a full historical sync now that the tokens are stored, so the
+  // dashboard has data immediately instead of waiting for the first webhook.
+  // Best-effort: the connection itself has already succeeded, so a sync failure
+  // (transient Strava/DB error, rate limit) must not surface as a failed
+  // connect. The webhook and the manual re-sync backfill anything missed here.
+  try {
+    await syncStravaActivities(userId);
+  } catch (err) {
+    captureError("actions.handleStravaCallback.initialSync", err);
   }
 }
