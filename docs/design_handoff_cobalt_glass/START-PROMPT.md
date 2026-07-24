@@ -29,7 +29,7 @@ Du skal implementere et komplet redesign af Stride (Next.js running-dashboard) k
 - [ ] `<SyncButton>` — idle/syncing/synced (kobles til rigtig sync-API hvis den findes)
 - [ ] `<RunnerLoader>` — logo-loaderen (statisk løber + rullende stiplet vej) + `<LoadingOverlay>` (blur over indhold, nav/hero friholdes). INGEN skeletons.
 - [ ] `<IntensityMeter>` — 5-søjlers intensitets-brik (erstatter "Z2"/"Z4"-koder)
-- [ ] `<SourceBadge>` — GARMIN/STRAVA-badge med farvet prik
+- [ ] `<SourceBadge>` — STRAVA-badge med farvet prik
 - [ ] `<CountUpNumber>` — tal med count-up + dæmpet pulserende 0-state (dansk talformat)
 
 **Fase 3 — Sider** (én ad gangen, sammenlign med screenshot efter hver)

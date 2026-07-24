@@ -26,7 +26,6 @@
   /* Farver — semantiske */
   --success:       #2BA84A;  /* synced-prik */
   --success-text:  #1B7A38;  /* synced-tekst */
-  --garmin:        #007CC3;  /* Garmin kilde-badge-prik */
   --strava:        #FC4C02;  /* Strava kilde-badge-prik + connect-knap */
   --on-red:        #FDF3EE;  /* tekst på røde flader */
 
@@ -69,7 +68,6 @@ module.exports = {
         silver: { DEFAULT: '#E9EAE5', dark: '#DDE0EC' },
         muted: '#5560A8',
         onred: '#FDF3EE',
-        garmin: '#007CC3',
         strava: '#FC4C02',
       },
       borderRadius: { widget: '24px', card: '20px', tile: '13px' },
@@ -117,14 +115,14 @@ loops, translate ±30px + scale 1.06). `pointer-events: none`.
 | **Sync-knap** | NYT | 3 states: `Sync now` (kobolt pill, hvid refresh-ikon) → `SYNCER…` (outline pill, pulserende rød prik, mono) → `SYNCED` (outline pill, grøn prik, grøn tekst). Simuleret 1,8s |
 | **Hero** | NYT | Venstre: rød mono-label ("UGE 27 · MARATHONPLAN") + serif-italic hilsen i 2 linjer. Højre: kæmpe km-tal med count-up-animation (1,2s ease-out cubic) + mono-underlabel |
 | **Plan-strip** | NYT | Slank glas-række: logo-tile + "CPH Marathon · mål 3:45" + progress-bar (71 %, kobolt→rød gradient i enden) + "74 DAGE" (rød mono) + "Se plan →" outline-knap |
-| **Seneste aktivitet (widget, stor)** | NYT | 6/12 kolonner. Header: mono-label + GARMIN-badge + tidspunkt. Titel 30px + zone-pill ("Zone 3 · Moderat tempo"). 4 nøgletal (34px display, puls i rød). Pace-kurve: SVG-linje der tegner sig (stroke-dasharray, 1,8s) med pulserende rød endeprik |
+| **Seneste aktivitet (widget, stor)** | NYT | 6/12 kolonner. Header: mono-label + STRAVA-badge + tidspunkt. Titel 30px + zone-pill ("Zone 3 · Moderat tempo"). 4 nøgletal (34px display, puls i rød). Pace-kurve: SVG-linje der tegner sig (stroke-dasharray, 1,8s) med pulserende rød endeprik |
 | **Rute (widget, lille)** | NYT | 3/12 kolonner. Rigtigt kort: **Leaflet + CARTO light_all tiles**, ikke-interaktivt (alle handlers off). Rute som rød polyline (bred 22 %-opacity glow under 3,5px streg), start-prik kobolt, slut-prik rød. Stats-chip nederst-venstre i glas |
 | **Snit-pace (widget)** | NYT | 3/12. Progress-ring (SVG-cirkel, stroke-dasharray-animation), 5:06 i display-font i midten, note med rød delta nederst |
 | **Volumen (widget)** | NYT | 4/12. 10 søjler, stigende kobolt-opacity (0.25→1.0), sidste søjle rød. Vokser fra bunden staggered (delay 0.06s pr. søjle, scaleY cubic-bezier(.2,.8,.2,1)) |
 | **Restitution (widget)** | ÆNDRET (mindre) | 3/12, kompakt. Rød gradient-flade (rgba(238,36,24,0.85→0.65)), 86 % i display-font, hvid progress-bar. Tekst i `--on-red` |
 | **AI Coach (widget)** | NYT | 5/12. Kobolt-flade rgba(27,41,192,0.9). Logo-glyf + "AI COACH" mono + serif-italic citat i »…«. 2 pill-knapper (sølv solid + outline) |
-| **Seneste ture (widget)** | ÆNDRET | 7/12. Rækker med: intensitets-måler (42px brik med 5 mini-søjler: kobolt = aktiv, rød = hård, 15 % = inaktiv — IKKE tal!), navn + dato + klartekst-zone ("Hårdt tempo" i rød / "Rolig snak-fart" i kobolt), kilde-badge (STRAVA/GARMIN med farvet prik), km + pace højrestillet |
-| **Datakilder (widget)** | NYT | 5/12. Garmin-række (forbundet, grøn prik) + Strava-række (connect-flow: orange knap → forbundet). Zone-forklaring i klartekst nederst |
+| **Seneste ture (widget)** | ÆNDRET | 7/12. Rækker med: intensitets-måler (42px brik med 5 mini-søjler: kobolt = aktiv, rød = hård, 15 % = inaktiv — IKKE tal!), navn + dato + klartekst-zone ("Hårdt tempo" i rød / "Rolig snak-fart" i kobolt), kilde-badge (STRAVA med farvet prik), km + pace højrestillet |
+| **Datakilder (widget)** | NYT | 5/12. Strava-række (connect-flow: orange knap → forbundet). Zone-forklaring i klartekst nederst |
 | **Zone-labels** | ÆNDRET | Aldrig "Z2"/"Z4" alene. Altid klartekst: Zone 1–2 = "Rolig snak-fart", Zone 3 = "Moderat tempo", Zone 4–5 = "Hårdt tempo"/"Meget hårdt". Hård = rød, rolig/moderat = kobolt |
 | **Loader** | NYT | ÉN genbrugelig logo-loader — INGEN skeletons. Statisk løber-glyf over stiplet vej (`stroke-dasharray: 10 14`) der ruller bagud (0.5s linear loop) + mono-statustekst. Se `assets/loader-runner.svg` |
 | **Side-loading** | NYT | Widget-området (under hero) dækkes af ét samlet overlay: rgba(233,234,229,0.4) + backdrop-blur 16px + central loader. Nav + hero er IKKE dækket og forbliver klikbare. Fader ud efter ~2s (0.6s opacity ease), fjernes så fra DOM. Hero-km-tal viser dæmpet pulserende "0,0" og tæller op når loaderen lukker |
@@ -197,7 +195,7 @@ Kør evt. HTML-filerne i `design-files/` direkte i en browser for at se animatio
 - Alle interaktioner slået fra (dragging, zoom, tap) — kortet er en visning, ikke et kort-UI
 - `fitBounds` på rutens koordinater med padding 22px
 - Rute: 2 polylines (glow: rød 9px/22 % + streg: rød 3,5px), start = kobolt circleMarker, slut = rød
-- I produktion: brug aktivitetens rigtige GPS-polyline fra Garmin/Strava API
+- I produktion: brug aktivitetens rigtige GPS-polyline fra Strava API
 
 ## 8. Filer i denne pakke
 
