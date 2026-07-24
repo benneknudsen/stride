@@ -65,10 +65,9 @@ export async function syncStravaActivities(userId: string): Promise<number> {
             averageCadence: sql`excluded.average_cadence`,
             averageWatts: sql`excluded.average_watts`,
             summaryPolyline: sql`excluded.summary_polyline`,
-            // splits / calories / hr_zones are NOT updated here: the summary
-            // payload can't carry them, so overwriting would blank out the
-            // richer values the webhook's detail fetch already stored (#101).
-            raw: sql`excluded.raw`,
+            // splits / calories / hr_zones / raw are NOT updated here: the
+            // summary payload can't carry them, so overwriting would blank out
+            // the richer values the webhook's detail fetch already stored (#101).
             updatedAt: new Date(),
           },
         });
