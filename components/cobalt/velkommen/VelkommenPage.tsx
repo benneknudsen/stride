@@ -58,8 +58,8 @@ export function VelkommenPage() {
         </Reveal>
         <Reveal delay={0.16}>
           <p className="mx-auto mt-6 max-w-[560px] text-[15.5px] leading-relaxed text-ink">
-            Stride samler dine ture fra Strava og Garmin, analyserer hver eneste af dem med AI og
-            bygger en ugeplan, der peger mod dit næste race.
+            Stride samler dine ture fra Strava, analyserer hver eneste af dem med AI og bygger en
+            ugeplan, der peger mod dit næste race.
           </p>
         </Reveal>
         <Reveal delay={0.24}>
@@ -127,10 +127,6 @@ export function VelkommenPage() {
                 <span className="flex items-center gap-2 cg-label text-[11px] font-semibold text-cobalt">
                   <span className="size-2 rounded-full bg-strava" aria-hidden="true" />
                   Strava
-                </span>
-                <span className="flex items-center gap-2 cg-label text-[11px] font-semibold text-cobalt">
-                  <span className="size-2 rounded-full bg-garmin" aria-hidden="true" />
-                  Garmin
                 </span>
               </div>
               <p className="m-0 text-[13.5px] leading-relaxed text-ink">

@@ -1,22 +1,13 @@
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
-import {
-  GARMIN_API_BASE,
-  GARMIN_AUTHORIZATION_URL,
-  GARMIN_SCOPE,
-  GARMIN_TOKEN_URL,
-} from "@/lib/garmin/config";
 
 const isDev = process.env.NODE_ENV === "development";
-
-/** `GET /user/id` is the whole of Garmin's "profile" — there is no name or email. */
-type GarminProfile = { userId: string };
 
 /**
  * Strava's `GET /athlete` shape — the fields we read for the NextAuth profile.
  * Strava no longer returns an email on this endpoint, so we mint a placeholder
- * (see the provider's `profile` below), the same convention as Garmin.
+ * (see the provider's `profile` below).
  */
 type StravaAthleteProfile = {
   id: number;
@@ -26,59 +17,14 @@ type StravaAthleteProfile = {
   profile: string | null;
 };
 
-/**
- * Garmin Connect — OAuth 2.0 PKCE (issue #35).
- *
- * `checks: ["pkce", "state"]` is what makes this a PKCE flow: Auth.js mints the
- * code_verifier, sends its S256 challenge on the authorize leg, replays the
- * verifier on the token leg, and validates the CSRF state — so the flow needs no
- * hand-rolled cookie dance like the Strava connect action has.
- *
- * Two places Garmin departs from a stock OAuth 2 provider:
- *
- *  - **Auth method.** Garmin wants `client_id`/`client_secret` in the form body;
- *    Auth.js defaults to HTTP Basic, which Garmin's token endpoint rejects.
- *  - **No identity.** Garmin returns *only* an opaque `userId` — no email, ever.
- *    `users.email` is NOT NULL (it is the account's natural key), so a Garmin-only
- *    sign-in gets a routable-looking but undeliverable placeholder, the same
- *    convention GitHub uses for private-email users. An athlete who signs in with
- *    Garmin and later wants email/Google can link those to the same account.
- *
- * The tokens this provider returns are the *data* tokens for the Activity API.
- * NextAuth's adapter would park them in `accounts` in plaintext; `lib/auth.ts`
- * copies them into `garmin_tokens` encrypted (AES-256-GCM) on every sign-in.
- */
 const providers: NextAuthConfig["providers"] = [
   Google({
     clientId: process.env.AUTH_GOOGLE_ID,
     clientSecret: process.env.AUTH_GOOGLE_SECRET,
   }),
   {
-    id: "garmin",
-    name: "Garmin",
-    type: "oauth",
-    clientId: process.env.GARMIN_CLIENT_ID,
-    clientSecret: process.env.GARMIN_CLIENT_SECRET,
-    authorization: {
-      url: GARMIN_AUTHORIZATION_URL,
-      params: { response_type: "code", scope: GARMIN_SCOPE },
-    },
-    token: { url: GARMIN_TOKEN_URL },
-    userinfo: { url: `${GARMIN_API_BASE}/user/id` },
-    checks: ["pkce", "state"],
-    client: { token_endpoint_auth_method: "client_secret_post" },
-    profile(profile: GarminProfile) {
-      return {
-        id: profile.userId,
-        name: "Garmin-bruger",
-        email: `garmin_${profile.userId}@users.noreply.stride.run`,
-        image: null,
-      };
-    },
-  },
-  {
     /**
-     * Strava — OAuth 2.0 PKCE (issue #183). Modelled on the Garmin provider above.
+     * Strava — OAuth 2.0 PKCE (issue #183).
      *
      * Strava is a *data source* first: the connect flow in `actions/strava.ts`
      * links it to an already-authenticated account. This provider makes Strava
@@ -90,8 +36,8 @@ const providers: NextAuthConfig["providers"] = [
      * Two Strava-specific departures from a stock OAuth 2 provider:
      *  - **Auth method.** Strava wants `client_id`/`client_secret` in the form
      *    body (`client_secret_post`), not HTTP Basic.
-     *  - **No identity.** `GET /athlete` returns no email, so — like Garmin — a
-     *    Strava-only sign-in gets a routable-looking placeholder for the NOT NULL
+     *  - **No identity.** `GET /athlete` returns no email, so a Strava-only
+     *    sign-in gets a routable-looking placeholder for the NOT NULL
      *    `users.email`; the athlete can link email/Google to the same account.
      */
     id: "strava",

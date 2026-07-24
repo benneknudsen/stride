@@ -174,8 +174,7 @@ function formatKm(km: number): string {
  * that couldn't.
  */
 const LOCK_MESSAGES: Record<PredictionLockReason, (km: number) => string> = {
-  "no-runs": () =>
-    "Synkronisér dine løbeture fra Strava eller Garmin, så beregner vi dit race-estimat.",
+  "no-runs": () => "Synkronisér dine løbeture fra Strava, så beregner vi dit race-estimat.",
   "stale-runs": (km) =>
     `Vi kan ikke se nogen løbeture fra de sidste ${LOOKBACK_DAYS} dage. Løb en tur på mindst ${formatKm(km)} km, så låser vi dit race-estimat op.`,
   "runs-too-short": (km) =>

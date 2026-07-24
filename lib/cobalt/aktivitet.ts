@@ -51,7 +51,7 @@ const TYPE_LABELS: Record<string, string> = {
 export interface ActivityDetailLike {
   id: string;
   name: string;
-  /** Ingesting provider ("strava" | "garmin"); absent on the demo fixtures (#35). */
+  /** Ingesting provider ("strava"); absent on the demo fixtures. */
   source?: string | null;
   /** Strava activity type — "Run", "TrailRun", … */
   type: string;

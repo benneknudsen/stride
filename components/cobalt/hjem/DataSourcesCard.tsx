@@ -1,21 +1,13 @@
 "use client";
 
-import { signIn } from "next-auth/react";
 import { useState, useTransition } from "react";
 import { connectStrava } from "@/actions/strava";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { ROUTES } from "@/lib/routes";
 
 // "Datakilder" widget (5/12): one row per provider, each reflecting the user's
-// real connection state. Issue #98 removed a hardcoded "Garmin Forbundet" row
-// for an integration that did not exist and faked the connect with local state;
-// issue #35 built the integration, so the row is back — and now it is real.
-//
-// The two connects run different flows, because the two providers are wired
-// differently: Strava is a data-only link (a server action mints the PKCE
-// challenge, and the callback stores the tokens), while Garmin is also an
-// identity provider, so its connect is a NextAuth sign-in that links the Garmin
-// account to the session user and stores the same tokens encrypted.
+// real connection state. Strava is a data-only link (a server action mints the
+// PKCE challenge, and the callback stores the tokens).
 //
 // A plain-language zone legend sits at the bottom — no "Z2"/"Z4" codes anywhere.
 const ZONE_LEGEND = [
@@ -92,11 +84,9 @@ function ConnectControl({
 
 export function DataSourcesCard({
   stravaConnected,
-  garminConnected,
   signedIn,
 }: {
   stravaConnected: boolean;
-  garminConnected: boolean;
   /** Visitors can't start an OAuth flow — the callback needs a session. */
   signedIn: boolean;
 }) {
@@ -109,20 +99,6 @@ export function DataSourcesCard({
       try {
         const { url } = await connectStrava();
         window.location.assign(url);
-      } catch {
-        setFailed(true);
-      }
-    });
-  };
-
-  // NextAuth redirects the browser itself; linking the Garmin account to the
-  // signed-in user, and storing its tokens, both happen server-side on the way
-  // back through the callback.
-  const handleConnectGarmin = () => {
-    setFailed(false);
-    startTransition(async () => {
-      try {
-        await signIn("garmin", { callbackUrl: ROUTES.HOME });
       } catch {
         setFailed(true);
       }
@@ -146,19 +122,6 @@ export function DataSourcesCard({
             pending={pending}
             brandColor="var(--color-strava)"
             onConnect={handleConnectStrava}
-          />
-        </SourceRow>
-
-        <SourceRow
-          name="Garmin"
-          dotColor={garminConnected ? "var(--color-success)" : "var(--color-garmin)"}
-        >
-          <ConnectControl
-            connected={garminConnected}
-            signedIn={signedIn}
-            pending={pending}
-            brandColor="var(--color-garmin)"
-            onConnect={handleConnectGarmin}
           />
         </SourceRow>
 

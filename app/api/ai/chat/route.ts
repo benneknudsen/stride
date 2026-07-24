@@ -153,7 +153,7 @@ Regler:
 /** Appended when the user has nothing synced yet, so the coach never passes
  * demo numbers off as the user's own training. */
 const DEMO_DATA_NOTE = `
-- VIGTIGT: Brugeren har endnu ingen synkroniserede aktiviteter, så dine tools læser produktets demodata. Gør altid opmærksom på det, når du refererer til tallene, og anbefal at forbinde Strava eller Garmin.`;
+- VIGTIGT: Brugeren har endnu ingen synkroniserede aktiviteter, så dine tools læser produktets demodata. Gør altid opmærksom på det, når du refererer til tallene, og anbefal at forbinde Strava.`;
 
 // ---------------------------------------------------------------------------
 // Agent tools — thin, validated adapters over the coach engine (the SSOT)
@@ -167,7 +167,7 @@ const isoDate = z.string().describe("ISO 8601 date string");
  * The activity fields the progression engine reads — DB rows and demo fixtures
  * both fit. Source-agnostic by design (issue #184): the route loads activities
  * through `getDashboardActivities`, which filters by `userId` only, so the coach
- * sees every synced run whether it came in over Strava or Garmin. Both providers'
+ * sees every synced run regardless of provider. Both providers'
  * mappers normalise into the same columns/units, so no `source` field is needed
  * here — see the note on `AnalysisActivity` in `lib/ai/analysis.ts`.
  */

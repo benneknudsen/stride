@@ -70,7 +70,7 @@ function detailed(overrides: Partial<DetailedActivity> = {}): DetailedActivity {
     laps: [],
     segment_efforts: [],
     photos: null,
-    device_name: "Garmin Forerunner",
+    device_name: "Apple Watch",
     embed_token: null,
     ...overrides,
   };

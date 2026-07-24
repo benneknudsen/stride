@@ -58,12 +58,6 @@ export const users = pgTable(
     image: text("image"),
     /** Strava athlete id (numeric, stored as bigint for headroom). */
     stravaAthleteId: bigint("strava_athlete_id", { mode: "number" }),
-    /**
-     * Garmin's app-scoped user id (issue #35). Opaque string, not numeric — it
-     * is how a Garmin push notification names the athlete, so the webhook
-     * resolves the owning user through this column.
-     */
-    garminUserId: text("garmin_user_id"),
     /** Målrace-dato (dag-granulær, ingen tz). Null = ingen race valgt → demo-fallback. */
     raceDate: date("race_date", { mode: "date" }),
     /** Valgfrit racenavn til UI ("Silkeborg Halvmarathon"). */
@@ -74,7 +68,6 @@ export const users = pgTable(
   (table) => [
     uniqueIndex("users_email_unique").on(table.email),
     uniqueIndex("users_strava_athlete_id_unique").on(table.stravaAthleteId),
-    uniqueIndex("users_garmin_user_id_unique").on(table.garminUserId),
   ]
 );
 
@@ -157,42 +150,7 @@ export const stravaTokens = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// garmin_tokens — AES-256-GCM encrypted OAuth tokens (one row per user).
-// Mirrors strava_tokens (issue #35). Garmin's tokens are deliberately NOT left
-// in the NextAuth `accounts` row the adapter writes: the adapter stores them in
-// plaintext, and this codebase's rule is that provider tokens are encrypted at
-// rest (lib/crypto.ts). `accounts` keeps the identity link; the secrets live here.
-// ---------------------------------------------------------------------------
-
-export const garminTokens = pgTable(
-  "garmin_tokens",
-  {
-    id: text("id").primaryKey().$defaultFn(createId),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** AES-256-GCM ciphertext of a JSON blob holding both tokens (single IV). */
-    accessTokenEnc: text("access_token_enc").notNull(),
-    /** Unused — both tokens live in `accessTokenEnc`. Kept for parity with strava_tokens. */
-    refreshTokenEnc: text("refresh_token_enc").notNull(),
-    /** Per-row initialization vector (hex). */
-    iv: text("iv").notNull(),
-    /** GCM authentication tag (hex). */
-    authTag: text("auth_tag").notNull(),
-    /** When the access token expires (derived from Garmin's relative `expires_in`). */
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    /** When the *refresh* token expires — Garmin's expire too (~3 months). */
-    refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }),
-    /** Granted OAuth scope string. */
-    scope: text("scope"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [uniqueIndex("garmin_tokens_user_id_unique").on(table.userId)]
-);
-
-// ---------------------------------------------------------------------------
-// activities — running workouts with full metrics, from Strava or Garmin
+// activities — running workouts with full metrics, from Strava
 // ---------------------------------------------------------------------------
 
 export const activities = pgTable(
@@ -203,23 +161,12 @@ export const activities = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     /**
-     * Which provider this row was ingested from (issue #35). Defaults to
-     * "strava" so every row written before Garmin existed keeps its true origin
-     * without a backfill. Feeds the UI's SourceBadge.
+     * Which provider this row was ingested from. Defaults to "strava" — the only
+     * ingest source — and feeds the UI's SourceBadge.
      */
     source: text("source").notNull().default("strava"),
-    /**
-     * Strava activity id. Null on Garmin rows — the provider-specific id columns
-     * are mutually exclusive, one per `source`.
-     */
+    /** Strava activity id — the dedup key for a synced activity. */
     stravaActivityId: bigint("strava_activity_id", { mode: "number" }),
-    /**
-     * Garmin's `summaryId` — the dedup key for a Garmin activity. A string, not
-     * a number (e.g. "x153.1652667514"), and the only id Garmin guarantees on
-     * both the pull and the push payload (`activityId` is absent on some manual
-     * entries). Null on Strava rows.
-     */
-    garminSummaryId: text("garmin_summary_id"),
     name: text("name").notNull(),
     /** Strava activity type, e.g. "Run", "TrailRun". */
     type: text("type").notNull().default("Run"),
@@ -259,11 +206,9 @@ export const activities = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // Both provider keys are nullable now, and Postgres treats NULLs as distinct
-    // in a unique index — so a user's many Garmin rows (all with a null
-    // strava_activity_id) don't collide here, and vice versa.
+    // strava_activity_id is nullable, and Postgres treats NULLs as distinct in a
+    // unique index — so rows without one (e.g. a manual entry) don't collide.
     uniqueIndex("activities_user_strava_activity_unique").on(table.userId, table.stravaActivityId),
-    uniqueIndex("activities_user_garmin_summary_unique").on(table.userId, table.garminSummaryId),
     index("activities_user_start_date_idx").on(table.userId, table.startDate),
     // Webhook delete/lookup filters by strava_activity_id alone; the composite
     // unique above leads with user_id and can't serve it — see issue #38.

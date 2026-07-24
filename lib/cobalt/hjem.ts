@@ -45,12 +45,11 @@ const DA_MONTHS = [
 const DA_WEEKDAYS_LONG = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
 
 /**
- * Where an activity was ingested from. Both members are now real: #96 removed a
- * *fabricated* badge that alternated per row, and #35 made Garmin an actual sync
- * source — so the value is read from the activity's `source` column via
+ * Where an activity was ingested from. #96 removed a *fabricated* badge that
+ * alternated per row — the value is read from the activity's `source` column via
  * {@link sourceOf}, never chosen at the call site.
  */
-export type ActivitySource = "garmin" | "strava";
+export type ActivitySource = "strava";
 
 export interface ZoneInfo {
   /** IntensityMeter level 1–5. */
@@ -234,8 +233,8 @@ export interface HomeView {
   latest: LatestActivityView;
   /**
    * The newest run's decoded GPS route (issue #114) — empty when that run
-   * carried no polyline (a treadmill run, or a Garmin row, which never has
-   * one). The RouteCard renders a placeholder rather than an empty map.
+   * carried no polyline (e.g. a treadmill run). The RouteCard renders a
+   * placeholder rather than an empty map.
    */
   routeCoords: [number, number][];
   routeKm: number;
@@ -329,12 +328,12 @@ function isRun(activity: HomeActivityLike): boolean {
 export const ACTIVITY_SOURCE: ActivitySource = "strava";
 
 /**
- * The badge a row should carry. Since #35 the app ingests two providers, so the
- * source is per-activity data, not a constant — but it arrives as the DB's free
- * -text column, so narrow it here rather than trusting the string at the badge.
+ * The badge a row should carry. Source arrives as the DB's free-text column, so
+ * narrow it to {@link ActivitySource} here rather than trusting the string at
+ * the badge; anything unrecognised falls back to {@link ACTIVITY_SOURCE}.
  */
 export function sourceOf(activity: { source?: string | null }): ActivitySource {
-  return activity.source === "garmin" ? "garmin" : ACTIVITY_SOURCE;
+  return activity.source === "strava" ? "strava" : ACTIVITY_SOURCE;
 }
 
 export function buildHomeView(
@@ -437,7 +436,7 @@ export function buildHomeView(
   const weekOfPlan = Math.min(totalWeeks, Math.max(1, totalWeeks - Math.floor(daysToRace / 7)));
 
   // The real GPS route of the newest run (issue #114). A run without a polyline
-  // (treadmill, or any Garmin row) draws nothing; the fixtures keep the Søerne
+  // (a treadmill run, say) draws nothing; the fixtures keep the Søerne
   // loop so demo mode still shows a route.
   const decoded = decodePolyline(latest.summaryPolyline);
   const routeCoords = decoded.length > 0 ? decoded : isDemo ? DEMO_ROUTE_COORDS : [];

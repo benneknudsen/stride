@@ -130,19 +130,6 @@ describe("buildActivitiesView", () => {
     expect(row.category).toBe("rolig");
   });
 
-  it("resolves the source, defaulting a Garmin row to garmin", () => {
-    const view = buildActivitiesView(
-      [
-        run({ id: "g", source: "garmin" }),
-        run({ id: "s", source: "strava", startDate: new Date(2026, 6, 12) }),
-      ],
-      NOW
-    );
-    const byId = Object.fromEntries(view.rows.map((r) => [r.id, r.source]));
-    expect(byId.g).toBe("garmin");
-    expect(byId.s).toBe("strava");
-  });
-
   it("labels a single-month window with just that month", () => {
     const view = buildActivitiesView([run({ startDate: new Date(2026, 6, 3) })], NOW);
     expect(view.periodLabel).toBe("Juli");
