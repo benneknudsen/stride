@@ -14,6 +14,19 @@ const isDev = process.env.NODE_ENV === "development";
 type GarminProfile = { userId: string };
 
 /**
+ * Strava's `GET /athlete` shape — the fields we read for the NextAuth profile.
+ * Strava no longer returns an email on this endpoint, so we mint a placeholder
+ * (see the provider's `profile` below), the same convention as Garmin.
+ */
+type StravaAthleteProfile = {
+  id: number;
+  firstname: string | null;
+  lastname: string | null;
+  profile_medium: string | null;
+  profile: string | null;
+};
+
+/**
  * Garmin Connect — OAuth 2.0 PKCE (issue #35).
  *
  * `checks: ["pkce", "state"]` is what makes this a PKCE flow: Auth.js mints the
@@ -60,6 +73,47 @@ const providers: NextAuthConfig["providers"] = [
         name: "Garmin-bruger",
         email: `garmin_${profile.userId}@users.noreply.stride.run`,
         image: null,
+      };
+    },
+  },
+  {
+    /**
+     * Strava — OAuth 2.0 PKCE (issue #183). Modelled on the Garmin provider above.
+     *
+     * Strava is a *data source* first: the connect flow in `actions/strava.ts`
+     * links it to an already-authenticated account. This provider makes Strava
+     * *also* an optional sign-in — the tokens it returns are the same Activity
+     * API tokens, which `lib/auth.ts` mirrors into `strava_tokens` encrypted
+     * (AES-256-GCM) and whose athlete id it records on the user, exactly like the
+     * connect action does, so a Strava sign-in lands connected and syncable.
+     *
+     * Two Strava-specific departures from a stock OAuth 2 provider:
+     *  - **Auth method.** Strava wants `client_id`/`client_secret` in the form
+     *    body (`client_secret_post`), not HTTP Basic.
+     *  - **No identity.** `GET /athlete` returns no email, so — like Garmin — a
+     *    Strava-only sign-in gets a routable-looking placeholder for the NOT NULL
+     *    `users.email`; the athlete can link email/Google to the same account.
+     */
+    id: "strava",
+    name: "Strava",
+    type: "oauth",
+    clientId: process.env.STRAVA_CLIENT_ID,
+    clientSecret: process.env.STRAVA_CLIENT_SECRET,
+    authorization: {
+      url: "https://www.strava.com/oauth/authorize",
+      params: { response_type: "code", approval_prompt: "auto", scope: "read,activity:read_all" },
+    },
+    token: { url: "https://www.strava.com/oauth/token" },
+    userinfo: { url: "https://www.strava.com/api/v3/athlete" },
+    checks: ["pkce", "state"],
+    client: { token_endpoint_auth_method: "client_secret_post" },
+    profile(profile: StravaAthleteProfile) {
+      const name = [profile.firstname, profile.lastname].filter(Boolean).join(" ").trim();
+      return {
+        id: String(profile.id),
+        name: name || "Strava-bruger",
+        email: `strava_${profile.id}@users.noreply.stride.run`,
+        image: profile.profile_medium ?? profile.profile ?? null,
       };
     },
   },

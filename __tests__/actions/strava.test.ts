@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => {
     upsertStravaTokens: vi.fn(),
     auth: vi.fn(),
     cookieSet: vi.fn(),
+    syncStravaActivities: vi.fn(),
     // db.update(table).set(values).where(cond) — a chainable fluent stub.
     dbWhere: vi.fn(),
     dbSet: vi.fn(),
@@ -57,6 +58,10 @@ vi.mock("@/lib/crypto", () => ({
 
 vi.mock("@/lib/db/queries", () => ({
   upsertStravaTokens: mocks.upsertStravaTokens,
+}));
+
+vi.mock("@/lib/strava/sync", () => ({
+  syncStravaActivities: mocks.syncStravaActivities,
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -103,6 +108,7 @@ beforeEach(() => {
   mocks.exchangeCodeForTokens.mockResolvedValue(tokensFixture);
   mocks.encrypt.mockReturnValue(blobFixture);
   mocks.upsertStravaTokens.mockResolvedValue(undefined);
+  mocks.syncStravaActivities.mockResolvedValue(0);
   mocks.auth.mockResolvedValue({ user: { id: "user-1" } });
 
   // db.update(table).set(values).where(cond) resolves once where() is awaited.
@@ -361,6 +367,60 @@ describe("handleStravaCallback — athlete linking edge cases", () => {
     await handleStravaCallback("auth-code", "verifier-123");
 
     expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ===========================================================================
+// handleStravaCallback — initial sync (issue #183)
+// ===========================================================================
+
+describe("handleStravaCallback — initial sync", () => {
+  it("kicks off a full sync for the session user after tokens are stored", async () => {
+    await handleStravaCallback("auth-code", "verifier-123");
+
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+    expect(mocks.syncStravaActivities).toHaveBeenCalledWith("user-1");
+  });
+
+  it("syncs only after tokens are persisted (never before)", async () => {
+    const order: string[] = [];
+    mocks.upsertStravaTokens.mockImplementationOnce(async () => {
+      order.push("upsert");
+    });
+    mocks.syncStravaActivities.mockImplementationOnce(async () => {
+      order.push("sync");
+      return 0;
+    });
+
+    await handleStravaCallback("auth-code", "verifier-123");
+
+    expect(order[0]).toBe("upsert");
+    expect(order).toContain("sync");
+    expect(order.indexOf("upsert")).toBeLessThan(order.indexOf("sync"));
+  });
+
+  it("still syncs when athlete linking is skipped (no athlete on the response)", async () => {
+    mocks.exchangeCodeForTokens.mockResolvedValueOnce({ ...tokensFixture, athlete: undefined });
+
+    await handleStravaCallback("auth-code", "verifier-123");
+
+    expect(mocks.dbUpdate).not.toHaveBeenCalled();
+    expect(mocks.syncStravaActivities).toHaveBeenCalledWith("user-1");
+  });
+
+  it("swallows a sync failure so a successful connect is not rolled back", async () => {
+    mocks.syncStravaActivities.mockRejectedValueOnce(new Error("Strava API error 429"));
+
+    // The connect itself succeeded — the action must resolve, not reject.
+    await expect(handleStravaCallback("auth-code", "verifier-123")).resolves.toBeUndefined();
+    expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not sync for an unauthenticated caller", async () => {
+    mocks.auth.mockResolvedValueOnce(null);
+
+    await expect(handleStravaCallback("code", "verifier")).rejects.toThrow("Not authenticated");
+    expect(mocks.syncStravaActivities).not.toHaveBeenCalled();
   });
 });
 
