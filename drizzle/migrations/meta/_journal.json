@@ -43,6 +43,13 @@
       "when": 1783838288986,
       "tag": "0005_optimal_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784920396964,
+      "tag": "0006_chemical_johnny_storm",
+      "breakpoints": true
     }
   ]
 }
