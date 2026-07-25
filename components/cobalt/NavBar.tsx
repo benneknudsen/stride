@@ -4,6 +4,7 @@ import { track } from "@vercel/analytics";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/cobalt/Logo";
 import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
@@ -53,11 +54,27 @@ export function NavBar({
   // syncState lags a render behind, so two fast clicks would both see "idle".
   // The ref flips synchronously and is what actually guards the fetch.
   const syncingRef = useRef(false);
+  // Account drop-down: opens on hover/click of the identity chip, holds a
+  // short grace timer so a brief pointer slip between chip and menu doesn't
+  // snap it shut (#logout-menu).
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openMenu = useCallback(() => {
+    if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
+    setMenuOpen(true);
+  }, []);
+  // Delay the close so the pointer can travel from chip to menu item.
+  const closeMenu = useCallback(() => {
+    if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
+    menuTimerRef.current = setTimeout(() => setMenuOpen(false), 120);
+  }, []);
 
   // Drop the pending reset and any in-flight sync when the bar unmounts.
   useEffect(
     () => () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
       abortRef.current?.abort();
     },
     []
@@ -152,24 +169,70 @@ export function NavBar({
       <div className="flex items-center gap-3">
         <SyncButton state={syncState} onSync={handleSync} />
         {userName ? (
-          <>
-            <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
-              {userName.toUpperCase()}
-            </span>
-            {userImage ? (
-              <Image
-                src={userImage}
-                alt={userName}
-                width={32}
-                height={32}
-                className="size-8 flex-none rounded-full object-cover ring-1 ring-white/70"
-              />
-            ) : (
-              <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
-                {userName.slice(0, 1).toUpperCase()}
+          // Hover open/close is a pointer-only nicety; keyboard and touch users
+          // drive the menu through the button's click toggle below.
+          // biome-ignore lint/a11y/noStaticElementInteractions: hover is progressive enhancement, button handles interaction
+          <div className="relative" onMouseEnter={openMenu} onMouseLeave={closeMenu}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Kontomenu"
+              className="cg-interactive flex items-center gap-3 rounded-pill"
+            >
+              <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
+                {userName.toUpperCase()}
               </span>
-            )}
-          </>
+              {userImage ? (
+                <Image
+                  src={userImage}
+                  alt={userName}
+                  width={32}
+                  height={32}
+                  className="size-8 flex-none rounded-full object-cover ring-1 ring-white/70"
+                />
+              ) : (
+                <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
+                  {userName.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+            </button>
+
+            {menuOpen ? (
+              <div
+                role="menu"
+                className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[168px] rounded-card border border-cobalt/15 bg-white/60 p-1.5 shadow-lg backdrop-blur-xl"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void signOut({ callbackUrl: ROUTES.HOME });
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-pill px-3 py-2 text-left text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.08]"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <path d="M16 17l5-5-5-5" />
+                    <path d="M21 12H9" />
+                  </svg>
+                  Log ud
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </nav>
