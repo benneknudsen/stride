@@ -24,9 +24,10 @@ const providers: NextAuthConfig["providers"] = [
      * Strava is a *data source* first: the connect flow in `actions/strava.ts`
      * links it to an already-authenticated account. This provider makes Strava
      * *also* an optional sign-in — the tokens it returns are the same Activity
-     * API tokens, which `lib/auth.ts` mirrors into `strava_tokens` encrypted
-     * (AES-256-GCM) and whose athlete id it records on the user, exactly like the
-     * connect action does, so a Strava sign-in lands connected and syncable.
+     * API tokens. After #188, `lib/auth.ts` mirrors those tokens into
+     * `strava_tokens` (AES-256-GCM), records the athlete id on the user, and
+     * fires an initial sync via its `events.signIn` callback, exactly like the
+     * connect action does — so a Strava sign-in lands connected and syncable.
      *
      * Two Strava-specific departures from a stock OAuth 2 provider:
      *  - **Auth method.** Strava wants `client_id`/`client_secret` in the form
