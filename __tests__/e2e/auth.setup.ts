@@ -1,8 +1,8 @@
 import { expect, test as setup } from "@playwright/test";
 import { STORAGE_STATE } from "../../playwright.config";
 
-// /login offers exactly two ways in: an email magic link and Google. Neither
-// survives a headless test run. The dev Credentials provider (dev/dev, added in
+// /login offers exactly one way in: Strava OAuth, which does not survive a
+// headless test run. The dev Credentials provider (dev/dev, added in
 // auth.config.ts when NODE_ENV is "development") has no form of its own — it
 // only exists at the API level, so signing in means driving NextAuth's callback
 // endpoint by hand: take a CSRF token, post the credentials against it, and let

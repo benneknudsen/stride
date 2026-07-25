@@ -1,6 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -18,10 +17,6 @@ type StravaAthleteProfile = {
 };
 
 const providers: NextAuthConfig["providers"] = [
-  Google({
-    clientId: process.env.AUTH_GOOGLE_ID,
-    clientSecret: process.env.AUTH_GOOGLE_SECRET,
-  }),
   {
     /**
      * Strava — OAuth 2.0 PKCE (issue #183).
@@ -36,9 +31,9 @@ const providers: NextAuthConfig["providers"] = [
      * Two Strava-specific departures from a stock OAuth 2 provider:
      *  - **Auth method.** Strava wants `client_id`/`client_secret` in the form
      *    body (`client_secret_post`), not HTTP Basic.
-     *  - **No identity.** `GET /athlete` returns no email, so a Strava-only
+     *  - **No identity.** `GET /athlete` returns no email, so a Strava
      *    sign-in gets a routable-looking placeholder for the NOT NULL
-     *    `users.email`; the athlete can link email/Google to the same account.
+     *    `users.email`.
      */
     id: "strava",
     name: "Strava",
@@ -86,11 +81,11 @@ if (isDev) {
 
 /**
  * Edge-safe auth config. Contains only providers and callbacks that can run in
- * the Edge runtime (middleware). The Email provider (nodemailer) and the
- * Drizzle adapter live in lib/auth.ts, which only loads in the Node runtime.
+ * the Edge runtime (middleware). The Drizzle adapter lives in lib/auth.ts, which
+ * only loads in the Node runtime.
  *
  * In development, a Credentials provider (dev/dev) is added so you can log in
- * without setting up OAuth apps or a Resend API key.
+ * without setting up the Strava OAuth app.
  */
 const authConfig = {
   providers,
@@ -107,10 +102,8 @@ const authConfig = {
    * (the edge one in proxy.ts and the Node one in lib/auth.ts that spreads it).
    *
    * Set `AUTH_URL` to the canonical origin in production (see .env.example): when
-   * present, Auth.js builds callback and magic-link URLs from it and ignores the
-   * request host, which neutralises host-header spoofing even with trust on. As
-   * defence in depth, `assertTrustedMagicLinkUrl` in lib/email.ts refuses to send
-   * a magic link whose host is not `AUTH_URL`'s in production (issue #168).
+   * present, Auth.js builds callback URLs from it and ignores the request host,
+   * which neutralises host-header spoofing even with trust on.
    */
   trustHost: true,
   callbacks: {

@@ -73,8 +73,8 @@ export const users = pgTable(
 
 // ---------------------------------------------------------------------------
 // NextAuth (Auth.js) adapter tables — required by @auth/drizzle-adapter for the
-// Email magic-link + GitHub/Google OAuth providers. Column/property names follow
-// the Auth.js contract exactly (the adapter accesses them by these keys).
+// Strava OAuth provider. Column/property names follow the Auth.js contract
+// exactly (the adapter accesses them by these keys).
 // ---------------------------------------------------------------------------
 
 export const accounts = pgTable(
