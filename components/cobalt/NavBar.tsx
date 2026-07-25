@@ -1,6 +1,7 @@
 "use client";
 
 import { track } from "@vercel/analytics";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -31,11 +32,14 @@ const RESET_DELAY_MS = { synced: 2500, error: 4000 } as const;
 
 export function NavBar({
   userName,
+  userImage,
   activeHref,
   onSync,
 }: {
   /** Display name of the signed-in user. Absent for visitors. */
   userName?: string;
+  /** Strava athlete avatar (session.user.image). Null when unset (#187). */
+  userImage?: string | null;
   activeHref?: string;
   /** Fired when a sync finishes successfully, after the router has refreshed. */
   onSync?: () => void;
@@ -152,9 +156,19 @@ export function NavBar({
             <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
               {userName.toUpperCase()}
             </span>
-            <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
-              {userName.slice(0, 1).toUpperCase()}
-            </span>
+            {userImage ? (
+              <Image
+                src={userImage}
+                alt={userName}
+                width={32}
+                height={32}
+                className="size-8 flex-none rounded-full object-cover ring-1 ring-white/70"
+              />
+            ) : (
+              <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
+                {userName.slice(0, 1).toUpperCase()}
+              </span>
+            )}
           </>
         ) : null}
       </div>

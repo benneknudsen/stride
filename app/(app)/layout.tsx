@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             boundary around each bar. */}
         <Suspense fallback={null}>
           <LandingChromeGate signedIn={user !== undefined}>
-            <NavBar userName={userName} />
+            <NavBar userName={userName} userImage={user?.image} />
           </LandingChromeGate>
         </Suspense>
         {children}

@@ -30,10 +30,14 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   images: {
-    // Avatar hosts for the sign-in providers surfaced on the settings page.
+    // Strava athlete avatars (session.user.image, #187). Strava serves the
+    // profile image from its CloudFront CDN (dgtbsa32eaptv.cloudfront.net) and,
+    // for athletes who linked Facebook, from graph.facebook.com; older accounts
+    // still surface *.strava.com URLs.
     remotePatterns: [
-      { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "https", hostname: "*.cloudfront.net" },
+      { protocol: "https", hostname: "*.strava.com" },
+      { protocol: "https", hostname: "graph.facebook.com" },
     ],
   },
   async headers() {
