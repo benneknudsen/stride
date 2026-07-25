@@ -180,7 +180,7 @@ export function VelkommenPage() {
             Klar til din næste PR?
           </h2>
           <p className="mx-auto mt-4 max-w-[440px] text-[14.5px] leading-relaxed text-silver/80">
-            Log ind med Google — eller kig dig omkring i demoen først.
+            Log ind med Strava — eller kig dig omkring i demoen først.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <LoginLink className="cg-interactive rounded-pill bg-silver px-7 py-3 text-[14px] font-semibold text-cobalt transition-opacity hover:opacity-90">

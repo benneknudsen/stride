@@ -223,7 +223,7 @@ describe("getAccountsByUserId", () => {
   it("returns the list of linked accounts", async () => {
     const rows = [
       { provider: "github", type: "oauth" },
-      { provider: "google", type: "oauth" },
+      { provider: "strava", type: "oauth" },
     ];
     mock.setResult(rows);
     expect(await getAccountsByUserId("u1")).toEqual(rows);
