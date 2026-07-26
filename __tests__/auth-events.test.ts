@@ -86,7 +86,7 @@ const stravaAccount = {
   scope: "read,activity:read_all",
 };
 
-const user = { id: "user-1", email: "strava_42@users.noreply.stride.run" };
+const user = { id: "user-1", email: "strava_42@users.noreply.stride-run.club" };
 
 // What our mocked encrypt() returns — a single-IV blob over both tokens.
 const blobFixture = { iv: "deadbeef", authTag: "cafe", encrypted: "ENCRYPTED_BLOB" };

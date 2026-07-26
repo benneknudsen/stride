@@ -7,7 +7,7 @@
 <p align="center">AI-powered running coach — Strava sync, progression analysis, generative UI</p>
 
 <p align="center">
-  <a href="https://stride-ochre-five.vercel.app"><strong>Live → stride-ochre-five.vercel.app</strong></a> ·
+  <a href="https://stride-run.club"><strong>Live → stride-run.club</strong></a> ·
   <a href="../../issues">Issues</a> ·
   <a href="./docs/architecture.md">Architecture</a>
 </p>
@@ -87,7 +87,7 @@ Required env vars: `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY` (see `.env.ex
 
 ## Project Status
 
-**✅ Live på Vercel → [stride-ochre-five.vercel.app](https://stride-ochre-five.vercel.app)**
+**✅ Live på Vercel → [stride-run.club](https://stride-run.club)**
 
 ### ✅ Phase 1 — Complete
 
