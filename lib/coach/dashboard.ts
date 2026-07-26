@@ -14,6 +14,7 @@ import {
   type WeekDay,
   type WorkoutRecommendation,
 } from "@/lib/coach/recommender";
+import { ensureDate } from "@/lib/db/calendar-date";
 import { GOALS } from "@/lib/training/goals";
 import type {
   LoadRisk,
@@ -99,7 +100,7 @@ export function buildZoneSeries(
   return Array.from({ length: weeks }, (_, i) => {
     const end = weekEnd(asOf, weeks, i);
     const windowRuns = runs.filter((run) => {
-      const t = run.startDate.getTime();
+      const t = ensureDate(run.startDate).getTime();
       return t <= end.getTime() && t > end.getTime() - ROLLING_DAYS * DAY_MS;
     });
     const { slices } = aggregateZones(windowRuns);
@@ -129,7 +130,7 @@ export function buildVolumeSeries(
     const end = weekEnd(asOf, weeks, i);
     const meters = runs
       .filter((run) => {
-        const t = run.startDate.getTime();
+        const t = ensureDate(run.startDate).getTime();
         return t <= end.getTime() && t > end.getTime() - WEEK_MS;
       })
       .reduce((sum, run) => sum + run.distance, 0);
@@ -241,12 +242,11 @@ export function buildCoachDashboard(
 
   const lastRun = normalized
     .filter(isRun)
-    .filter((run) => run.startDate.getTime() <= now.getTime())
-    .reduce<Date | null>(
-      (latest, run) =>
-        latest === null || run.startDate.getTime() > latest.getTime() ? run.startDate : latest,
-      null
-    );
+    .filter((run) => ensureDate(run.startDate).getTime() <= now.getTime())
+    .reduce<Date | null>((latest, run) => {
+      const runStart = ensureDate(run.startDate);
+      return latest === null || runStart.getTime() > latest.getTime() ? runStart : latest;
+    }, null);
 
   const { weekStrip, ...workout } = recommendWorkout(
     {

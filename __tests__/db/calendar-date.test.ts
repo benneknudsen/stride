@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fromDbDate, toDbDate } from "@/lib/db/calendar-date";
+import { ensureDate, fromDbDate, toDbDate } from "@/lib/db/calendar-date";
 
 /**
  * Regression tests for issue #102 — the race date landed in the DB one day
@@ -83,5 +83,35 @@ describe("race date round-trip through a Drizzle date column", () => {
   it("passes null through in both directions (no race chosen)", () => {
     expect(toDbDate(null)).toBeNull();
     expect(fromDbDate(null)).toBeNull();
+  });
+});
+
+/**
+ * Regression tests for issue #190 — the Neon driver hands timestamp columns back
+ * as ISO strings, so `startDate.getTime()` threw in production. `ensureDate`
+ * normalises either shape to a real `Date` while preserving the exact instant
+ * (unlike the day-granular helpers above, which shift to midnight).
+ */
+describe("ensureDate normalises a timestamp to a real Date, instant preserved", () => {
+  it("passes a Date through unchanged", () => {
+    const d = new Date("2024-01-15T10:30:00Z");
+    expect(ensureDate(d).getTime()).toBe(d.getTime());
+  });
+
+  it("parses an ISO string to the same instant (not shifted to midnight)", () => {
+    expect(ensureDate("2024-01-15T10:30:00Z").getTime()).toBe(
+      new Date("2024-01-15T10:30:00Z").getTime()
+    );
+  });
+
+  it("parses a local-time string (no 'Z') the way JS does", () => {
+    expect(ensureDate("2024-01-15T10:30:00").getTime()).toBe(
+      new Date("2024-01-15T10:30:00").getTime()
+    );
+  });
+
+  it("throws a TypeError on a nullish value (defensive)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the defensive runtime guard
+    expect(() => ensureDate(null as any)).toThrow(TypeError);
   });
 });

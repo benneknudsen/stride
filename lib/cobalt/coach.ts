@@ -17,6 +17,7 @@
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
 import { DEFAULT_RACE_DATE } from "@/lib/coach/engine";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
+import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
 import { computeSnapshot } from "@/lib/training/progression-core";
@@ -113,7 +114,10 @@ function windowAvgHr(
   const start = now.getTime() - toDaysAgo * DAY_MS;
   const end = now.getTime() - fromDaysAgo * DAY_MS;
   const samples = activities
-    .filter((a) => a.startDate.getTime() > start && a.startDate.getTime() <= end)
+    .filter((a) => {
+      const t = ensureDate(a.startDate).getTime();
+      return t > start && t <= end;
+    })
     .map((a) => a.averageHeartrate)
     .filter((hr) => hr > 0);
   if (samples.length === 0) return null;
@@ -130,7 +134,7 @@ function longestInWindow(activities: CoachActivityLike[], now: Date, days: numbe
   const from = now.getTime() - days * DAY_MS;
   let best: CoachActivityLike | null = null;
   for (const a of activities) {
-    if (a.startDate.getTime() < from) continue;
+    if (ensureDate(a.startDate).getTime() < from) continue;
     if (!best || a.distance > best.distance) best = a;
   }
   return best;

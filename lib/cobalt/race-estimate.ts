@@ -7,6 +7,8 @@
 // support an estimate (no runs, unknown distance) the callers render nothing
 // rather than a made-up number.
 
+import { ensureDate } from "@/lib/db/calendar-date";
+
 const DAY_MS = 86_400_000;
 
 /** How far back a run may lie and still anchor the prediction. */
@@ -70,7 +72,8 @@ export function estimateRaceTime(
 
   let reference: EstimateRunLike | null = null;
   for (const run of runs) {
-    if (run.startDate.getTime() < cutoff || run.startDate.getTime() > now.getTime()) continue;
+    const startMs = ensureDate(run.startDate).getTime();
+    if (startMs < cutoff || startMs > now.getTime()) continue;
     if (run.distance < MIN_REFERENCE_METERS || run.movingTime <= 0) continue;
     if (!reference || run.distance > reference.distance) reference = run;
   }

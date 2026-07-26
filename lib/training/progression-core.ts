@@ -14,6 +14,7 @@
 // wrappers live in lib/training/progression.ts, which re-exports everything
 // here.
 
+import { ensureDate } from "@/lib/db/calendar-date";
 import { aggregateZones } from "@/lib/training/zones";
 import type { HrZone } from "@/types/domain";
 
@@ -94,7 +95,7 @@ function median(values: number[]): number {
 }
 
 function inWindow(activity: ProgressionActivityInput, asOf: Date, days: number): boolean {
-  const time = activity.startDate.getTime();
+  const time = ensureDate(activity.startDate).getTime();
   return time <= asOf.getTime() && time >= asOf.getTime() - days * DAY_MS;
 }
 
@@ -149,13 +150,15 @@ export function computeSnapshot(
   activities: ProgressionActivityInput[],
   asOf: Date
 ): ProgressionSnapshot {
-  const runs = activities.filter(isRun).filter((run) => run.startDate.getTime() <= asOf.getTime());
+  const runs = activities
+    .filter(isRun)
+    .filter((run) => ensureDate(run.startDate).getTime() <= asOf.getTime());
   const windowRuns = runs.filter((run) => inWindow(run, asOf, WINDOW_DAYS));
 
-  const earliest = runs.reduce<number | null>(
-    (min, run) => (min === null ? run.startDate.getTime() : Math.min(min, run.startDate.getTime())),
-    null
-  );
+  const earliest = runs.reduce<number | null>((min, run) => {
+    const time = ensureDate(run.startDate).getTime();
+    return min === null ? time : Math.min(min, time);
+  }, null);
   const hasFullWindow = earliest !== null && asOf.getTime() - earliest >= WINDOW_DAYS * DAY_MS;
 
   const acute = dailyLoad(runs, asOf, ACUTE_DAYS);
