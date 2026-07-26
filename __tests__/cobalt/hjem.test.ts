@@ -128,3 +128,36 @@ describe("buildHomeView isPersonalRecord", () => {
     expect(view.latest.isPersonalRecord).toBe(true);
   });
 });
+
+// Production regression (issue #194): the Neon serverless driver hands
+// `startDate` back as an ISO *string*, not a Date, so the Date-method helpers
+// (danishDate/relativeDayLabel/clock) crash with "getDate is not a function"
+// unless every call routes through ensureDate. Demo fixtures are Date objects,
+// which is why the tests above never caught it — this one feeds strings.
+describe("buildHomeView with ISO-string startDate (issue #194)", () => {
+  const ISO = "2024-06-15T07:30:00Z";
+  // The DB row types startDate as Date but the driver returns a string.
+  const asString = (iso: string) => iso as unknown as Date;
+
+  it("does not throw when startDate is an ISO string from the DB", () => {
+    expect(() => buildHomeView([run({ startDate: asString(ISO) })])).not.toThrow();
+  });
+
+  it("labels a string startDate exactly as the equivalent Date input would", () => {
+    const fromString = buildHomeView([run({ startDate: asString(ISO) })]);
+    const fromDate = buildHomeView([run({ startDate: new Date(ISO) })]);
+
+    expect(fromString.latest.dayLabel).toBe(fromDate.latest.dayLabel);
+    expect(fromString.latest.clock).toBe(fromDate.latest.clock);
+    expect(fromString.recentRuns).toEqual(fromDate.recentRuns);
+    expect(fromString.paceTrend).toEqual(fromDate.paceTrend);
+  });
+
+  it("renders a well-formed Danish date label — no NaN, no crash", () => {
+    const view = buildHomeView([run({ startDate: asString(ISO) })]);
+    // "15. jun" (or the local-day equivalent) — day number + Danish month.
+    const day = new Date(ISO).getDate();
+    expect(view.recentRuns[0]?.dateLabel).toBe(`${day}. jun`);
+    expect(view.paceTrend[0]?.dateLabel).toBe(`${day}. jun`);
+  });
+});

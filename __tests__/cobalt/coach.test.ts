@@ -183,3 +183,37 @@ describe("buildLiveCoachView", () => {
     expect(view.load.status).toBe("OPTIMAL");
   });
 });
+
+// Production regression (issue #194): live activities come from Neon with
+// `startDate` as an ISO string, and buildLiveCoachView's daily-load math routes
+// them through startOfDay(...).getDate(). Without ensureDate that throws
+// "getDate is not a function"; demo fixtures (Date objects) never hit it.
+describe("buildLiveCoachView with ISO-string startDate (issue #194)", () => {
+  // The DB row types startDate as Date but the driver returns a string.
+  const asString = (iso: string) => iso as unknown as Date;
+  const stringActivities: CoachLoadActivityLike[] = [
+    { startDate: asString("2026-07-14T07:30:00Z"), distance: 10_000 },
+    { startDate: asString("2026-07-12T07:30:00Z"), distance: 8_000 },
+  ];
+
+  it("does not throw when startDate is an ISO string from the DB", () => {
+    expect(() =>
+      buildLiveCoachView(dashboard({ ratio: 1.0 }), stringActivities, NOW)
+    ).not.toThrow();
+  });
+
+  it("builds the same load bars as the equivalent Date-typed activities", () => {
+    const fromString = buildLiveCoachView(dashboard({ ratio: 1.0 }), stringActivities, NOW);
+    const fromDate = buildLiveCoachView(
+      dashboard({ ratio: 1.0 }),
+      [
+        { startDate: new Date("2026-07-14T07:30:00Z"), distance: 10_000 },
+        { startDate: new Date("2026-07-12T07:30:00Z"), distance: 8_000 },
+      ],
+      NOW
+    );
+
+    expect(fromString.activityCount).toBe(2);
+    expect(fromString.load.bars).toEqual(fromDate.load.bars);
+  });
+});

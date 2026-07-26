@@ -99,7 +99,7 @@ function dailyKm(activities: CoachLoadActivityLike[], now: Date, daysAgo: number
   const target = startOfDay(new Date(now.getTime() - daysAgo * DAY_MS));
   let km = 0;
   for (const a of activities) {
-    if (startOfDay(a.startDate) === target) km += a.distance / 1000;
+    if (startOfDay(ensureDate(a.startDate)) === target) km += a.distance / 1000;
   }
   return km;
 }
