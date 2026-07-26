@@ -46,7 +46,7 @@ type CoachPageActivity = CoachActivityInput & {
  *  payload stays lean and serialization-safe (ISO strings, no Date instances). */
 function toFeedActivities(activities: CoachPageActivity[]): CoachFeedActivityInput[] {
   return activities.map((a) => ({
-    startDate: a.startDate.toISOString(),
+    startDate: typeof a.startDate === "string" ? a.startDate : a.startDate.toISOString(),
     distance: a.distance,
     movingTime: a.movingTime,
     averageSpeed: a.averageSpeed,

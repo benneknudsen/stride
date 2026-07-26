@@ -90,4 +90,29 @@ describe("CoachPage — issue #195 (Neon timestamp string bug)", () => {
     const tree = await CoachPage();
     expect(tree).not.toBeNull();
   });
+
+  it("handles activities with string startDate (raw DB value in prod)", async () => {
+    const mockActivities = [
+      {
+        id: "a1",
+        name: "Morning Run",
+        type: "Run",
+        source: "strava",
+        startDate: "2026-07-15T08:00:00.000Z",
+        distance: 5000,
+        movingTime: 1800,
+        averageSpeed: 2.78,
+        averageHeartrate: 145,
+        averageCadence: 170,
+        totalElevationGain: 50,
+        hrZones: null,
+        summaryPolyline: null,
+      },
+    ] as unknown as DashboardActivity[];
+
+    vi.mocked(getDashboardActivities).mockResolvedValueOnce(mockActivities);
+
+    const tree = await CoachPage();
+    expect(tree).not.toBeNull();
+  });
 });
