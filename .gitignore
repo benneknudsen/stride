@@ -53,3 +53,9 @@ next-env.d.ts
 
 # Claude Code review notes (not versioned)
 .cc-review/
+
+# Claude Code brief files
+.cc-brief-*.txt
+
+# artifacts
+0
