@@ -403,10 +403,27 @@ describe("getActivities", () => {
 
 describe("getActivityById", () => {
   it("returns the activity when it belongs to the user", async () => {
-    const activity = { id: "a1", userId: "u1", name: "Morning Run" };
+    const activity = { id: "a1", userId: "u1", name: "Morning Run", startDate: new Date() };
     mock.setResult([activity]);
     expect(await getActivityById("u1", "a1")).toEqual(activity);
     expect(mock.calls.limit?.[0]?.[0]).toBe(1);
+  });
+
+  it("normalizes string startDate to Date (Neon serverless bug #195)", async () => {
+    const isoString = "2026-07-15T08:00:00.000Z";
+    const activity = { id: "a1", userId: "u1", name: "Morning Run", startDate: isoString };
+    mock.setResult([activity]);
+    const result = await getActivityById("u1", "a1");
+    expect(result?.startDate).toBeInstanceOf(Date);
+    expect(result?.startDate.toISOString()).toBe(new Date(isoString).toISOString());
+  });
+
+  it("returns Date startDate unchanged", async () => {
+    const dateVal = new Date("2026-07-15T08:00:00.000Z");
+    const activity = { id: "a1", userId: "u1", name: "Morning Run", startDate: dateVal };
+    mock.setResult([activity]);
+    const result = await getActivityById("u1", "a1");
+    expect(result?.startDate).toBe(dateVal);
   });
 
   it("returns null when no activity matches (wrong owner or missing id)", async () => {

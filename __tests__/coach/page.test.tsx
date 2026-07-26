@@ -1,18 +1,11 @@
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Issue #167: the coach page must run computeCoachDashboard exactly once per
-// request. It used to call it twice with identical args — once for the workout
-// card (NextWorkoutSection) and once for the coach console. We spy on the engine
-// entry point, render the whole page tree (including the suspended workout
-// section), and assert a single call whose result is shared as a prop.
-
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "user-1", name: "Test Runner" } }),
 }));
 
 vi.mock("@/lib/db/queries", () => ({
-  // Empty rows → the page falls back to the demo fixtures, so no DB is touched.
   getDashboardActivities: vi.fn().mockResolvedValue([]),
   getRacePlan: vi.fn().mockResolvedValue(null),
 }));
@@ -27,10 +20,11 @@ vi.mock("@/lib/coach/dashboard-data", async (importOriginal) => {
 
 import CoachPage from "@/app/(app)/dashboard/coach/page";
 import { computeCoachDashboard } from "@/lib/coach/dashboard-data";
+import type { DashboardActivity } from "@/lib/db/queries";
+import { getDashboardActivities } from "@/lib/db/queries";
 
 type AnyElement = ReactElement<Record<string, unknown>>;
 
-/** Depth-first search of a React element tree for the first node matching. */
 function findElement(node: unknown, predicate: (el: AnyElement) => boolean): AnyElement | null {
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -56,12 +50,9 @@ describe("CoachPage — issue #167", () => {
   it("computes the coach dashboard exactly once per request", async () => {
     const tree = await CoachPage();
 
-    // The console has already consumed the dashboard during the page render.
     expect(computeCoachDashboard).toHaveBeenCalledTimes(1);
     const dashboard = vi.mocked(computeCoachDashboard).mock.results[0]?.value;
 
-    // Render the suspended workout section too — before the fix it re-ran the
-    // engine here; now it must reuse the shared result without recomputing.
     const section = findElement(tree, isNextWorkoutSection);
     expect(section).not.toBeNull();
 
@@ -69,7 +60,34 @@ describe("CoachPage — issue #167", () => {
     await sectionFn(section?.props);
 
     expect(computeCoachDashboard).toHaveBeenCalledTimes(1);
-    // The section received the very object the single computation produced.
     expect(section?.props.dashboard).toBe(dashboard);
+  });
+});
+
+describe("CoachPage — issue #195 (Neon timestamp string bug)", () => {
+  it("handles activities with Date startDate (normalized from DB string)", async () => {
+    const startDate = new Date("2026-07-15T08:00:00.000Z");
+    const mockActivities: DashboardActivity[] = [
+      {
+        id: "a1",
+        name: "Morning Run",
+        type: "Run",
+        source: "strava",
+        startDate,
+        distance: 5000,
+        movingTime: 1800,
+        averageSpeed: 2.78,
+        averageHeartrate: 145,
+        averageCadence: 170,
+        totalElevationGain: 50,
+        hrZones: null,
+        summaryPolyline: null,
+      },
+    ];
+
+    vi.mocked(getDashboardActivities).mockResolvedValueOnce(mockActivities);
+
+    const tree = await CoachPage();
+    expect(tree).not.toBeNull();
   });
 });
