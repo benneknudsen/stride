@@ -7,6 +7,7 @@
  */
 
 import { getLocalDate } from "@/lib/coach/engine";
+import { ensureDate } from "@/lib/db/calendar-date";
 
 /** Convert speed (m/s) to a `min:sec` pace string per km. Null/zero → `--:--`. */
 export function formatPace(metersPerSecond: number | null): string {
@@ -72,7 +73,10 @@ export function getWeeklyVolume(
   endOfWeek.setDate(startOfWeek.getDate() + 7);
 
   return activities
-    .filter((a) => a.startDate >= startOfWeek && a.startDate < endOfWeek)
+    .filter((a) => {
+      const start = ensureDate(a.startDate);
+      return start >= startOfWeek && start < endOfWeek;
+    })
     .reduce((sum, a) => sum + a.distance, 0);
 }
 

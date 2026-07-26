@@ -14,6 +14,7 @@ import {
   type ZoneInfo,
   zoneForHeartRate,
 } from "@/lib/cobalt/hjem";
+import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace } from "@/lib/metrics";
 
@@ -131,14 +132,14 @@ export function buildActivitiesView(
   // "Month totals" window: from the start of the previous calendar month up to
   // now — a natural recent span that reads as e.g. "Juni – Juli".
   const windowStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
-  const inWindow = runs.filter((a) => a.startDate.getTime() >= windowStart);
+  const inWindow = runs.filter((a) => ensureDate(a.startDate).getTime() >= windowStart);
 
   const rows: ActivityRowView[] = inWindow.map((a) => {
     const zone = zoneForHeartRate(a.averageHeartrate ?? 0);
     return {
       id: a.id,
       name: a.name,
-      metaLabel: metaLabel(a.startDate, now, a.movingTime),
+      metaLabel: metaLabel(ensureDate(a.startDate), now, a.movingTime),
       zone,
       category: activityCategory(zone.level),
       source: sourceOf(a),
@@ -154,7 +155,10 @@ export function buildActivitiesView(
   // index would render "Januar – December" instead of "December – Januar".
   // Live data can also leave the window empty (all rows older than last month) —
   // fall back to the current month so the header never reads "undefined".
-  const ordinals = inWindow.map((a) => a.startDate.getFullYear() * 12 + a.startDate.getMonth());
+  const ordinals = inWindow.map((a) => {
+    const start = ensureDate(a.startDate);
+    return start.getFullYear() * 12 + start.getMonth();
+  });
   const nowOrdinal = now.getFullYear() * 12 + now.getMonth();
   const minOrdinal = ordinals.length > 0 ? Math.min(...ordinals) : nowOrdinal;
   const maxOrdinal = ordinals.length > 0 ? Math.max(...ordinals) : nowOrdinal;

@@ -38,6 +38,7 @@ import {
   type WorkoutContext,
 } from "@/lib/coach/engine";
 import { recommendWorkout } from "@/lib/coach/recommender";
+import { ensureDate } from "@/lib/db/calendar-date";
 import {
   getChatHistory,
   getDashboardActivities,
@@ -201,8 +202,8 @@ function buildCoachTools(
     .filter((a) => /run/i.test(a.type))
     .reduce<Date | null>(
       (latest, run) =>
-        run.startDate.getTime() <= now.getTime() &&
-        (latest === null || run.startDate.getTime() > latest.getTime())
+        ensureDate(run.startDate).getTime() <= now.getTime() &&
+        (latest === null || ensureDate(run.startDate).getTime() > latest.getTime())
           ? run.startDate
           : latest,
       null

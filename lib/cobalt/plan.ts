@@ -33,6 +33,7 @@ import {
 } from "@/lib/coach/engine";
 import { formatDanish } from "@/lib/cobalt/format";
 import { buildHomeView, type HomeActivityLike, zoneForHeartRate } from "@/lib/cobalt/hjem";
+import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { getWeeklyVolume } from "@/lib/metrics";
 import {
@@ -618,8 +619,9 @@ function buildDerivedWeek(
   weekEnd.setDate(weekEnd.getDate() + 7);
   const runsByDay: HomeActivityLike[][] = Array.from({ length: 7 }, () => []);
   for (const run of runs) {
-    if (run.startDate >= weekStart && run.startDate < weekEnd) {
-      runsByDay[mondayIndex(run.startDate.getDay())].push(run);
+    const start = ensureDate(run.startDate);
+    if (start >= weekStart && start < weekEnd) {
+      runsByDay[mondayIndex(start.getDay())].push(run);
     }
   }
 

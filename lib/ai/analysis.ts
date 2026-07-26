@@ -13,6 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { ensureDate } from "@/lib/db/calendar-date";
 import { formatPace } from "@/lib/metrics";
 import { computeSnapshot, type LoadRisk } from "@/lib/training/progression";
 import type { AnalysisScope } from "@/types/domain";
@@ -130,7 +131,10 @@ export function buildAnalysisInput(
     const start = nowMs - (week + 1) * 7 * DAY_MS;
     const end = nowMs - week * 7 * DAY_MS;
     const meters = activities
-      .filter((a) => a.startDate.getTime() > start && a.startDate.getTime() <= end)
+      .filter((a) => {
+        const t = ensureDate(a.startDate).getTime();
+        return t > start && t <= end;
+      })
       .reduce((sum, a) => sum + a.distance, 0);
     return round(meters / 1000);
   });
@@ -156,10 +160,11 @@ export function buildAnalysisInput(
     readyToIncrease: snapshot.readyToIncrease,
   };
 
-  const last7 = activities.filter((a) => a.startDate.getTime() > nowMs - 7 * DAY_MS);
+  const last7 = activities.filter((a) => ensureDate(a.startDate).getTime() > nowMs - 7 * DAY_MS);
   const prev7 = activities.filter(
     (a) =>
-      a.startDate.getTime() > nowMs - 14 * DAY_MS && a.startDate.getTime() <= nowMs - 7 * DAY_MS
+      ensureDate(a.startDate).getTime() > nowMs - 14 * DAY_MS &&
+      ensureDate(a.startDate).getTime() <= nowMs - 7 * DAY_MS
   );
 
   return {

@@ -23,6 +23,7 @@
 // the same activities always yield the same paces, so a server render and a
 // client hydration can't disagree.
 
+import { ensureDate } from "@/lib/db/calendar-date";
 import { formatPace } from "@/lib/metrics";
 
 const DAY_MS = 86_400_000;
@@ -276,7 +277,7 @@ export function predictRace(
   if (runs.length === 0) return locked("no-runs", requiredKm);
 
   const recent = runs.filter((activity) => {
-    const time = activity.startDate.getTime();
+    const time = ensureDate(activity.startDate).getTime();
     return time <= nowMs && time >= nowMs - LOOKBACK_DAYS * DAY_MS;
   });
   if (recent.length === 0) return locked("stale-runs", requiredKm);

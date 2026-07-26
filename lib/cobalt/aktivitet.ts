@@ -11,6 +11,7 @@
 import { type ActivitySource, sourceOf, type ZoneInfo, zoneForHeartRate } from "@/lib/cobalt/hjem";
 import { decodePolyline } from "@/lib/cobalt/polyline";
 import { ZONE_RAMP, type ZoneKey } from "@/lib/cobalt/zones";
+import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace } from "@/lib/metrics";
 import { zoneForHeartRate as hrZoneNumber, type ZoneNumber } from "@/lib/training/zones";
@@ -293,7 +294,7 @@ function buildStats(activity: ActivityDetailLike, zone: ZoneInfo | null): Activi
 export function buildActivityDetailView(activity: ActivityDetailLike): ActivityDetailView {
   const hr = activity.averageHeartrate ?? 0;
   const zone = hr > 0 ? zoneForHeartRate(hr) : null;
-  const date = activity.startDate;
+  const date = ensureDate(activity.startDate);
 
   return {
     id: activity.id,

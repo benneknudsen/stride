@@ -19,6 +19,7 @@ import {
 } from "@/lib/cobalt/race-estimate";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
+import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
 import { detectPersonalRecord } from "@/lib/training/personal-record";
@@ -118,7 +119,7 @@ function windowPaceSeconds(
   let dist = 0;
   let time = 0;
   for (const a of activities) {
-    const t = a.startDate.getTime();
+    const t = ensureDate(a.startDate).getTime();
     if (t >= from && t < to) {
       dist += a.distance;
       time += a.movingTime;

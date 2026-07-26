@@ -37,3 +37,24 @@ export function fromDbDate(day: Date | null): Date | null {
   if (!day) return null;
   return new Date(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
 }
+
+/**
+ * A full `timestamp` value from a DB row → a real `Date`, instant preserved.
+ *
+ * The Neon serverless driver (`@neondatabase/serverless`) hands back
+ * `timestamp`/`timestamptz` columns as ISO 8601 strings (e.g.
+ * "2024-01-15T10:30:00Z") because those columns declare no Date mode — yet
+ * callers type `startDate`/`endDate` as `Date` and call `.getTime()` or compare
+ * against other `Date`s. In production (SSR, minified) that throws
+ * `startDate.getTime is not a function` (issue #190); unit tests and demo
+ * fixtures never hit it because their values are already `Date` objects.
+ *
+ * Unlike `toDbDate`/`fromDbDate` (day-granular `date` columns, issue #102, which
+ * shift to local/UTC midnight), this preserves the exact instant: an ISO string
+ * parses to the same moment. Do NOT route full timestamps through those helpers.
+ */
+export function ensureDate(d: Date | string): Date {
+  if (d instanceof Date) return d;
+  if (typeof d === "string") return new Date(d);
+  throw new TypeError(`ensureDate: expected a Date or ISO string, got ${typeof d}`);
+}
