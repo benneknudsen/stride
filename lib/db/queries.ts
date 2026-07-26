@@ -11,7 +11,7 @@ import {
 } from "../../drizzle/schema";
 import type { AnalysisScope, HrZone } from "../../types/domain";
 import { captureError } from "../observability";
-import { fromDbDate, toDbDate } from "./calendar-date";
+import { ensureDate, fromDbDate, toDbDate } from "./calendar-date";
 import { db } from "./index";
 
 /**
@@ -299,7 +299,11 @@ export const getDashboardActivities = cache(
           // sync writer only ever stores HrZone[]. Narrow it here — the same
           // explicit-JSON convention as `Activity` in types/domain.ts — so these
           // rows can feed the coach engine's zone charts (issue #86).
-          return rows.map((row) => ({ ...row, hrZones: row.hrZones as HrZone[] | null }));
+          return rows.map((row) => ({
+            ...row,
+            startDate: ensureDate(row.startDate),
+            hrZones: row.hrZones as HrZone[] | null,
+          }));
         } catch (err) {
           captureError("queries.getDashboardActivities", err);
           return [];
@@ -359,7 +363,8 @@ export const getActivityById = cache(async (userId: string, activityId: string) 
       .from(activities)
       .where(and(eq(activities.id, activityId), eq(activities.userId, userId)))
       .limit(1);
-    return activity ?? null;
+    if (!activity) return null;
+    return { ...activity, startDate: ensureDate(activity.startDate) };
   } catch (err) {
     captureError("queries.getActivityById", err);
     return null;
