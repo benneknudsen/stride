@@ -99,8 +99,8 @@ What already exists and should be REUSED, not rebuilt:
    (32-byte hex). Demo mode is fully functional at this point.
 2. **Auth env:** Google Cloud OAuth client → `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`.
    Auth code already exists (Google + magic link + dev/dev in dev). Magic links
-   wait on a domain (Resend sender verification for `noreply@stride.run`).
-3. **Strava:** create API app (callback domain may be the vercel.app domain) →
+   wait on a domain (Resend sender verification for `noreply@stride-run.club`).
+3. **Strava:** create API app (callback domain may be the `stride-run.club` domain) →
    `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REDIRECT_URI` (exact
    match), `STRAVA_VERIFY_TOKEN` (self-chosen). Connect account, run
    `/api/strava/sync`, register the webhook subscription (one curl).

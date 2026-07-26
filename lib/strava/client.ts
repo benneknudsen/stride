@@ -23,7 +23,7 @@ const STRAVA_API_BASE = "https://www.strava.com/api/v3";
 const STRAVA_PUSH_SUBSCRIPTION_URL = `${STRAVA_API_BASE}/push_subscriptions`;
 
 /** Default public callback the webhook route is deployed at (env-overridable). */
-const DEFAULT_WEBHOOK_CALLBACK_URL = "https://stride-ochre-five.vercel.app/api/strava/webhook";
+const DEFAULT_WEBHOOK_CALLBACK_URL = "https://stride-run.club/api/strava/webhook";
 
 /** The URL Strava will POST activity events to; verified via `hub.challenge`. */
 function getWebhookCallbackUrl(): string {

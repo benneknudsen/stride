@@ -54,7 +54,7 @@ const providers: NextAuthConfig["providers"] = [
       return {
         id: String(profile.id),
         name: name || "Strava-bruger",
-        email: `strava_${profile.id}@users.noreply.stride.run`,
+        email: `strava_${profile.id}@users.noreply.stride-run.club`,
         image: profile.profile_medium ?? profile.profile ?? null,
       };
     },
