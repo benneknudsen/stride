@@ -389,7 +389,7 @@ export function buildHomeView(
         id: a.id,
         paceSeconds,
         paceLabel: paceSecondsToClock(paceSeconds),
-        dateLabel: danishDate(a.startDate),
+        dateLabel: danishDate(ensureDate(a.startDate)),
         km: a.distance / 1000,
       };
     })
@@ -420,7 +420,7 @@ export function buildHomeView(
   const recentRuns: RecentRunView[] = recentSource.map((a) => ({
     id: a.id,
     name: a.name,
-    dateLabel: danishDate(a.startDate),
+    dateLabel: danishDate(ensureDate(a.startDate)),
     zone: zoneForHeartRate(a.averageHeartrate ?? 0),
     source: sourceOf(a),
     km: a.distance / 1000,
@@ -468,8 +468,8 @@ export function buildHomeView(
       durationLabel: formatDuration(latest.movingTime),
       zone: latestZone,
       source: sourceOf(latest),
-      dayLabel: relativeDayLabel(latest.startDate, now),
-      clock: clock(latest.startDate),
+      dayLabel: relativeDayLabel(ensureDate(latest.startDate), now),
+      clock: clock(ensureDate(latest.startDate)),
       paceCurve: isDemo ? DEMO_PACE_CURVE : [],
       // Only runs are compared — `runs` is already filtered, so a PB can't be
       // "beaten" by a bike ride's distance or pace.
