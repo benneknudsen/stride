@@ -26,6 +26,16 @@ const DAY_MS = 86_400_000;
 
 export type ChatRole = "coach" | "user";
 
+/**
+ * A persisted chat turn as `getChatHistory` returns it — the signed-in user's
+ * stored conversation, replayed into the panel on load (issue #202). Roles are
+ * the model's ("assistant"/"user"); the view-model maps "assistant" → "coach".
+ */
+export interface ChatHistoryEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
@@ -51,7 +61,10 @@ export interface LoadBar {
 export interface CoachView {
   /** Header count — "AI COACH · BASERET PÅ N TURE". */
   activityCount: number;
-  /** Opening transcript shown when the page loads. */
+  /**
+   * Opening transcript shown when the page loads: the signed-in user's persisted
+   * history (issue #202), followed by the synthetic coach opener.
+   */
   initialMessages: ChatMessage[];
   /** Quick-prompt chips under the chat. */
   prompts: string[];
@@ -211,6 +224,20 @@ function greeting(userName?: string): string {
   return userName ? `Godmorgen ${userName}!` : "Godmorgen!";
 }
 
+/**
+ * The user's persisted conversation as panel bubbles (issue #202): mapped to the
+ * panel's roles ("assistant" → "coach") and left non-synthetic, so they render
+ * as real turns and — unlike the scripted opener — are kept as the route's
+ * fallback context when the DB history read fails (app/api/ai/chat/route.ts).
+ */
+function historyMessages(history: ChatHistoryEntry[]): ChatMessage[] {
+  return history.map((entry, i) => ({
+    id: `h${i}`,
+    role: entry.role === "assistant" ? "coach" : "user",
+    text: entry.content,
+  }));
+}
+
 export function buildCoachView(now: Date = new Date(), userName?: string): CoachView {
   const latest = demoActivities[0];
 
@@ -316,7 +343,8 @@ export function buildLiveCoachView(
   dashboard: CoachDashboardData,
   activities: CoachLoadActivityLike[],
   now: Date = new Date(),
-  userName?: string
+  userName?: string,
+  history: ChatHistoryEntry[] = []
 ): CoachView {
   const { workout, loadGauge } = dashboard;
   const ratio = loadGauge.ratio;
@@ -341,11 +369,14 @@ export function buildLiveCoachView(
       ? `Du har endnu ikke fire ugers historik, så belastningsbilledet er foreløbigt. ${LOAD_NOTES[status]}`
       : `Din akut/kronisk-ratio er ${ratio.toFixed(2)} — status ${status}. ${LOAD_NOTES[status]}`;
 
-  // A single coach opening bubble (issue #201): readiness, the load read (was
-  // m3, carrying the acute:chronic ratio + status) and the week's recommendation
-  // in one turn — no fabricated "Hvordan ser min træningsbelastning ud?" user
-  // question, and nothing scripted is sent to the model as context.
+  // The persisted conversation is replayed first (issue #202) so a returning
+  // user sees and can continue their history, then a single fresh coach opening
+  // bubble (issue #201): readiness, the load read (was m3, carrying the
+  // acute:chronic ratio + status) and the week's recommendation in one turn — no
+  // fabricated "Hvordan ser min træningsbelastning ud?" user question, and
+  // nothing scripted is sent to the model as context.
   const initialMessages: ChatMessage[] = [
+    ...historyMessages(history),
     {
       id: "m1",
       role: "coach",

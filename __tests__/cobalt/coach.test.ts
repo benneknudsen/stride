@@ -200,6 +200,73 @@ describe("buildLiveCoachView", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// buildLiveCoachView — persisted chat history (issue #202)
+// ---------------------------------------------------------------------------
+
+// The signed-in user's stored conversation (getChatHistory shape) must be shown
+// in the panel: prepended to the transcript, before the synthetic opener, as
+// real (non-synthetic) turns so it also serves as the route's fallback context.
+describe("buildLiveCoachView with persisted chat history (issue #202)", () => {
+  const history = [
+    { role: "user" as const, content: "Hvad skal jeg løbe i dag?" },
+    { role: "assistant" as const, content: "En rolig tur på 6 km." },
+  ];
+
+  it("prepends the history before the synthetic opener, in order", () => {
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.0 }),
+      liveActivities,
+      NOW,
+      undefined,
+      history
+    );
+    // two history turns + the single synthetic opener
+    expect(view.initialMessages).toHaveLength(3);
+    expect(view.initialMessages[0]).toMatchObject({
+      role: "user",
+      text: "Hvad skal jeg løbe i dag?",
+    });
+    expect(view.initialMessages[1]).toMatchObject({
+      role: "coach",
+      text: "En rolig tur på 6 km.",
+    });
+    const opener = view.initialMessages[2];
+    expect(opener.role).toBe("coach");
+    expect(opener.synthetic).toBe(true);
+  });
+
+  it("marks history turns as real (non-synthetic) so they persist as fallback context", () => {
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.0 }),
+      liveActivities,
+      NOW,
+      undefined,
+      history
+    );
+    expect(view.initialMessages[0].synthetic).toBeUndefined();
+    expect(view.initialMessages[1].synthetic).toBeUndefined();
+  });
+
+  it("gives every message a unique id", () => {
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.0 }),
+      liveActivities,
+      NOW,
+      undefined,
+      history
+    );
+    const ids = view.initialMessages.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("shows only the synthetic opener when there is no history", () => {
+    const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW, undefined, []);
+    expect(view.initialMessages).toHaveLength(1);
+    expect(view.initialMessages[0].synthetic).toBe(true);
+  });
+});
+
 // Production regression (issue #194): live activities come from Neon with
 // `startDate` as an ISO string, and buildLiveCoachView's daily-load math routes
 // them through startOfDay(...).getDate(). Without ensureDate that throws

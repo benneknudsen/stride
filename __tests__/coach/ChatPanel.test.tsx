@@ -39,6 +39,42 @@ describe("ChatPanel — HTTP status error handling", () => {
     expect(body.messages).toEqual([{ role: "user", content: "Mit spørgsmål" }]);
   });
 
+  test("renders persisted history and sends it (non-synthetic) as fallback context (issue #202)", async () => {
+    const withHistory = [
+      { id: "h0", role: "user" as const, text: "Tidligere spørgsmål" },
+      { id: "h1", role: "coach" as const, text: "Tidligere svar" },
+      { id: "m1", role: "coach" as const, text: "Godmorgen!", synthetic: true },
+    ];
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ role: "assistant", content: "Svar" }), { status: 200 })
+      );
+
+    render(<ChatPanel initialMessages={withHistory} prompts={prompts} />);
+
+    // The stored conversation is visible in the transcript — the whole point of
+    // issue #202 (it used to never render).
+    expect(screen.getByText("Tidligere spørgsmål")).toBeDefined();
+    expect(screen.getByText("Tidligere svar")).toBeDefined();
+
+    const input = screen.getByLabelText("Skriv til din coach");
+    fireEvent.change(input, { target: { value: "Nyt spørgsmål" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const body = JSON.parse((fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string);
+    // Real history turns flow to the route (its client-transcript fallback when
+    // the DB read fails); only the synthetic opener is stripped.
+    expect(body.messages).toEqual([
+      { role: "user", content: "Tidligere spørgsmål" },
+      { role: "assistant", content: "Tidligere svar" },
+      { role: "user", content: "Nyt spørgsmål" },
+    ]);
+  });
+
   test("shows login prompt on 401", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ error: "authentication_required" }), { status: 401 })

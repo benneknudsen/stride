@@ -29,10 +29,15 @@ function tools() {
   return buildCoachTools("user-1", NOW, { raceDate: null, raceName: null }, ACTIVITIES);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parse(t: { inputSchema: any }, input: unknown) {
+  return (t.inputSchema as any).safeParse(input);
+}
+
 describe("coach tools — provider robustness (#200)", () => {
   it("recommendWorkout accepts explicit null for every optional param", async () => {
     const t = tools().recommendWorkout;
-    const parsed = t.inputSchema.safeParse({
+    const parsed = parse(t, {
       goal: null,
       footballYesterday: null,
       injuryHistory: null,
@@ -47,7 +52,7 @@ describe("coach tools — provider robustness (#200)", () => {
     const t = tools().getProgression;
     // Empty parameter objects break function-calling on some providers, so the
     // schema must expose at least one property.
-    const parsed = t.inputSchema.safeParse({ reason: null });
+    const parsed = parse(t, { reason: null });
     expect(parsed.success).toBe(true);
     const result = await t.execute?.(parsed.data as never, {} as never);
     expect(result).toBeTruthy();
@@ -55,7 +60,7 @@ describe("coach tools — provider robustness (#200)", () => {
 
   it("getWeekPlan accepts explicit null for phase and monday", async () => {
     const t = tools().getWeekPlan;
-    const parsed = t.inputSchema.safeParse({ phase: null, monday: null });
+    const parsed = parse(t, { phase: null, monday: null });
     expect(parsed.success).toBe(true);
     const result = await t.execute?.(parsed.data as never, {} as never);
     expect(result).toBeTruthy();
@@ -63,7 +68,7 @@ describe("coach tools — provider robustness (#200)", () => {
 
   it("validateWorkout accepts null for every optional param and normalizes it", async () => {
     const t = tools().validateWorkout;
-    const parsed = t.inputSchema.safeParse({
+    const parsed = parse(t, {
       plannedDate: "2026-07-28",
       plannedType: null,
       plannedDistanceKm: null,
@@ -83,7 +88,7 @@ describe("coach tools — provider robustness (#200)", () => {
 
   it("recommendWorkout still works when the model omits every optional param", async () => {
     const t = tools().recommendWorkout;
-    const parsed = t.inputSchema.safeParse({});
+    const parsed = parse(t, {});
     expect(parsed.success).toBe(true);
     const result = await t.execute?.(parsed.data as never, {} as never);
     expect(result).toBeTruthy();

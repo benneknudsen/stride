@@ -15,7 +15,7 @@ import type { CoachActivityInput, CoachDashboardData } from "@/lib/coach/dashboa
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
-import { getDashboardActivities, getRacePlan } from "@/lib/db/queries";
+import { getChatHistory, getDashboardActivities, getRacePlan } from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
 
 // Coach (issues #34 + #75, consolidated in #86) — the single coach route the
@@ -155,9 +155,16 @@ export default async function CoachPage() {
   const session = await auth();
   const userId = session?.user?.id;
 
-  const [rows, racePlan] = userId
-    ? await Promise.all([getDashboardActivities(userId), getRacePlan(userId)])
-    : [[], null];
+  // Issue #202: replay the signed-in user's persisted chat history in the panel.
+  // Best-effort inside getChatHistory (it returns [] on failure), so a history
+  // read never breaks the page — the chat just opens on the fresh greeting.
+  const [rows, racePlan, history] = userId
+    ? await Promise.all([
+        getDashboardActivities(userId),
+        getRacePlan(userId),
+        getChatHistory(userId),
+      ])
+    : [[], null, []];
 
   const live = rows.length > 0;
   const activities: CoachPageActivity[] = live ? rows : demoActivities;
@@ -177,7 +184,7 @@ export default async function CoachPage() {
   // dashboard, so they stay consistent and the computation never doubles up.
   const dashboard = computeCoachDashboard(activities, raceDate, userId);
   const coachView = user
-    ? buildLiveCoachView(dashboard, activities, new Date(), userName)
+    ? buildLiveCoachView(dashboard, activities, new Date(), userName, history)
     : buildCoachView();
 
   return (
