@@ -49,9 +49,20 @@ export function getModelIds(): { primary: string; fallback: string } {
   };
 }
 
-/** Resolve an OpenRouter model from its identifier, e.g. `"google/gemini-2.0-flash-001"`. */
+/**
+ * Resolve an OpenRouter model from its identifier, e.g. `"google/gemini-2.0-flash-001"`.
+ *
+ * `.chat(...)` is deliberate — calling the provider directly (`openrouter(id)`)
+ * returns a model bound to OpenAI's **Responses** API (`/responses`), which is
+ * `@ai-sdk/openai`'s default since v3. OpenRouter's endpoint is
+ * Chat-Completions-shaped, so every request through the callable form was
+ * rejected with `Invalid Responses API request` — identically for every model,
+ * primary and fallback alike, which is what made it look like a model problem.
+ * The failure is request-shape, not capability: pin the chat model and the same
+ * models answer fine.
+ */
 export function resolveModel(modelId: string): LanguageModel {
-  return openrouter(modelId);
+  return openrouter.chat(modelId);
 }
 
 /**
