@@ -68,6 +68,15 @@ export interface CoachView {
   initialMessages: ChatMessage[];
   /** Quick-prompt chips under the chat. */
   prompts: string[];
+  /**
+   * Scripted coach answers for signed-out visitors, keyed by chip label (issue
+   * #203). The public demo shows the full chat UI, but /api/ai/chat is
+   * session-gated — so a visitor's chip tap renders one of these precomputed
+   * replies (derived from the same fixtures the dashboards read) instead of
+   * firing a request that can only 401. Only `buildCoachView` (the demo
+   * fallback) populates it; the live view leaves it undefined.
+   */
+  demoReplies?: Record<string, string>;
   /** "Ugens fokus" — the week's headline recommendation (serif quote). */
   focusQuote: string;
   form: {
@@ -301,10 +310,21 @@ export function buildCoachView(now: Date = new Date(), userName?: string): Coach
   const ratio = acuteChronicRatio(demoActivities, now);
   const status = loadStatusFromRatio(ratio);
 
+  // Scripted answers for a signed-out visitor's chip taps (issue #203) — each
+  // derived from the same fixtures the opener and dashboards read, so a demo
+  // reply never contradicts what's on screen. Keyed by the exact chip labels.
+  const demoReplies: Record<string, string> = {
+    [COACH_PROMPTS[0]]: `${hrTrendLine} Din længste tur den seneste uge var ${longRunKm} km i snit ${longRunPace} /km med puls ${longRunHr}. Samlet ser ugen konsistent ud — god balance mellem rolige og hårde pas.`,
+    [COACH_PROMPTS[1]]:
+      "Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
+    [COACH_PROMPTS[2]]: `Din readiness ligger på ${pct}% — ${note.toLowerCase()}. Der er ${raceWeeks} uger til dit race, og formen udvikler sig planmæssigt. Hold fokus på de lange ture, så er du klar.`,
+  };
+
   return {
     activityCount: demoActivities.length,
     initialMessages,
     prompts,
+    demoReplies,
     focusQuote:
       "Progressiv 10 km torsdag — start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
     form: { pct, note, trend, trendTone },

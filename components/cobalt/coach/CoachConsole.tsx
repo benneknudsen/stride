@@ -29,14 +29,19 @@ function Panel({ delay, children }: { delay: number; children: ReactNode }) {
 // covers the two-column area for a beat, and when it lifts the form bar and the
 // 14-day load bars animate in. The view itself is built server-side (demo or
 // live) and arrives as a plain-JSON prop.
-export function CoachConsole({ view }: { view: CoachView }) {
+export function CoachConsole({ view, visitor = false }: { view: CoachView; visitor?: boolean }) {
   const { loading, started } = useStartupReveal();
 
   return (
     <div className="relative">
       <div className="grid grid-cols-12 items-start gap-4">
         <div className="col-span-12 lg:col-span-7">
-          <ChatPanel initialMessages={view.initialMessages} prompts={view.prompts} />
+          <ChatPanel
+            initialMessages={view.initialMessages}
+            prompts={view.prompts}
+            visitor={visitor}
+            demoReplies={view.demoReplies}
+          />
         </div>
 
         <div className="col-span-12 flex flex-col gap-4 lg:col-span-5">

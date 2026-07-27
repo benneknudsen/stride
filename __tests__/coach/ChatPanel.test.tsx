@@ -128,6 +128,44 @@ describe("ChatPanel — HTTP status error handling", () => {
     });
   });
 
+  test("in visitor mode the composer is a login-CTA, not a message input (issue #203)", () => {
+    render(
+      <ChatPanel initialMessages={initialMessages} prompts={prompts} visitor demoReplies={{}} />
+    );
+
+    // No message input is promised to a visitor who can't actually chat.
+    expect(screen.queryByLabelText("Skriv til din coach")).toBeNull();
+    expect(screen.queryByLabelText("Send besked")).toBeNull();
+
+    // Instead: an honest login prompt with a link to the login route.
+    expect(screen.getByText("Log ind for at chatte med din coach.")).toBeDefined();
+    expect(screen.getByRole("link", { name: "Log ind" }).getAttribute("href")).toBe(ROUTES.LOGIN);
+  });
+
+  test("visitor chip tap shows a scripted answer without touching the network (issue #203)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    render(
+      <ChatPanel
+        initialMessages={initialMessages}
+        prompts={["Analysér min uge"]}
+        visitor
+        demoReplies={{ "Analysér min uge": "Din uge ser stærk ud." }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Analysér min uge" }));
+
+    // The visitor's question and the scripted answer both land in the transcript…
+    expect(screen.getByText("Din uge ser stærk ud.")).toBeDefined();
+    // …the chip label also appears as the visitor's own bubble.
+    expect(screen.getAllByText("Analysér min uge").length).toBeGreaterThan(1);
+
+    // …and nothing ever hit /api/ai/chat, so no "tjek din forbindelse" bubble.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Tjek din forbindelse/)).toBeNull();
+  });
+
   test("renders fallback answer when response body is missing but text is present", async () => {
     const ndjson = [
       JSON.stringify({ role: "assistant", content: "Det ser " }),
