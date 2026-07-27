@@ -14,8 +14,9 @@ import { cn } from "@/lib/utils";
 // "Coach-feed" (issue #34, bottom section). On mount it POSTs the athlete's
 // progression context to /api/ai/analyze and renders the streamed coach cards
 // (#33) the instant each NDJSON line lands — so insight appears progressively.
-// With no AI key configured the endpoint streams a deterministic, data-grounded
-// analysis, so the feed always fills in the public demo.
+// Unauthenticated visitors always receive a deterministic, data-grounded
+// heuristic analysis (regardless of AI key configuration), so the feed always
+// fills in the public demo (#209).
 
 type Status = "streaming" | "done" | "error";
 
@@ -135,9 +136,12 @@ function FeedCard({ view }: { view: FeedCardView }) {
   );
 }
 
+const DEFAULT_ERROR_MESSAGE = "Kunne ikke hente coach-feedet lige nu. Prøv igen.";
+
 export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[] }) {
   const [status, setStatus] = useState<Status>("streaming");
   const [blocks, setBlocks] = useState<AnalysisBlock[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>(DEFAULT_ERROR_MESSAGE);
   // Guard against StrictMode's double-invoke firing two concurrent streams.
   const startedRef = useRef(false);
 
@@ -150,7 +154,9 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildCoachFeedRequest(activities)),
       });
-      if (!res.ok || !res.body) throw new Error(`Request failed: ${res.status}`);
+      if (res.status === 401) throw new Error("authentication_required");
+      if (res.status === 429) throw new Error("rate_limited");
+      if (!res.ok || !res.body) throw new Error(`network_error:${res.status}`);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -173,7 +179,15 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
       }
       push(buffer);
       setStatus("done");
-    } catch {
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      if (reason === "authentication_required") {
+        setErrorMessage("Log ind for at se coach-indsigter.");
+      } else if (reason === "rate_limited") {
+        setErrorMessage("Du har nået grænsen. Prøv igen om et øjeblik.");
+      } else {
+        setErrorMessage(DEFAULT_ERROR_MESSAGE);
+      }
       setStatus("error");
     }
   }, [activities]);
@@ -206,9 +220,7 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
       </div>
 
       {status === "error" ? (
-        <GlassCard className="p-[22px] text-[13.5px] text-ink">
-          Kunne ikke hente coach-feedet lige nu. Prøv igen.
-        </GlassCard>
+        <GlassCard className="p-[22px] text-[13.5px] text-ink">{errorMessage}</GlassCard>
       ) : blocks.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {blocks.map((block, i) => (

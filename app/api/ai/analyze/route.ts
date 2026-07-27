@@ -145,11 +145,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // No provider → deterministic, data-grounded analysis for the demo. Guard it
-  // with a light per-IP rate limit first: this path runs before auth on up to
-  // 500 client-supplied activities, so it is a cheap compute-DoS surface on the
-  // keyless demo deploy without one.
-  if (!isAIConfigured()) {
+  // Gating rule: who pays for the call, not whether a key exists (#209).
+  // Without a session, always serve the deterministic heuristic — even when a
+  // key is configured (as it is in production). It is free, data-grounded and
+  // already fenced by a per-IP rate limit, so the public demo's coach feed
+  // fills in instead of hitting a 401. With a session, take the live-AI path
+  // when configured, otherwise fall back to the same heuristic.
+  if (!userId) {
+    // Per-IP guard: this path reduces up to 500 client-supplied activities
+    // before auth, so on the demo deploy it is an unauthenticated compute sink.
     const ip = clientIp(req);
     const limit = await rateLimit(`ai-heuristic:${ip}`, {
       max: HEURISTIC_RATE_LIMIT_MAX,
@@ -165,11 +169,6 @@ export async function POST(req: NextRequest) {
     return ndjsonResponse(heuristicBlocks(input));
   }
 
-  // Live AI key configured → require authentication to prevent cost abuse.
-  if (!userId) {
-    return Response.json({ error: "authentication_required" }, { status: 401 });
-  }
-
   // Per-user rate limit on the live-AI path (cache hits above never reach here),
   // mirroring the chat route: 429 with a `retry-after` when the window is full.
   const limit = await rateLimit(`analyze:${userId}`, {
@@ -182,6 +181,11 @@ export async function POST(req: NextRequest) {
       { error: "rate_limited" },
       { status: 429, headers: { "retry-after": String(retryAfterSeconds) } }
     );
+  }
+
+  // No AI key configured → serve the heuristic even for a signed-in user.
+  if (!isAIConfigured()) {
+    return ndjsonResponse(heuristicBlocks(input));
   }
 
   const prompt = buildAnalysisPrompt(input);
