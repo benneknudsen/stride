@@ -23,22 +23,12 @@
  */
 
 import { track } from "@vercel/analytics/server";
-import { stepCountIs, streamText, tool } from "ai";
+import { stepCountIs, streamText } from "ai";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { buildCoachTools, type CoachChatActivity } from "@/lib/ai/coach-tools";
 import { getModelCandidates, isAIConfigured } from "@/lib/ai/provider";
 import { auth } from "@/lib/auth";
-import {
-  getCurrentPhase,
-  getLocalDate,
-  getWeekPlan,
-  SESSION_TYPES,
-  serializeValidationResult,
-  validateWorkout,
-  type WorkoutContext,
-} from "@/lib/coach/engine";
-import { recommendWorkout } from "@/lib/coach/recommender";
-import { ensureDate } from "@/lib/db/calendar-date";
 import {
   getChatHistory,
   getDashboardActivities,
@@ -48,10 +38,7 @@ import {
 import { demoActivities } from "@/lib/demo/data";
 import { captureError } from "@/lib/observability";
 import { rateLimit } from "@/lib/rate-limit";
-import { GOALS } from "@/lib/training/goals";
-import { computeSnapshot, type ProgressionActivityInput } from "@/lib/training/progression";
 import type { ChatReply } from "@/types/chat";
-import type { HrZone } from "@/types/domain";
 
 export const runtime = "nodejs";
 // Tool loop (up to MAX_STEPS model round-trips) needs more headroom than the
@@ -108,8 +95,6 @@ const TOTAL_BUDGET_MS = Math.floor(MAX_DURATION_MS * 0.75); // 45_000
 
 /** Cap on messages sent to the model (persisted history + this turn). */
 const MAX_CONTEXT_MESSAGES = 50;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const NDJSON_HEADERS = {
   "Content-Type": "application/x-ndjson; charset=utf-8",
@@ -173,163 +158,6 @@ Regler:
  * demo numbers off as the user's own training. */
 const DEMO_DATA_NOTE = `
 - VIGTIGT: Brugeren har endnu ingen synkroniserede aktiviteter, så dine tools læser produktets demodata. Gør altid opmærksom på det, når du refererer til tallene, og anbefal at forbinde Strava.`;
-
-// ---------------------------------------------------------------------------
-// Agent tools — thin, validated adapters over the coach engine (the SSOT)
-// ---------------------------------------------------------------------------
-
-const GOAL_KEYS = ["c25k", "marathon", "zone2", "efficient"] as const;
-
-const isoDate = z.string().describe("ISO 8601 date string");
-
-/**
- * The activity fields the progression engine reads — DB rows and demo fixtures
- * both fit. Source-agnostic by design (issue #184): the route loads activities
- * through `getDashboardActivities`, which filters by `userId` only, so the coach
- * sees every synced run regardless of provider. Both providers'
- * mappers normalise into the same columns/units, so no `source` field is needed
- * here — see the note on `AnalysisActivity` in `lib/ai/analysis.ts`.
- */
-type CoachChatActivity = {
-  type: string;
-  startDate: Date;
-  distance: number;
-  movingTime: number;
-  averageHeartrate: number | null;
-  hrZones?: HrZone[] | null;
-};
-
-function buildCoachTools(
-  userId: string,
-  now: Date,
-  race: { raceDate: Date | null; raceName: string | null } | null | undefined,
-  activities: CoachChatActivity[]
-) {
-  // The user's real synced activities, resolved once by the route and bound
-  // into the tools — the model reads data, it never supplies it (so it can
-  // neither guess nor fabricate the history it reasons over).
-  const progressionInputs: ProgressionActivityInput[] = activities.map((a) => ({
-    type: a.type,
-    distance: a.distance,
-    movingTime: a.movingTime,
-    averageHeartrate: a.averageHeartrate ?? null,
-    hrZones: a.hrZones ?? null,
-    startDate: a.startDate,
-  }));
-  const latestRun = progressionInputs
-    .filter((a) => /run/i.test(a.type))
-    .reduce<Date | null>(
-      (latest, run) =>
-        ensureDate(run.startDate).getTime() <= now.getTime() &&
-        (latest === null || ensureDate(run.startDate).getTime() > latest.getTime())
-          ? run.startDate
-          : latest,
-      null
-    );
-  // E2: resolve "the current phase" from the athlete's Danish calendar day, not
-  // the server's UTC one. `now` stays the real instant for the recommender's
-  // recovery math; only the day-of read goes through `getLocalDate`.
-  const today = getLocalDate(now);
-  // Issue #99: the user's race is resolved once by the route and bound into
-  // every tool here — the model never sees the date as a free parameter, so it
-  // can neither guess nor override which race the plan periodises toward.
-  // Null/undefined falls back to the engine's demo defaults.
-  const raceDate = race?.raceDate ?? undefined;
-  const raceName = race?.raceName ?? undefined;
-  return {
-    recommendWorkout: tool({
-      description:
-        "Anbefal brugerens næste pas som et workout card (type, distance, pace, pulsloft, sko, begrundelse, ugestrimmel). Progression og seneste løbetur læses automatisk fra brugerens egne aktiviteter.",
-      inputSchema: z.object({
-        goal: z
-          .enum(GOAL_KEYS)
-          .default("zone2")
-          .describe("The user's training goal, when they have stated one"),
-        footballYesterday: z
-          .boolean()
-          .default(false)
-          .describe("Set true only if the user says they played football yesterday"),
-        injuryHistory: z
-          .boolean()
-          .default(false)
-          .describe("Set true only if the user mentions an injury history"),
-        risk: z
-          .enum(["low", "medium", "high"])
-          .optional()
-          .describe("Optional risk read for the session, threaded to the rule engine"),
-      }),
-      execute: async ({ goal, footballYesterday, injuryHistory, risk }) => {
-        // The recommendation is grounded in the user's real history: the
-        // progression snapshot and the last-run date both come from the
-        // activities the route loaded, never from model-supplied numbers.
-        return recommendWorkout(
-          {
-            userId,
-            goal: GOALS[goal],
-            progression: computeSnapshot(progressionInputs, now),
-            lastRun: latestRun ?? new Date(now.getTime() - 2 * DAY_MS),
-            footballYesterday,
-            injuryHistory,
-            risk,
-            raceDate,
-          },
-          now
-        );
-      },
-    }),
-
-    getProgression: tool({
-      description:
-        "Beregn brugerens progressionssnapshot (hasFullWindow, pace efficiency, training load, zone 2-andel, volumen) ud fra brugerens egne synkroniserede aktiviteter.",
-      inputSchema: z.object({}),
-      execute: async () => computeSnapshot(progressionInputs, now),
-    }),
-
-    getWeekPlan: tool({
-      description:
-        "Ugens planlagte pas (man-søn) for en træningsfase. Udelad phase for at bruge den aktuelle fase.",
-      inputSchema: z.object({
-        phase: z.enum(["adapt", "burn", "sharpen", "peak"]).optional(),
-        monday: isoDate.optional().describe("The Monday the week starts on"),
-      }),
-      execute: async ({ phase, monday }) =>
-        getWeekPlan(
-          phase ?? getCurrentPhase(today, raceDate),
-          monday ? new Date(monday) : undefined,
-          raceDate,
-          raceName
-        ),
-    }),
-
-    validateWorkout: tool({
-      description:
-        "Valider et foreslået pas mod regelmotorens constraints (puls, restitution, sko, lang tur, fodbold, ugeprogression). Returnerer blokerende issues og advarsler.",
-      inputSchema: z.object({
-        plannedDate: isoDate,
-        plannedType: z.enum(SESSION_TYPES).optional(),
-        plannedDistanceKm: z.number().optional(),
-        plannedZone: z.number().optional().describe("Target HR zone, 1-5"),
-        shoeType: z.string().optional().describe('e.g. "vomero" or "adios_pro"'),
-        includesStrength: z.boolean().optional(),
-        lastRunDate: isoDate.optional(),
-        footballYesterday: z.boolean().optional(),
-        phase: z.enum(["adapt", "burn", "sharpen", "peak"]).optional(),
-        weeklyDistanceKm: z.number().optional(),
-        previousWeekDistanceKm: z.number().optional(),
-      }),
-      execute: async (input) => {
-        const context: WorkoutContext = {
-          ...input,
-          plannedDate: new Date(input.plannedDate),
-          lastRunDate: input.lastRunDate ? new Date(input.lastRunDate) : undefined,
-          phase: input.phase ?? getCurrentPhase(today, raceDate),
-          raceDate,
-        };
-        return serializeValidationResult(validateWorkout(context));
-      },
-    }),
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Route
