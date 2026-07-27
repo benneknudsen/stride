@@ -1,9 +1,27 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "@/components/cobalt/coach/MessageBubble";
 import type { ChatMessage, CoachView } from "@/lib/cobalt/coach";
+import { ROUTES } from "@/lib/routes";
 import type { ChatMessage as ApiChatMessage, ChatReply } from "@/types/chat";
+
+/** Why the chat request failed — drives the error bubble copy. */
+type FailureKind = "network" | "unauthorized" | "rate_limited";
+
+interface ChatFailure {
+  kind: FailureKind;
+  retryAfter?: number;
+}
+
+/** Format `retry-after` seconds into a short Danish phrase. */
+function formatRetryAfter(seconds: number | undefined): string {
+  if (!seconds || seconds <= 0) return "lidt";
+  if (seconds < 60) return `${seconds} sekunder`;
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes} minut${minutes === 1 ? "" : "ter"}`;
+}
 
 // Left column: the chat UI. Owns its own transcript, draft and typing state.
 // Sending a message (typed, or via a quick-prompt chip) appends the user
@@ -23,7 +41,7 @@ export function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<ChatFailure | null>(null);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -32,11 +50,11 @@ export function ChatPanel({
   useEffect(() => () => abortRef.current?.abort(), []);
 
   // Keep the newest message in view as the transcript grows.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing/failed are the scroll triggers, not read in the body
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing/failure are the scroll triggers, not read in the body
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, typing, failed]);
+  }, [messages, typing, failure]);
 
   /** Panel transcript → the role/content shape the chat route expects. */
   const toApiMessages = (transcript: ChatMessage[]): ApiChatMessage[] =>
@@ -61,7 +79,7 @@ export function ChatPanel({
   const streamReply = async (transcript: ChatMessage[]) => {
     const controller = new AbortController();
     abortRef.current = controller;
-    setFailed(false);
+    setFailure(null);
     setTyping(true);
     // Reserve this coach turn's id up-front so every fragment update targets
     // the same bubble.
@@ -84,6 +102,15 @@ export function ChatPanel({
       );
     };
 
+    const reportFailure = (kind: FailureKind, retryAfter?: number) => {
+      setFailure({ kind, retryAfter });
+      setTyping(false);
+      Sentry.captureException(new Error(`ChatPanel request failed: ${kind}`), {
+        tags: { context: "coach.chat.client" },
+        extra: { kind, retryAfter },
+      });
+    };
+
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
@@ -91,7 +118,33 @@ export function ChatPanel({
         body: JSON.stringify({ messages: toApiMessages(transcript) }),
         signal: controller.signal,
       });
-      if (!res.ok || !res.body) throw new Error(`Request failed: ${res.status}`);
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          reportFailure("unauthorized");
+          return;
+        }
+        if (res.status === 429) {
+          const retryAfter = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
+          reportFailure("rate_limited", Number.isFinite(retryAfter) ? retryAfter : undefined);
+          return;
+        }
+        reportFailure("network");
+        return;
+      }
+
+      // Some WebViews/proxies strip the streaming body even on a 200. Fall back
+      // to reading the full NDJSON text and stitching the answer together.
+      if (!res.body) {
+        const text = await res.text();
+        const fallbackAnswer = text.split("\n").map(parseLine).join("");
+        if (!fallbackAnswer.trim()) {
+          reportFailure("network");
+          return;
+        }
+        render(fallbackAnswer);
+        return;
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -110,13 +163,15 @@ export function ChatPanel({
         }
       }
       answer += parseLine(buffer);
-      if (!answer.trim()) throw new Error("empty_reply");
+      if (!answer.trim()) {
+        reportFailure("network");
+        return;
+      }
       render(answer);
     } catch {
       // Unmounted mid-stream — never touch state after abort.
       if (controller.signal.aborted) return;
-      setTyping(false);
-      setFailed(true);
+      reportFailure("network");
     }
   };
 
@@ -163,17 +218,42 @@ export function ChatPanel({
           </div>
         ) : null}
 
-        {failed ? (
+        {failure ? (
           <div className="flex justify-start">
             <div className="flex max-w-[82%] flex-col items-start gap-2.5 rounded-[18px_18px_18px_6px] border border-red/30 bg-white/60 px-[18px] py-[14px] text-[13.5px] leading-relaxed text-ink">
-              Coachen kunne ikke svare lige nu. Tjek din forbindelse og prøv igen.
-              <button
-                type="button"
-                onClick={retry}
-                className="cg-interactive rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
-              >
-                Prøv igen
-              </button>
+              {failure.kind === "unauthorized" ? (
+                <>
+                  Log ind for at chatte med coachen.
+                  <a
+                    href={ROUTES.LOGIN}
+                    className="cg-interactive rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
+                  >
+                    Log ind
+                  </a>
+                </>
+              ) : failure.kind === "rate_limited" ? (
+                <>
+                  Du har sendt mange beskeder — prøv igen om {formatRetryAfter(failure.retryAfter)}.
+                  <button
+                    type="button"
+                    onClick={retry}
+                    className="cg-interactive rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
+                  >
+                    Prøv igen
+                  </button>
+                </>
+              ) : (
+                <>
+                  Coachen kunne ikke svare lige nu. Tjek din forbindelse og prøv igen.
+                  <button
+                    type="button"
+                    onClick={retry}
+                    className="cg-interactive rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
+                  >
+                    Prøv igen
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ) : null}
