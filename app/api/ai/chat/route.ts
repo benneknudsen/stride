@@ -84,16 +84,27 @@ const requestSchema = z.object({
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
-/** Upper bound on model round-trips in the tool loop. */
-const MAX_STEPS = 8;
+/** Upper bound on model round-trips in the tool loop. Four tools exist, and
+ * chained calls beyond that are usually the model looping rather than a
+ * grounded answer (issue #198). */
+const MAX_STEPS = 4;
 
 /**
- * Per-candidate stream timeout (issue #71 E3). Guards against a model that
- * accepts the request then stalls without streaming: the abort lets the router
- * fall through to the next candidate (or the scripted floor) instead of holding
- * the request open to the 60 s `maxDuration`. A fresh signal per candidate.
+ * Time budget derived from `maxDuration` so the hard limits can never drift
+ * apart (issue #198). `maxDuration` is the absolute ceiling Vercel enforces;
+ * we leave 25 % headroom for request setup, JSON parsing, tool execution, and
+ * stream teardown.
+ *
+ * - `FIRST_TOKEN_TIMEOUT_MS`: per-candidate abort if the provider streams
+ *   nothing (no text, no tool call) within this window. A fresh window per
+ *   candidate so the fallback model gets its own chance.
+ * - `TOTAL_BUDGET_MS`: hard cap for the whole response, including all tool
+ *   rounds. When this fires the active candidate is aborted and a truncation
+ *   marker is streamed instead of persisting a half answer.
  */
-const PROVIDER_TIMEOUT_MS = 12_000;
+const MAX_DURATION_MS = maxDuration * 1000; // 60_000
+const FIRST_TOKEN_TIMEOUT_MS = Math.floor(MAX_DURATION_MS * 0.25); // 15_000
+const TOTAL_BUDGET_MS = Math.floor(MAX_DURATION_MS * 0.75); // 45_000
 
 /** Cap on messages sent to the model (persisted history + this turn). */
 const MAX_CONTEXT_MESSAGES = 50;
@@ -119,6 +130,12 @@ const PROVIDER_DOWN_REPLY: ChatReply = {
   role: "assistant",
   content:
     "Coachen kunne ikke svare lige nu — prøv igen om et øjeblik. Dit næste pas står stadig klar på Coach-dashboardet.",
+};
+
+/** Appended to an answer that was cut off by the total budget or a provider error after it started streaming (issue #198). */
+const TRUNCATED_REPLY: ChatReply = {
+  role: "assistant",
+  content: "\n\n[Svaret blev afbrudt — prøv igen om et øjeblik.]",
 };
 
 /** Stream an already-resolved set of replies (scripted fallback) as NDJSON. */
@@ -403,16 +420,42 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      let emitted = 0;
       let answer = "";
+      let sawActivity = false;
+      let isTruncated = false;
+      let activeAbortController: AbortController | null = null;
+      let budgetExceeded = false;
+
       const emit = (reply: ChatReply) => {
-        emitted += 1;
         controller.enqueue(encoder.encode(`${JSON.stringify(reply)}\n`));
       };
 
+      const budgetTimer = setTimeout(() => {
+        budgetExceeded = true;
+        activeAbortController?.abort();
+      }, TOTAL_BUDGET_MS);
+
       // Provider router with fallback: try each model until one streams output.
       for (const { id, model } of getModelCandidates()) {
-        if (emitted > 0) break;
+        if (sawActivity || budgetExceeded) break;
+
+        const candidateController = new AbortController();
+        activeAbortController = candidateController;
+
+        let firstTokenTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+          if (!sawActivity) {
+            candidateController.abort(new Error("first token timeout"));
+          }
+        }, FIRST_TOKEN_TIMEOUT_MS);
+
+        const noteActivity = () => {
+          sawActivity = true;
+          if (firstTokenTimer) {
+            clearTimeout(firstTokenTimer);
+            firstTokenTimer = null;
+          }
+        };
+
         try {
           const result = streamText({
             model,
@@ -420,27 +463,51 @@ export async function POST(req: NextRequest) {
             messages,
             tools,
             stopWhen: stepCountIs(MAX_STEPS),
-            abortSignal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+            abortSignal: candidateController.signal,
             onError: ({ error }) => {
               captureProviderError("stream", id, error);
             },
           });
-          for await (const delta of result.textStream) {
-            if (delta.length === 0) continue;
-            answer += delta;
-            emit({ role: "assistant", content: delta });
+          for await (const part of result.fullStream) {
+            if (part.type === "text-delta") {
+              noteActivity();
+              if (part.text.length === 0) continue;
+              answer += part.text;
+              emit({ role: "assistant", content: part.text });
+            } else if (
+              part.type === "tool-call" ||
+              part.type === "tool-result" ||
+              part.type === "tool-input-start"
+            ) {
+              // Tool-only activity counts as a response so we do not fall back
+              // to another candidate, but it does not emit text by itself.
+              noteActivity();
+            }
           }
           break;
         } catch (err) {
-          // Timed out (E3) or errored. Already streamed part of this model's
-          // output → cannot safely retry; otherwise fall through to the next.
+          // Timed out before first token, total budget reached, or provider
+          // error. If the model already produced output we must not retry:
+          // the user would get two interleaved answers; instead close the
+          // stream with a truncation marker.
           captureProviderError("catch", id, err);
-          if (emitted > 0) break;
+          if (sawActivity) {
+            isTruncated = true;
+            break;
+          }
+        } finally {
+          if (firstTokenTimer) clearTimeout(firstTokenTimer);
+          activeAbortController = null;
         }
       }
 
-      // Every provider failed before emitting → scripted floor.
-      if (emitted === 0) {
+      clearTimeout(budgetTimer);
+
+      if (isTruncated) {
+        // Partial answer was already streamed; warn the user and do NOT keep
+        // the half turn in the persisted history (issue #198).
+        emit(TRUNCATED_REPLY);
+      } else if (!sawActivity) {
         captureError(
           "api.ai.chat.all_providers_failed",
           new Error("All AI provider candidates failed; returning scripted floor")
@@ -448,10 +515,9 @@ export async function POST(req: NextRequest) {
         emit(PROVIDER_DOWN_REPLY);
       }
 
-      // Persist the completed round (best-effort, inserts swallow DB errors).
-      // Only on a real model answer — the scripted floor stays out of history
-      // so a retried question doesn't accumulate duplicate user turns.
-      if (answer.length > 0) {
+      // Persist only complete model answers. Scripted floors and truncated
+      // answers stay out of history so retried questions don't duplicate.
+      if (answer.length > 0 && !isTruncated) {
         if (latest?.role === "user") {
           await insertChatMessage({ userId, role: "user", content: latest.content });
         }

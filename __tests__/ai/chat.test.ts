@@ -12,12 +12,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetRateLimit } from "@/lib/rate-limit";
 import type { ChatMessage, ChatReply } from "@/types/chat";
 
-const { authMock, streamTextMock } = vi.hoisted(() => ({
+const { authMock, streamTextMock, insertChatMessageMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   streamTextMock: vi.fn(),
+  insertChatMessageMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
+
+vi.mock("@/lib/db/queries", () => ({
+  getChatHistory: vi.fn().mockResolvedValue([]),
+  getDashboardActivities: vi.fn().mockResolvedValue([]),
+  getRacePlan: vi.fn().mockResolvedValue(null),
+  insertChatMessage: insertChatMessageMock,
+}));
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -25,6 +33,7 @@ vi.mock("ai", async (importOriginal) => {
 });
 
 import { POST } from "@/app/api/ai/chat/route";
+import { insertChatMessage } from "@/lib/db/queries";
 
 const MESSAGES: ChatMessage[] = [{ role: "user", content: "Hvad skal jeg løbe i dag?" }];
 
@@ -50,6 +59,11 @@ function stubTextStream(deltas: string[]): void {
     textStream: (async function* () {
       yield* deltas;
     })(),
+    fullStream: (async function* () {
+      for (const text of deltas) {
+        yield { type: "text-delta", text };
+      }
+    })(),
   }));
 }
 
@@ -58,6 +72,7 @@ beforeEach(() => {
   authMock.mockReset();
   authMock.mockResolvedValue({ user: { id: "user-1" } });
   streamTextMock.mockReset();
+  insertChatMessageMock.mockClear();
   stubTextStream(["Hej ", "Benjamin!"]);
 });
 
@@ -165,5 +180,51 @@ describe("POST /api/ai/chat", () => {
 
     expect(res.status).toBe(400);
     expect(streamTextMock).not.toHaveBeenCalled();
+  });
+
+  it("streams a full answer from a mock model that uses two tool rounds (#198)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    streamTextMock.mockImplementation(() => ({
+      fullStream: (async function* () {
+        yield { type: "tool-call", toolCallId: "tc-1", toolName: "getProgression", args: {} };
+        yield { type: "tool-result", toolCallId: "tc-1", result: { hasFullWindow: true } };
+        yield { type: "tool-call", toolCallId: "tc-2", toolName: "recommendWorkout", args: {} };
+        yield { type: "tool-result", toolCallId: "tc-2", result: { workout: "5 km zone 2" } };
+        yield { type: "text-delta", text: "Du skal løbe " };
+        yield { type: "text-delta", text: "5 km i dag." };
+      })(),
+    }));
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    expect(replies.map((r) => r.content).join("")).toBe("Du skal løbe 5 km i dag.");
+    expect(insertChatMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        role: "assistant",
+        content: "Du skal løbe 5 km i dag.",
+      })
+    );
+  });
+
+  it("emits a truncation marker and does not persist a partial answer (#198)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    streamTextMock.mockImplementation(() => ({
+      fullStream: (async function* () {
+        yield { type: "text-delta", text: "Det ser " };
+        throw new Error("stream broke");
+      })(),
+    }));
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    const fullText = replies.map((r) => r.content).join("");
+    expect(fullText).toContain("Det ser");
+    expect(fullText).toContain("Svaret blev afbrudt");
+    expect(insertChatMessage).not.toHaveBeenCalled();
   });
 });
