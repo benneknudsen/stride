@@ -46,6 +46,7 @@ import {
   insertChatMessage,
 } from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
+import { captureError } from "@/lib/observability";
 import { rateLimit } from "@/lib/rate-limit";
 import { GOALS } from "@/lib/training/goals";
 import { computeSnapshot, type ProgressionActivityInput } from "@/lib/training/progression";
@@ -410,7 +411,7 @@ export async function POST(req: NextRequest) {
       };
 
       // Provider router with fallback: try each model until one streams output.
-      for (const { model } of getModelCandidates()) {
+      for (const { id, model } of getModelCandidates()) {
         if (emitted > 0) break;
         try {
           const result = streamText({
@@ -420,6 +421,9 @@ export async function POST(req: NextRequest) {
             tools,
             stopWhen: stepCountIs(MAX_STEPS),
             abortSignal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+            onError: ({ error }) => {
+              captureProviderError("stream", id, error);
+            },
           });
           for await (const delta of result.textStream) {
             if (delta.length === 0) continue;
@@ -427,15 +431,22 @@ export async function POST(req: NextRequest) {
             emit({ role: "assistant", content: delta });
           }
           break;
-        } catch {
+        } catch (err) {
           // Timed out (E3) or errored. Already streamed part of this model's
           // output → cannot safely retry; otherwise fall through to the next.
+          captureProviderError("catch", id, err);
           if (emitted > 0) break;
         }
       }
 
       // Every provider failed before emitting → scripted floor.
-      if (emitted === 0) emit(PROVIDER_DOWN_REPLY);
+      if (emitted === 0) {
+        captureError(
+          "api.ai.chat.all_providers_failed",
+          new Error("All AI provider candidates failed; returning scripted floor")
+        );
+        emit(PROVIDER_DOWN_REPLY);
+      }
 
       // Persist the completed round (best-effort, inserts swallow DB errors).
       // Only on a real model answer — the scripted floor stays out of history
@@ -459,7 +470,17 @@ async function currentUserId(): Promise<string | null> {
   try {
     const session = await auth();
     return session?.user?.id ?? null;
-  } catch {
+  } catch (err) {
+    captureError("api.ai.chat.auth", err);
     return null;
   }
+}
+
+/** Capture a provider error with the model id so incidents are debuggable. */
+function captureProviderError(phase: "stream" | "catch", modelId: string, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  const error = new Error(`AI chat provider ${modelId} failed during ${phase}: ${message}`);
+  error.name = "ChatProviderError";
+  error.cause = err;
+  captureError("api.ai.chat.provider", error);
 }
