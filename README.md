@@ -31,7 +31,7 @@ It's designed to replace a manual running-coach workflow with an intelligent, da
 | Database | Drizzle ORM + Neon (Vercel Postgres) |
 | Auth | NextAuth.js v5 |
 | Charts | Recharts |
-| Testing | Vitest (845 tests) |
+| Testing | Vitest (887 tests) |
 | CI/CD | Vercel (automatic deploys) |
 | LLM Agents | Hermes (Orchestrator) + Claude Code (Opus, Fable) |
 
@@ -60,7 +60,7 @@ Instead of streaming text, the AI endpoint (`app/api/ai/analyze`) streams typed 
 
 ### Landing & Brand
 
-- **Velkommen landing page** ([#119](../../issues/119)) — public visitors get a branded landing page with live preview widgets; the demo dashboard lives at `/?demo=1`
+- **Velkommen landing page** ([#119](../../issues/119)) — public visitors get a branded landing page with live preview widgets; the demo dashboard lives at `/demo`
 - **AI coach teaser** ([#121](../../issues/121)) — coach analysis rendered as a typewriter loop on the landing page
 - **Open Graph social card** ([#120](../../issues/120)) — `app/opengraph-image.tsx` with Bricolage wordmark + serif-italic tagline
 - **Cobalt Glass design system** — light "silver paper" theme with liquid-glass surfaces: `components/cobalt/` (UI) + `lib/cobalt/` (view-models), tokens in `app/globals.css`
@@ -85,31 +85,11 @@ npm run dev
 
 Required env vars: `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY` (see `.env.example` for all).
 
-## Project Status
+## Status
 
-**✅ Live på Vercel → [stride-run.club](https://stride-run.club)**
+Live in production at **[stride-run.club](https://stride-run.club)**, deployed on Vercel with Neon Postgres.
 
-### ✅ Phase 1 — Complete
-
-- [x] Architecture + project scaffold
-- [x] Database schema (Drizzle + PostgreSQL)
-- [x] NextAuth v5 foundation
-- [x] Strava PKCE OAuth + encrypted token storage
-- [x] Activity sync pipeline
-- [x] Dashboard (weekly volume, pace distribution, zone breakdown)
-- [x] Activity detail page
-- [x] AI analysis with generative UI (streamObject + 4 typed tools)
-- [x] Training plan dashboard (committed plan, latest run, last 5, next run)
-- [x] Deploy to Vercel + Neon Postgres
-- [x] 845 tests
-
-### ✅ Phase 2 — Coach Intelligence — Complete
-
-- [x] [#30 Progression metrics engine](../../issues/30) — pace/HR trends, training load
-- [x] [#31 Coach rule engine](../../issues/31) — 155 bpm, 48h buffer, phases
-- [x] [#32 Workout recommender](../../issues/32) — next workout engine
-- [x] [#33 Coach insight cards](../../issues/33) — AI-generated coaching messages
-- [x] [#34 Coach dashboard](../../issues/34) — unified coaching view
+The MVP and coach intelligence work are shipped: Strava PKCE OAuth with encrypted token storage, the activity sync pipeline, the Cobalt Glass dashboards (weekly volume, pace distribution, zone breakdown), AI analysis via generative UI, the progression + coaching engines, and the chat coach at `/dashboard/coach`. Backed by 887 passing tests. Active development continues via GitHub Issues.
 
 ## Author
 
