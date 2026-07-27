@@ -206,7 +206,7 @@ export default async function CoachPage() {
 
       <section>
         <SectionHeading index="02" title="Spørg coachen" hint="AI · samtale" />
-        <CoachConsole view={coachView} />
+        <CoachConsole view={coachView} visitor={!user} />
       </section>
 
       <section>

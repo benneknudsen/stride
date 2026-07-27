@@ -70,6 +70,15 @@ describe("buildCoachView", () => {
     expect(view.prompts).toContain("Analysér min uge");
   });
 
+  it("scripts a demo answer for every chip so visitors never hit the 401 chat (issue #203)", () => {
+    expect(view.demoReplies).toBeDefined();
+    for (const prompt of view.prompts) {
+      const reply = view.demoReplies?.[prompt];
+      expect(typeof reply).toBe("string");
+      expect((reply ?? "").length).toBeGreaterThan(0);
+    }
+  });
+
   it("builds 14 daily load bars with only the last (today) accented", () => {
     expect(view.load.bars).toHaveLength(14);
     expect(view.load.bars.at(-1)?.accent).toBe(true);
@@ -143,6 +152,11 @@ describe("buildLiveCoachView", () => {
   it("counts the passed-in activities, not the demo fixtures", () => {
     const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW);
     expect(view.activityCount).toBe(2);
+  });
+
+  it("leaves demoReplies undefined — a signed-in user gets the live chat, not scripts (issue #203)", () => {
+    const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW);
+    expect(view.demoReplies).toBeUndefined();
   });
 
   it("builds the focus quote from a training workout", () => {

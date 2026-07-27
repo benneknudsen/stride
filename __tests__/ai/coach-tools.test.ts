@@ -29,8 +29,9 @@ function tools() {
   return buildCoachTools("user-1", NOW, { raceDate: null, raceName: null }, ACTIVITIES);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: workaround for AI SDK's FlexibleSchema type not exposing safeParse
 function parse(t: { inputSchema: any }, input: unknown) {
+  // biome-ignore lint/suspicious/noExplicitAny: see above
   return (t.inputSchema as any).safeParse(input);
 }
 
