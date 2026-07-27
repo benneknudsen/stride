@@ -231,7 +231,19 @@ export async function POST(req: NextRequest) {
   ]);
   const usingDemoData = rows.length === 0;
   const activities: CoachChatActivity[] = usingDemoData ? demoActivities : rows;
-  const tools = buildCoachTools(userId, now, racePlan, activities);
+  // Building the tools is the last synchronous step before the stream, and it
+  // reduces real DB rows — so a bad row here used to take the whole route down
+  // with a 500 (a raw ISO date reaching `.getTime()`, #190/#194/#195). Every
+  // other dependency on this path degrades instead of throwing; this one now
+  // does too: the user gets the scripted floor, and the cause lands in Sentry
+  // rather than in an opaque 500.
+  let tools: ReturnType<typeof buildCoachTools>;
+  try {
+    tools = buildCoachTools(userId, now, racePlan, activities);
+  } catch (err) {
+    captureError("api.ai.chat.build_tools", err);
+    return ndjsonResponse([PROVIDER_DOWN_REPLY]);
+  }
   const systemPrompt = usingDemoData ? COACH_SYSTEM_PROMPT + DEMO_DATA_NOTE : COACH_SYSTEM_PROMPT;
   const incoming = parsed.data.messages;
   // The client may send role: "assistant" messages (schema allows it for
@@ -311,8 +323,17 @@ export async function POST(req: NextRequest) {
               // to another candidate, but it does not emit text by itself.
               noteActivity();
             }
+            // `part.type === "error"` needs no branch: `onError` above already
+            // reports it. What matters is that it does NOT throw — see below.
           }
-          break;
+          // Only stop routing once a candidate actually produced something.
+          // A provider that fails politely (bad model id, no endpoint that
+          // supports tool calls, quota) surfaces the failure as an `error`
+          // part, and `onError` keeps it from ever reaching the catch — so the
+          // stream simply ends. Breaking unconditionally here treated that as
+          // an answer: the fallback model was never tried and every such
+          // failure became the scripted floor.
+          if (sawActivity) break;
         } catch (err) {
           // Timed out before first token, total budget reached, or provider
           // error. If the model already produced output we must not retry:
