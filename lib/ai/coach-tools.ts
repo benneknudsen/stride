@@ -55,7 +55,9 @@ function orUndefined<T>(value: T | null | undefined): T | undefined {
  */
 export type CoachChatActivity = {
   type: string;
-  startDate: Date;
+  /** ISO string from the Neon driver, or a real Date (demo fixtures) — read it
+   *  through `ensureDate`, never directly. See `ProgressionActivityInput`. */
+  startDate: Date | string;
   distance: number;
   movingTime: number;
   averageHeartrate: number | null;
@@ -79,16 +81,20 @@ export function buildCoachTools(
     hrZones: a.hrZones ?? null,
     startDate: a.startDate,
   }));
+  // The accumulator must hold the *normalised* date, never the raw row value:
+  // the Neon driver hands `startDate` back as an ISO string (see `ensureDate`),
+  // so storing `run.startDate` here parked a string in a `Date`-typed slot and
+  // the next iteration's `latest.getTime()` threw
+  // `TypeError: e.getTime is not a function` — a 500 on /api/ai/chat from the
+  // second run onwards (4th recurrence of #190/#194/#195). The identical reduce
+  // in lib/coach/dashboard.ts:243 already does it this way; the two must match.
   const latestRun = progressionInputs
     .filter((a) => /run/i.test(a.type))
-    .reduce<Date | null>(
-      (latest, run) =>
-        ensureDate(run.startDate).getTime() <= now.getTime() &&
-        (latest === null || ensureDate(run.startDate).getTime() > latest.getTime())
-          ? run.startDate
-          : latest,
-      null
-    );
+    .reduce<Date | null>((latest, run) => {
+      const runStart = ensureDate(run.startDate);
+      if (runStart.getTime() > now.getTime()) return latest;
+      return latest === null || runStart.getTime() > latest.getTime() ? runStart : latest;
+    }, null);
   // E2: resolve "the current phase" from the athlete's Danish calendar day, not
   // the server's UTC one. `now` stays the real instant for the recommender's
   // recovery math; only the day-of read goes through `getLocalDate`.

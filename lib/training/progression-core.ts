@@ -38,8 +38,14 @@ export interface ProgressionActivityInput {
   averageHeartrate: number | null;
   /** Time-in-zone buckets, if Strava provided them. */
   hrZones: HrZone[] | null;
-  /** Activity start (UTC). */
-  startDate: Date;
+  /**
+   * Activity start (UTC). `string` is not a convenience — the Neon driver hands
+   * `timestamp` columns back as ISO strings, so a DB row genuinely carries one.
+   * Typing it as `Date` alone made the compiler bless `startDate.getTime()` on a
+   * string, which is the bug behind #190/#194/#195. Every read must go through
+   * `ensureDate`; the widened type is what forces that.
+   */
+  startDate: Date | string;
 }
 
 /** Overload-risk band derived from the acute:chronic load ratio. */
