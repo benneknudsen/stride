@@ -33,7 +33,7 @@ vi.mock("ai", async (importOriginal) => {
 });
 
 import { POST } from "@/app/api/ai/chat/route";
-import { insertChatMessage } from "@/lib/db/queries";
+import { getDashboardActivities, insertChatMessage } from "@/lib/db/queries";
 
 const MESSAGES: ChatMessage[] = [{ role: "user", content: "Hvad skal jeg løbe i dag?" }];
 
@@ -149,6 +149,53 @@ describe("POST /api/ai/chat", () => {
     const replies = await readReplies(res);
     expect(replies).toHaveLength(1);
     expect(replies[0].content).toContain("kunne ikke svare");
+  });
+
+  it("falls through to the fallback candidate when the first streams nothing (#208)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    // A provider that fails politely — bad model id, no endpoint supporting
+    // tool calls, quota — reports an `error` part instead of throwing, and
+    // `onError` keeps it out of the catch. The router must treat that as a
+    // dead candidate and try the next model, not as an answer.
+    streamTextMock
+      .mockImplementationOnce(() => ({
+        fullStream: (async function* () {
+          yield { type: "error", error: new Error("no endpoints found that support tool use") };
+        })(),
+      }))
+      .mockImplementationOnce(() => ({
+        fullStream: (async function* () {
+          yield { type: "text-delta", text: "Rolig 5 km i dag." };
+        })(),
+      }));
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    // Read the body first — the stream's `start()` only runs to completion as
+    // the response is consumed, so the call count isn't final before that.
+    const replies = await readReplies(res);
+    expect(replies.map((r) => r.content).join("")).toBe("Rolig 5 km i dag.");
+    expect(streamTextMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("streams the scripted floor instead of a 500 when the tools cannot be built", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    // A row whose startDate is neither a Date nor an ISO string makes
+    // `ensureDate` throw inside `buildCoachTools` — the synchronous step that
+    // used to take the whole route down with a 500 (#190/#194/#195).
+    vi.mocked(getDashboardActivities).mockResolvedValueOnce([
+      { type: "Run", startDate: 0, distance: 8000, movingTime: 2400, averageHeartrate: 150 },
+      { type: "Run", startDate: 0, distance: 9000, movingTime: 2700, averageHeartrate: 150 },
+    ] as never);
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    expect(replies).toHaveLength(1);
+    expect(replies[0].content).toContain("kunne ikke svare");
+    expect(streamTextMock).not.toHaveBeenCalled();
   });
 
   it("rejects an empty message list", async () => {

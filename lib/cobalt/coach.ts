@@ -105,7 +105,9 @@ export interface CoachView {
  * #86); the DB's nullable averages never come into it.
  */
 export interface CoachLoadActivityLike {
-  startDate: Date;
+  /** ISO string from the Neon driver, or a real Date (demo fixtures) — every
+   *  read below goes through `ensureDate`. See `ProgressionActivityInput`. */
+  startDate: Date | string;
   /** Distance in meters. */
   distance: number;
 }
