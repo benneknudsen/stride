@@ -9,16 +9,34 @@ vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
 }));
 
-const initialMessages = [
-  { id: "m1", role: "coach" as const, text: "Godmorgen!" },
-  { id: "m2", role: "user" as const, text: "Hvordan ser min uge ud?" },
-];
+const initialMessages = [{ id: "m1", role: "coach" as const, text: "Godmorgen!", synthetic: true }];
 
 const prompts = ["Analysér min uge", "Foreslå næste pas"];
 
 describe("ChatPanel — HTTP status error handling", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test("strips synthetic opening turns from the /api/ai/chat request (issue #201)", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ role: "assistant", content: "Svar" }), { status: 200 })
+      );
+
+    render(<ChatPanel initialMessages={initialMessages} prompts={prompts} />);
+
+    const input = screen.getByLabelText("Skriv til din coach");
+    fireEvent.change(input, { target: { value: "Mit spørgsmål" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+    const body = JSON.parse((fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string);
+    // Only the visitor's real message reaches the model — never the scripted
+    // synthetic greeting.
+    expect(body.messages).toEqual([{ role: "user", content: "Mit spørgsmål" }]);
   });
 
   test("shows login prompt on 401", async () => {

@@ -56,12 +56,17 @@ export function ChatPanel({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, typing, failure]);
 
-  /** Panel transcript → the role/content shape the chat route expects. */
+  // Panel transcript → the role/content shape the chat route expects. Synthetic
+  // turns (the scripted opening bubble) are dropped so the coach's own greeting
+  // never becomes model context and no fabricated user turn is ever sent as if
+  // the visitor wrote it (issue #201).
   const toApiMessages = (transcript: ChatMessage[]): ApiChatMessage[] =>
-    transcript.map((m) => ({
-      role: m.role === "user" ? "user" : "assistant",
-      content: m.text,
-    }));
+    transcript
+      .filter((m) => !m.synthetic)
+      .map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text,
+      }));
 
   /** One NDJSON line → its `content` fragment ("" for blanks and junk). */
   const parseLine = (line: string): string => {

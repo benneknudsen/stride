@@ -52,9 +52,17 @@ describe("buildCoachView", () => {
     expect(view.activityCount).toBeGreaterThan(0);
   });
 
-  it("opens with a three-message coach/user/coach transcript", () => {
-    expect(view.initialMessages).toHaveLength(3);
-    expect(view.initialMessages.map((m) => m.role)).toEqual(["coach", "user", "coach"]);
+  it("opens with a single synthetic coach bubble — no fabricated user turn (issue #201)", () => {
+    expect(view.initialMessages).toHaveLength(1);
+    expect(view.initialMessages[0].role).toBe("coach");
+    expect(view.initialMessages.every((m) => m.synthetic === true)).toBe(true);
+    expect(view.initialMessages.some((m) => m.role === "user")).toBe(false);
+  });
+
+  it("folds the long-run summary and recommendation into the opening bubble", () => {
+    const opener = view.initialMessages[0].text;
+    expect(opener).toMatch(/km i snit/);
+    expect(opener).toContain("progressiv");
   });
 
   it("exposes the three quick-prompt chips", () => {
@@ -164,7 +172,7 @@ describe("buildLiveCoachView", () => {
     const view = buildLiveCoachView(dashboard({ ratio: null }), liveActivities, NOW);
     expect(view.form.pct).toBe(72);
     expect(view.load.status).toBe("OPTIMAL");
-    expect(view.initialMessages[2].text).toContain("foreløbigt");
+    expect(view.initialMessages[0].text).toContain("foreløbigt");
   });
 
   it("marks a rising load as STIGENDE/cobalt and a falling one as FALDENDE/red", () => {
@@ -177,10 +185,18 @@ describe("buildLiveCoachView", () => {
     expect(falling.form.trendTone).toBe("red");
   });
 
-  it("surfaces the acute:chronic ratio in the load answer message", () => {
+  it("surfaces the acute:chronic ratio in the opening bubble", () => {
     const view = buildLiveCoachView(dashboard({ ratio: 1.25 }), liveActivities, NOW);
-    expect(view.initialMessages[2].text).toContain("1.25");
+    expect(view.initialMessages[0].text).toContain("1.25");
     expect(view.load.status).toBe("OPTIMAL");
+  });
+
+  it("opens with a single synthetic coach bubble — no fabricated user turn (issue #201)", () => {
+    const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW);
+    expect(view.initialMessages).toHaveLength(1);
+    expect(view.initialMessages[0].role).toBe("coach");
+    expect(view.initialMessages[0].synthetic).toBe(true);
+    expect(view.initialMessages.some((m) => m.role === "user")).toBe(false);
   });
 });
 
