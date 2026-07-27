@@ -30,6 +30,13 @@ export interface ChatMessage {
   id: string;
   role: ChatRole;
   text: string;
+  /**
+   * The scripted opening bubble is `synthetic: true`: it is shown so the panel
+   * never starts empty, but the ChatPanel strips synthetic turns before POSTing
+   * to /api/ai/chat so the coach's own greeting never becomes model context and
+   * no fabricated user turn is ever sent as if the visitor wrote it (issue #201).
+   */
+  synthetic?: boolean;
 }
 
 export interface LoadBar {
@@ -228,17 +235,15 @@ export function buildCoachView(now: Date = new Date(), userName?: string): Coach
           : `Din puls ligger stabilt på ${avgHrLast7} — god konsistens.`
       : "Din træning ser konsistent ud.";
 
+  // A single coach opening bubble (issue #201): greeting, the aerobic-trend
+  // read, the long-run summary (was m3) and the week's recommendation, folded
+  // into one turn so the panel never opens with a fabricated user question.
   const initialMessages: ChatMessage[] = [
     {
       id: "m1",
       role: "coach",
-      text: `${greeting(userName)} ${hrTrendLine} Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25.`,
-    },
-    { id: "m2", role: "user", text: "Hvordan så min lange tur ud i søndags?" },
-    {
-      id: "m3",
-      role: "coach",
-      text: `Stærk tur: ${longRunKm} km i snit ${longRunPace} /km med stabil puls på ${longRunHr}. Det er præcis den udvikling vi vil se ${raceWeeks} uger før race.`,
+      synthetic: true,
+      text: `${greeting(userName)} ${hrTrendLine} Din lange tur i søndags var stærk: ${longRunKm} km i snit ${longRunPace} /km med stabil puls på ${longRunHr} — præcis den udvikling vi vil se ${raceWeeks} uger før race. Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25.`,
     },
   ];
 
@@ -336,14 +341,17 @@ export function buildLiveCoachView(
       ? `Du har endnu ikke fire ugers historik, så belastningsbilledet er foreløbigt. ${LOAD_NOTES[status]}`
       : `Din akut/kronisk-ratio er ${ratio.toFixed(2)} — status ${status}. ${LOAD_NOTES[status]}`;
 
+  // A single coach opening bubble (issue #201): readiness, the load read (was
+  // m3, carrying the acute:chronic ratio + status) and the week's recommendation
+  // in one turn — no fabricated "Hvordan ser min træningsbelastning ud?" user
+  // question, and nothing scripted is sent to the model as context.
   const initialMessages: ChatMessage[] = [
     {
       id: "m1",
       role: "coach",
-      text: `${greeting(userName)} Din readiness er ${pct}% — ${note.toLowerCase()}. Ugens anbefaling: ${focusQuote}`,
+      synthetic: true,
+      text: `${greeting(userName)} Din readiness er ${pct}% — ${note.toLowerCase()}. ${loadAnswer} Ugens anbefaling: ${focusQuote}`,
     },
-    { id: "m2", role: "user", text: "Hvordan ser min træningsbelastning ud?" },
-    { id: "m3", role: "coach", text: loadAnswer },
   ];
 
   return {
