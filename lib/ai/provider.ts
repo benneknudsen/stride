@@ -20,11 +20,11 @@ import type { LanguageModel } from "ai";
  *
  * Both are paid, production-grade tool-callers — NOT `:free` tier. OpenRouter's
  * free variants cap at ~20 req/min plus a shared daily limit, so under any real
- * traffic the coach chat 429s and stops answering (issue #199). Gemini 2.0 Flash
+ * traffic the coach chat 429s and stops answering (issue #199). Gemma 4 26B-A4B
  * is the cheap, reliable primary; GPT-4o-mini is an independent-vendor fallback
  * so a Google-side outage or rate limit still leaves a working provider.
  */
-const DEFAULT_PRIMARY = "google/gemini-2.0-flash-001";
+const DEFAULT_PRIMARY = "google/gemma-4-26b-a4b-it";
 const DEFAULT_FALLBACK = "openai/gpt-4o-mini";
 
 const openrouter = createOpenAI({
