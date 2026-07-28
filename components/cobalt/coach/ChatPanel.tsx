@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "@/components/cobalt/coach/MessageBubble";
 import type { ChatMessage, CoachView } from "@/lib/cobalt/coach";
 import { ROUTES } from "@/lib/routes";
-import type { ChatMessage as ApiChatMessage, ChatReply } from "@/types/chat";
+import type { ChatMessage as ApiChatMessage, ChatBlock, ChatReply } from "@/types/chat";
 
 /** Why the chat request failed — drives the error bubble copy. */
 type FailureKind = "network" | "unauthorized" | "rate_limited";
@@ -80,16 +80,42 @@ export function ChatPanel({
         content: m.text,
       }));
 
-  /** One NDJSON line → its `content` fragment ("" for blanks and junk). */
-  const parseLine = (line: string): string => {
+  /**
+   * One NDJSON line → a parsed fragment: a text token, a generative-UI block, or
+   * null for blanks and junk. Backward-compatible (issue #221): a legacy line
+   * with no `type` field is read as text via its `content`, so an old stream
+   * still renders as before.
+   */
+  type ParsedFragment = { kind: "text"; text: string } | { kind: "block"; block: ChatBlock };
+
+  const parseLine = (line: string): ParsedFragment | null => {
     const trimmed = line.trim();
-    if (!trimmed) return "";
+    if (!trimmed) return null;
     try {
-      const reply = JSON.parse(trimmed) as ChatReply;
-      return typeof reply.content === "string" ? reply.content : "";
+      const reply = JSON.parse(trimmed) as ChatReply | { content?: unknown };
+      if ("type" in reply && reply.type === "block") {
+        return { kind: "block", block: reply.block };
+      }
+      // type === "text", or a legacy line with no `type` at all.
+      const content = (reply as { content?: unknown }).content;
+      return typeof content === "string" ? { kind: "text", text: content } : null;
     } catch {
-      return "";
+      return null;
     }
+  };
+
+  /** Fold NDJSON lines into an accumulated answer + block list. */
+  const foldFragments = (
+    lines: string[],
+    answer: string,
+    blocks: ChatBlock[]
+  ): { answer: string; blocks: ChatBlock[] } => {
+    for (const line of lines) {
+      const parsed = parseLine(line);
+      if (parsed?.kind === "text") answer += parsed.text;
+      else if (parsed?.kind === "block") blocks.push(parsed.block);
+    }
+    return { answer, blocks };
   };
 
   /** POST the transcript, stream the coach's answer live into one coach bubble. */
@@ -104,18 +130,24 @@ export function ChatPanel({
     const assistantTurnId = `c${idRef.current}`;
     let started = false;
 
-    // Render the answer-so-far: the first non-empty fragment drops the typing
-    // indicator and appends an empty coach bubble; later fragments patch it.
-    const render = (answer: string) => {
-      if (!answer) return; // nothing yet — keep the typing indicator up
+    // Render the answer-so-far: the first fragment (text or block) drops the
+    // typing indicator and appends the coach bubble; later fragments patch it.
+    // Blocks are passed as a fresh array each time so React sees a new reference.
+    const render = (answer: string, blocks: ChatBlock[]) => {
+      if (!answer && blocks.length === 0) return; // nothing yet — keep typing dots
       if (!started) {
         started = true;
         setTyping(false);
-        setMessages((prev) => [...prev, { id: assistantTurnId, role: "coach", text: answer }]);
+        setMessages((prev) => [
+          ...prev,
+          { id: assistantTurnId, role: "coach", text: answer, blocks: [...blocks] },
+        ]);
         return;
       }
       setMessages((prev) =>
-        prev.map((m) => (m.id === assistantTurnId ? { ...m, text: answer } : m))
+        prev.map((m) =>
+          m.id === assistantTurnId ? { ...m, text: answer, blocks: [...blocks] } : m
+        )
       );
     };
 
@@ -154,12 +186,12 @@ export function ChatPanel({
       // to reading the full NDJSON text and stitching the answer together.
       if (!res.body) {
         const text = await res.text();
-        const fallbackAnswer = text.split("\n").map(parseLine).join("");
-        if (!fallbackAnswer.trim()) {
+        const folded = foldFragments(text.split("\n"), "", []);
+        if (!folded.answer.trim() && folded.blocks.length === 0) {
           reportFailure("network");
           return;
         }
-        render(fallbackAnswer);
+        render(folded.answer, folded.blocks);
         return;
       }
 
@@ -167,24 +199,29 @@ export function ChatPanel({
       const decoder = new TextDecoder();
       let buffer = "";
       let answer = "";
+      const blocks: ChatBlock[] = [];
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         let newline = buffer.indexOf("\n");
         while (newline >= 0) {
-          answer += parseLine(buffer.slice(0, newline));
+          const parsed = parseLine(buffer.slice(0, newline));
+          if (parsed?.kind === "text") answer += parsed.text;
+          else if (parsed?.kind === "block") blocks.push(parsed.block);
           buffer = buffer.slice(newline + 1);
           newline = buffer.indexOf("\n");
-          render(answer);
+          render(answer, blocks);
         }
       }
-      answer += parseLine(buffer);
-      if (!answer.trim()) {
+      const tail = parseLine(buffer);
+      if (tail?.kind === "text") answer += tail.text;
+      else if (tail?.kind === "block") blocks.push(tail.block);
+      if (!answer.trim() && blocks.length === 0) {
         reportFailure("network");
         return;
       }
-      render(answer);
+      render(answer, blocks);
     } catch {
       // Unmounted mid-stream — never touch state after abort.
       if (controller.signal.aborted) return;

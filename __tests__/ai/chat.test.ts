@@ -10,7 +10,14 @@
 import type { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetRateLimit } from "@/lib/rate-limit";
-import type { ChatMessage, ChatReply } from "@/types/chat";
+import type { ChatBlock, ChatMessage, ChatReply } from "@/types/chat";
+
+/**
+ * A parsed NDJSON line for assertions. Intersecting the `ChatReply` union with
+ * the optional wire fields lets a test read `.content` (text lines) or `.block`
+ * (block lines) off any reply after narrowing on `.type` (issue #221).
+ */
+type WireReply = ChatReply & { content?: string; block?: ChatBlock };
 
 const { authMock, streamTextMock, insertChatMessageMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
@@ -45,13 +52,13 @@ function chatRequest(body: unknown = { messages: MESSAGES }): NextRequest {
   }) as unknown as NextRequest;
 }
 
-/** Parse an NDJSON response body into `ChatReply` lines. */
-async function readReplies(res: Response): Promise<ChatReply[]> {
+/** Parse an NDJSON response body into reply lines. */
+async function readReplies(res: Response): Promise<WireReply[]> {
   const text = await res.text();
   return text
     .split("\n")
     .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as ChatReply);
+    .map((line) => JSON.parse(line) as WireReply);
 }
 
 function stubTextStream(deltas: string[]): void {
@@ -254,6 +261,131 @@ describe("POST /api/ai/chat", () => {
         content: "Du skal løbe 5 km i dag.",
       })
     );
+  });
+
+  it("emits an activity block from a getRecentActivities tool result (#221)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    streamTextMock.mockImplementation(() => ({
+      fullStream: (async function* () {
+        yield { type: "tool-call", toolCallId: "tc-1", toolName: "getRecentActivities", input: {} };
+        yield {
+          type: "tool-result",
+          toolCallId: "tc-1",
+          toolName: "getRecentActivities",
+          output: [
+            {
+              id: "act-42",
+              type: "Run",
+              startDate: "2026-07-25T06:00:00.000Z",
+              distance: 8000,
+              movingTime: 2400,
+              averageHeartrate: 148,
+              // Extra prose-only fields must be stripped from the block.
+              distanceKm: 8,
+              pace: "5:00",
+            },
+          ],
+        };
+        yield { type: "text-delta", text: "Din seneste tur var stærk." };
+      })(),
+    }));
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    const blocks = replies.filter((r) => r.type === "block");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toEqual({
+      role: "assistant",
+      type: "block",
+      block: {
+        kind: "activity",
+        activity: {
+          id: "act-42",
+          type: "Run",
+          startDate: "2026-07-25T06:00:00.000Z",
+          distance: 8000,
+          movingTime: 2400,
+          averageHeartrate: 148,
+        },
+      },
+    });
+    // The prose still streams as text alongside the block.
+    const text = replies
+      .filter((r) => r.type === "text")
+      .map((r) => r.content)
+      .join("");
+    expect(text).toBe("Din seneste tur var stærk.");
+  });
+
+  it("emits a workout block from a recommendWorkout tool result (#221)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    streamTextMock.mockImplementation(() => ({
+      fullStream: (async function* () {
+        yield {
+          type: "tool-result",
+          toolCallId: "tc-1",
+          toolName: "recommendWorkout",
+          output: {
+            type: "tempo",
+            distanceKm: 10,
+            paceRange: { min: "4:45", max: "5:05" },
+            heartRateCap: 172,
+            shoe: "adios-pro-4",
+            reason: ["Tempo-tolerance", "Restitution ok"],
+            // weekStrip is not rendered on the chat card and must be stripped.
+            weekStrip: [{ weekday: "mon", type: "tempo", description: "Tempo" }],
+          },
+        };
+        yield { type: "text-delta", text: "Kør et tempopas." };
+      })(),
+    }));
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    const blocks = replies.filter((r) => r.type === "block");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].block).toEqual({
+      kind: "workout",
+      workout: {
+        type: "tempo",
+        distanceKm: 10,
+        paceRange: { min: "4:45", max: "5:05" },
+        heartRateCap: 172,
+        shoe: "adios-pro-4",
+        reason: ["Tempo-tolerance", "Restitution ok"],
+      },
+    });
+  });
+
+  it("skips a block when the tool output fails validation (no fabrication) (#221)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    streamTextMock.mockImplementation(() => ({
+      fullStream: (async function* () {
+        yield {
+          type: "tool-result",
+          toolCallId: "tc-1",
+          toolName: "getRecentActivities",
+          // Missing `id` — cannot build a valid card, so no block is emitted.
+          output: [{ type: "Run", distance: 8000, movingTime: 2400, averageHeartrate: 148 }],
+        };
+        yield { type: "text-delta", text: "Her er din uge." };
+      })(),
+    }));
+
+    const res = await POST(chatRequest());
+
+    const replies = await readReplies(res);
+    expect(replies.filter((r) => r.type === "block")).toHaveLength(0);
+    expect(
+      replies
+        .filter((r) => r.type === "text")
+        .map((r) => r.content)
+        .join("")
+    ).toBe("Her er din uge.");
   });
 
   it("emits a truncation marker and does not persist a partial answer (#198)", async () => {

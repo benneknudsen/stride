@@ -16,6 +16,7 @@ const NOW = new Date("2026-07-27T09:00:00.000Z");
 
 const ACTIVITIES: CoachChatActivity[] = [
   {
+    id: "act-1",
     type: "Run",
     startDate: new Date("2026-07-25T06:00:00.000Z"),
     distance: 8000,
@@ -94,6 +95,59 @@ describe("coach tools — provider robustness (#200)", () => {
     const result = await t.execute?.(parsed.data as never, {} as never);
     expect(result).toBeTruthy();
   });
+
+  it("getRecentActivities accepts a null limit and returns card-shaped rows (#221)", async () => {
+    const t = tools().getRecentActivities;
+    const parsed = parse(t, { limit: null });
+    expect(parsed.success).toBe(true);
+    const result = (await t.execute?.(parsed.data as never, {} as never)) as Array<
+      Record<string, unknown>
+    >;
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0]).toMatchObject({
+      id: "act-1",
+      type: "Run",
+      distance: 8000,
+      movingTime: 2400,
+      averageHeartrate: 148,
+    });
+    // The card links to the detail page, so the id must survive, and startDate
+    // is serialised to an ISO string for the wire.
+    expect(typeof result[0].id).toBe("string");
+    expect(result[0].startDate).toBe("2026-07-25T06:00:00.000Z");
+  });
+});
+
+describe("getRecentActivities — ordering and limit (#221)", () => {
+  const MANY: CoachChatActivity[] = Array.from({ length: 7 }, (_, i) => ({
+    id: `act-${i}`,
+    type: "Run",
+    // Oldest first on purpose — the tool must sort newest-first regardless.
+    startDate: new Date(2026, 6, 10 + i, 6).toISOString(),
+    distance: 8000 + i * 100,
+    movingTime: 2400,
+    averageHeartrate: 148,
+    hrZones: null,
+  }));
+
+  function build() {
+    return buildCoachTools("user-1", NOW, { raceDate: null, raceName: null }, MANY)
+      .getRecentActivities;
+  }
+
+  it("returns at most 5 activities, newest first", async () => {
+    const result = (await build().execute?.({} as never, {} as never)) as Array<{ id: string }>;
+    expect(result).toHaveLength(5);
+    // act-6 is the newest (2026-07-16), act-2 the 5th newest (2026-07-12).
+    expect(result.map((a) => a.id)).toEqual(["act-6", "act-5", "act-4", "act-3", "act-2"]);
+  });
+
+  it("clamps an out-of-range limit into [1, 5]", async () => {
+    const one = (await build().execute?.({ limit: 1 } as never, {} as never)) as unknown[];
+    expect(one).toHaveLength(1);
+    const capped = (await build().execute?.({ limit: 99 } as never, {} as never)) as unknown[];
+    expect(capped).toHaveLength(5);
+  });
 });
 
 /**
@@ -110,6 +164,7 @@ describe("coach tools — provider robustness (#200)", () => {
 describe("coach tools — string dates from the Neon driver (#190/#194/#195)", () => {
   const AS_DATES: CoachChatActivity[] = [
     {
+      id: "act-old",
       type: "Run",
       startDate: new Date("2026-07-21T06:00:00.000Z"),
       distance: 10000,
@@ -118,6 +173,7 @@ describe("coach tools — string dates from the Neon driver (#190/#194/#195)", (
       hrZones: null,
     },
     {
+      id: "act-new",
       type: "Run",
       startDate: new Date("2026-07-25T06:00:00.000Z"),
       distance: 8000,
