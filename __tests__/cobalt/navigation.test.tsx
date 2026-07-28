@@ -210,10 +210,14 @@ describe("NavBar sync (#97)", () => {
     refresh.mockClear();
   });
 
-  const syncButton = () => screen.getByRole("button", { name: /sync now/i });
+  const syncButton = () => screen.getByRole("button", { name: /synkronisér/i });
 
   /** Fake timers, but let real promises still settle between ticks. */
   const useTimers = () => vi.useFakeTimers({ shouldAdvanceTime: true });
+
+  // The sync control only renders for a Strava-connected user (#216); a bare
+  // visitor gets no button at all. These behavioural tests need it on screen.
+  const renderConnected = () => render(<NavBar userName="Benne" stravaConnected />);
 
   test("posts to the sync endpoint, refreshes, then falls back to idle", async () => {
     useTimers();
@@ -221,7 +225,7 @@ describe("NavBar sync (#97)", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<NavBar />);
+    renderConnected();
     fireEvent.click(syncButton());
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -248,7 +252,7 @@ describe("NavBar sync (#97)", () => {
       .mockResolvedValueOnce({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<NavBar />);
+    renderConnected();
     fireEvent.click(syncButton());
 
     const retry = await screen.findByRole("button", { name: /prøv igen/i });
@@ -257,5 +261,50 @@ describe("NavBar sync (#97)", () => {
     fireEvent.click(retry);
     await waitFor(() => expect(screen.getByText("SYNCED")).toBeTruthy());
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  // Issue #216: Strava's own 429 is a "wait", not a user-fixable failure, so it
+  // reads as a calm status rather than the red "PRØV IGEN" retry affordance.
+  test("a 429 shows 'kørte for nylig', not the red retry", async () => {
+    useTimers();
+    pathname.mockReturnValue(ROUTES.HOME);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 429 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderConnected();
+    fireEvent.click(syncButton());
+
+    await waitFor(() => expect(screen.getByText(/kørte for nylig/i)).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /prøv igen/i })).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+// Issue #216: the sync button used to render for everyone, so a visitor (or a
+// signed-in user without Strava) could click it and hit a guaranteed 401/500.
+// Now it only renders for a connected user; others get a connect CTA or nothing.
+describe("sync control visibility by auth/strava state (#216)", () => {
+  test("visitor sees neither a sync nor a connect button", () => {
+    pathname.mockReturnValue(DEMO_HOME_ROUTE);
+    render(<NavBar />);
+
+    expect(screen.queryByRole("button", { name: /synkronisér/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /forbind strava/i })).toBeNull();
+  });
+
+  test("signed-in without Strava sees the connect CTA, not a sync button", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    render(<NavBar userName="Benne" stravaConnected={false} />);
+
+    expect(screen.getByRole("button", { name: /forbind strava/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /synkronisér/i })).toBeNull();
+  });
+
+  test("signed-in with Strava sees the sync button in Danish", () => {
+    pathname.mockReturnValue(ROUTES.HOME);
+    render(<NavBar userName="Benne" stravaConnected />);
+
+    expect(screen.getByRole("button", { name: /synkronisér/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /forbind strava/i })).toBeNull();
   });
 });
