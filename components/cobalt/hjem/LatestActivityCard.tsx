@@ -4,6 +4,7 @@ import { PrCelebration } from "@/components/cobalt/hjem/PrCelebration";
 import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import { formatDanish } from "@/lib/cobalt/format";
 import type { LatestActivityView } from "@/lib/cobalt/hjem";
+import { zoneBadgeText } from "@/lib/cobalt/zones";
 
 // The big "Seneste aktivitet" widget (6/12): header (mono label + source badge
 // + timestamp), a 30px title with a plain-language zone pill, four key metrics
@@ -73,7 +74,7 @@ export function LatestActivityCard({
                 : "color-mix(in srgb, var(--color-cobalt) 9%, transparent)",
           }}
         >
-          Zone {latest.zone.level} · {latest.zone.label}
+          {zoneBadgeText(latest.zone)}
         </span>
       </div>
 

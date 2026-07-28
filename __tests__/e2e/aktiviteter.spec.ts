@@ -24,7 +24,7 @@ test.describe("/aktiviteter", () => {
   test("lists activities", async ({ page }) => {
     // One IntensityMeter per row — it's the only thing on the row guaranteed to
     // be there regardless of breakpoint, and it carries an accessible name.
-    const rows = page.getByRole("img", { name: /^Intensitet:/ });
+    const rows = page.getByRole("img", { name: /^Zone \d:/ });
     expect(await rows.count()).toBeGreaterThan(0);
 
     await expect(page.getByText("km i alt")).toBeVisible();
@@ -32,7 +32,7 @@ test.describe("/aktiviteter", () => {
   });
 
   test("filtering narrows the list to one intensity", async ({ page }) => {
-    const rows = page.getByRole("img", { name: /^Intensitet:/ });
+    const rows = page.getByRole("img", { name: /^Zone \d:/ });
     const intensities = () =>
       rows.evaluateAll((els) => els.map((el) => el.getAttribute("aria-label") ?? ""));
 
