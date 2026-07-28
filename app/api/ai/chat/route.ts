@@ -57,6 +57,8 @@ const MAX_REQUEST_MESSAGES = 50;
 const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string().max(MAX_MESSAGE_LENGTH),
+  /** Client-generated idempotency key for the user turn (issue #205). */
+  clientMessageId: z.string().max(128).optional(),
 });
 
 const requestSchema = z.object({
@@ -309,9 +311,22 @@ export async function POST(req: NextRequest) {
   const clientContextMessages = incoming.filter((message) => message.role === "user");
   const latest = clientContextMessages[clientContextMessages.length - 1];
 
+  // Idempotent retry: if the latest user turn has already been persisted
+  // (same clientMessageId), it is already part of `history` and must not be
+  // inserted again (issue #205).
+  const latestAlreadyInHistory =
+    latest?.clientMessageId !== undefined &&
+    history.some((entry) => entry.role === "user" && entry.id === latest.clientMessageId);
+
   const messages = (
-    history.length > 0 && latest ? [...history, latest] : clientContextMessages
-  ).slice(-MAX_CONTEXT_MESSAGES);
+    history.length > 0 && latest && !latestAlreadyInHistory
+      ? [...history, latest]
+      : history.length > 0
+        ? history
+        : clientContextMessages
+  )
+    .slice(-MAX_CONTEXT_MESSAGES)
+    .map(({ role, content }) => ({ role, content }));
 
   const encoder = new TextEncoder();
 
@@ -445,9 +460,14 @@ export async function POST(req: NextRequest) {
 
       // Persist only complete model answers. Scripted floors and truncated
       // answers stay out of history so retried questions don't duplicate.
-      if (answer.length > 0 && !isTruncated) {
+      if (answer.length > 0 && !isTruncated && !latestAlreadyInHistory) {
         if (latest?.role === "user") {
-          await insertChatMessage({ userId, role: "user", content: latest.content });
+          await insertChatMessage({
+            ...(latest.clientMessageId ? { id: latest.clientMessageId } : {}),
+            userId,
+            role: "user",
+            content: latest.content,
+          });
         }
         await insertChatMessage({ userId, role: "assistant", content: answer });
       }

@@ -582,6 +582,13 @@ describe("insertChatMessage", () => {
     expect(mock.calls.values?.[0]?.[0]).toEqual(input);
   });
 
+  it("can override the row id with a client-provided idempotency id", async () => {
+    mock.setResult([]);
+    const withId = { id: "client-id-1", ...input };
+    await expect(insertChatMessage(withId)).resolves.toBeUndefined();
+    expect(mock.calls.values?.[0]?.[0]).toEqual(withId);
+  });
+
   it("swallows database errors so the chat route never breaks", async () => {
     mock.setError(DB_ERROR);
     await expect(insertChatMessage(input)).resolves.toBeUndefined();
@@ -596,12 +603,12 @@ describe("getChatHistory", () => {
   it("reverses the newest-first query into chronological order", async () => {
     // The query orders desc(createdAt); the function reverses to oldest-first.
     mock.setResult([
-      { role: "assistant", content: "newest" },
-      { role: "user", content: "older" },
+      { id: "id-2", role: "assistant", content: "newest" },
+      { id: "id-1", role: "user", content: "older" },
     ]);
     expect(await getChatHistory("u1")).toEqual([
-      { role: "user", content: "older" },
-      { role: "assistant", content: "newest" },
+      { id: "id-1", role: "user", content: "older" },
+      { id: "id-2", role: "assistant", content: "newest" },
     ]);
   });
 
