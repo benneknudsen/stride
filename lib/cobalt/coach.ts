@@ -33,6 +33,7 @@ export type ChatRole = "coach" | "user";
  * the model's ("assistant"/"user"); the view-model maps "assistant" → "coach".
  */
 export interface ChatHistoryEntry {
+  id: string;
   role: "user" | "assistant";
   content: string;
 }
@@ -55,6 +56,12 @@ export interface ChatMessage {
    * no fabricated user turn is ever sent as if the visitor wrote it (issue #201).
    */
   synthetic?: boolean;
+  /**
+   * Idempotency key for user turns (issue #205). The client generates a fresh
+   * id per message; retry sends the same id so the route can deduplicate. For
+   * replayed history it is the persisted row id; synthetic turns omit it.
+   */
+  clientId?: string;
 }
 
 export interface LoadBar {
@@ -252,6 +259,7 @@ function greeting(userName?: string): string {
 function historyMessages(history: ChatHistoryEntry[]): ChatMessage[] {
   return history.map((entry, i) => ({
     id: `h${i}`,
+    clientId: entry.id,
     role: entry.role === "assistant" ? "coach" : "user",
     text: entry.content,
   }));
@@ -400,20 +408,16 @@ export function buildLiveCoachView(
       : `Din akut/kronisk-ratio er ${ratio.toFixed(2)} — status ${status}. ${LOAD_NOTES[status]}`;
 
   // The persisted conversation is replayed first (issue #202) so a returning
-  // user sees and can continue their history, then a single fresh coach opening
-  // bubble (issue #201): readiness, the load read (was m3, carrying the
-  // acute:chronic ratio + status) and the week's recommendation in one turn — no
-  // fabricated "Hvordan ser min træningsbelastning ud?" user question, and
-  // nothing scripted is sent to the model as context.
-  const initialMessages: ChatMessage[] = [
-    ...historyMessages(history),
-    {
-      id: "m1",
-      role: "coach",
-      synthetic: true,
-      text: `${greeting(userName)} Din readiness er ${pct}% — ${note.toLowerCase()}. ${loadAnswer} Ugens anbefaling: ${focusQuote}`,
-    },
-  ];
+  // user sees and can continue their history. A fresh coach opening bubble is
+  // only shown when there is no history (issue #205) — otherwise every page load
+  // would greet the user with "Godmorgen!" on top of an existing thread.
+  const opener: ChatMessage = {
+    id: "m1",
+    role: "coach",
+    synthetic: true,
+    text: `${greeting(userName)} Din readiness er ${pct}% — ${note.toLowerCase()}. ${loadAnswer} Ugens anbefaling: ${focusQuote}`,
+  };
+  const initialMessages: ChatMessage[] = history.length > 0 ? historyMessages(history) : [opener];
 
   return {
     activityCount: activities.length,

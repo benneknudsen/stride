@@ -21,6 +21,11 @@ export type ChatRole = "user" | "assistant";
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /**
+   * Client-generated idempotency id for the user turn. Sent back on retry so
+   * the route can skip persisting a turn that already exists (issue #205).
+   */
+  clientMessageId?: string;
 }
 
 /**

@@ -35,8 +35,10 @@ describe("ChatPanel — HTTP status error handling", () => {
 
     const body = JSON.parse((fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string);
     // Only the visitor's real message reaches the model — never the scripted
-    // synthetic greeting.
-    expect(body.messages).toEqual([{ role: "user", content: "Mit spørgsmål" }]);
+    // synthetic greeting. Each user turn carries a client idempotency id.
+    expect(body.messages).toHaveLength(1);
+    expect(body.messages[0]).toMatchObject({ role: "user", content: "Mit spørgsmål" });
+    expect(typeof body.messages[0].clientMessageId).toBe("string");
   });
 
   test("renders persisted history and sends it (non-synthetic) as fallback context (issue #202)", async () => {
@@ -67,12 +69,13 @@ describe("ChatPanel — HTTP status error handling", () => {
 
     const body = JSON.parse((fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string);
     // Real history turns flow to the route (its client-transcript fallback when
-    // the DB read fails); only the synthetic opener is stripped.
-    expect(body.messages).toEqual([
-      { role: "user", content: "Tidligere spørgsmål" },
-      { role: "assistant", content: "Tidligere svar" },
-      { role: "user", content: "Nyt spørgsmål" },
-    ]);
+    // the DB read fails); only the synthetic opener is stripped. The new user
+    // turn carries a client idempotency id for retry deduplication.
+    expect(body.messages).toHaveLength(3);
+    expect(body.messages[0]).toEqual({ role: "user", content: "Tidligere spørgsmål" });
+    expect(body.messages[1]).toEqual({ role: "assistant", content: "Tidligere svar" });
+    expect(body.messages[2]).toMatchObject({ role: "user", content: "Nyt spørgsmål" });
+    expect(typeof body.messages[2].clientMessageId).toBe("string");
   });
 
   test("shows login prompt on 401", async () => {
@@ -191,5 +194,75 @@ describe("ChatPanel — HTTP status error handling", () => {
     await waitFor(() => {
       expect(screen.getByText("Det ser godt ud!")).toBeDefined();
     });
+  });
+
+  test("disables the send button and chips while streaming, and offers a stop button (issue #205)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      // Never-resolving stream so the panel stays in streaming state.
+      const stream = new ReadableStream<Uint8Array>({
+        start() {},
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "application/x-ndjson" },
+      });
+    });
+
+    render(<ChatPanel initialMessages={initialMessages} prompts={prompts} />);
+
+    const input = screen.getByLabelText("Skriv til din coach");
+    fireEvent.change(input, { target: { value: "Test" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Stop svaret")).toBeDefined();
+    });
+
+    const sendButton = screen.queryByLabelText("Send besked");
+    expect(sendButton).toBeNull();
+
+    const chips = screen
+      .getAllByRole("button")
+      .filter((b) => prompts.includes(b.textContent ?? ""));
+    expect(chips.length).toBeGreaterThan(0);
+    for (const chip of chips) {
+      expect(chip.hasAttribute("disabled")).toBe(true);
+    }
+
+    fetchSpy.mockRestore();
+  });
+
+  test("stopping the stream keeps the partial answer and restores the send button (issue #205)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          const encoder = new TextEncoder();
+          c.enqueue(
+            encoder.encode(`${JSON.stringify({ role: "assistant", content: "Delvis " })}\n`)
+          );
+          signal?.addEventListener("abort", () => c.close());
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "application/x-ndjson" },
+      });
+    });
+
+    render(<ChatPanel initialMessages={initialMessages} prompts={prompts} />);
+
+    const input = screen.getByLabelText("Skriv til din coach");
+    fireEvent.change(input, { target: { value: "Test" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(screen.getByText("Delvis")).toBeDefined());
+
+    fireEvent.click(screen.getByLabelText("Stop svaret"));
+
+    await waitFor(() => expect(screen.getByLabelText("Send besked")).toBeDefined());
+    expect(screen.getByText("Delvis")).toBeDefined();
+
+    fetchSpy.mockRestore();
   });
 });
