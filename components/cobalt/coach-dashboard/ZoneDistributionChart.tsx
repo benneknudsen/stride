@@ -2,7 +2,8 @@
 
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ZoneWeek } from "@/lib/coach/dashboard";
-import { ZONE_RAMP } from "@/lib/cobalt/zones";
+import { ZONE_RAMP, zoneBadgeText } from "@/lib/cobalt/zones";
+import type { ZoneNumber } from "@/lib/training/zones";
 
 // Zone distribution over time: one stacked bar per week, each showing the
 // rolling-4-week split of training time across HR zones 1–5. The palette and the
@@ -39,10 +40,17 @@ export function ZoneDistributionChart({ data }: { data: ZoneWeek[] }) {
                 borderRadius: 12,
                 fontSize: 12,
               }}
-              formatter={(value, name) => [
-                `${value}%`,
-                ZONE_RAMP.find((z) => z.key === name)?.label ?? String(name),
-              ]}
+              formatter={(value, name) => {
+                // ZONE_RAMP is ordered z1…z5, so the index is the zone number − 1.
+                const idx = ZONE_RAMP.findIndex((z) => z.key === name);
+                const step = ZONE_RAMP[idx];
+                return [
+                  `${value}%`,
+                  step
+                    ? zoneBadgeText({ level: (idx + 1) as ZoneNumber, label: step.label })
+                    : String(name),
+                ];
+              }}
             />
             {ZONE_RAMP.map((zone, i) => (
               <Bar
@@ -61,14 +69,14 @@ export function ZoneDistributionChart({ data }: { data: ZoneWeek[] }) {
       </div>
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {ZONE_RAMP.map((zone) => (
+        {ZONE_RAMP.map((zone, i) => (
           <span key={zone.key} className="flex items-center gap-1.5 text-[11px] text-ink">
             <span
               aria-hidden="true"
               className="inline-block size-2.5 rounded-[3px]"
               style={{ background: zone.color }}
             />
-            {zone.label}
+            {zoneBadgeText({ level: (i + 1) as ZoneNumber, label: zone.label })}
           </span>
         ))}
       </div>

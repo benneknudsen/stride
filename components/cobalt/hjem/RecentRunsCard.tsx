@@ -3,6 +3,7 @@ import { IntensityMeter } from "@/components/cobalt/IntensityMeter";
 import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import { formatDanish } from "@/lib/cobalt/format";
 import type { RecentRunView } from "@/lib/cobalt/hjem";
+import { zoneBadgeText } from "@/lib/cobalt/zones";
 
 // "Seneste ture" widget (7/12): one row per run — the 5-bar IntensityMeter
 // (never a number), name + date + plain-language zone, source badge, and the
@@ -26,7 +27,7 @@ export function RecentRunsCard({ runs }: { runs: RecentRunView[] }) {
                 i > 0 ? "color-mix(in srgb, var(--color-cobalt) 8%, transparent)" : undefined,
             }}
           >
-            <IntensityMeter level={run.zone.level} label={`Intensitet: ${run.zone.label}`} />
+            <IntensityMeter level={run.zone.level} label={run.zone.label} />
 
             <div className="min-w-0 flex-1">
               <div className="truncate font-cg-display text-[16px] font-bold tracking-[-0.02em] text-cobalt">
@@ -36,7 +37,7 @@ export function RecentRunsCard({ runs }: { runs: RecentRunView[] }) {
                 <span className="text-ink">{run.dateLabel}</span>
                 <span className="text-ink">·</span>
                 <span className={run.zone.tone === "red" ? "text-red" : "text-cobalt"}>
-                  {run.zone.label}
+                  {zoneBadgeText(run.zone)}
                 </span>
               </div>
             </div>

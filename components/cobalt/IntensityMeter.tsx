@@ -24,11 +24,14 @@ export function IntensityMeter({
   className?: string;
   label?: string;
 }) {
+  // The zone number leads the accessible name (issue #217) so screen readers
+  // announce "Zone 3: Moderat tempo", matching the visible zone badges.
+  const accessibleLabel = label ? `Zone ${level}: ${label}` : `Intensitet ${level} af 5`;
   return (
     <div
       role="img"
-      aria-label={label ?? `Intensitet ${level} af 5`}
-      title={label}
+      aria-label={accessibleLabel}
+      title={accessibleLabel}
       className={cn(
         "flex flex-none items-end justify-center gap-[2.5px] rounded-tile border pb-[9px]",
         className

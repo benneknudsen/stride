@@ -4,6 +4,7 @@ import { IntensityMeter } from "@/components/cobalt/IntensityMeter";
 import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import type { ActivityRowView } from "@/lib/cobalt/aktiviteter";
 import { formatDanish } from "@/lib/cobalt/format";
+import { zoneBadgeText } from "@/lib/cobalt/zones";
 import { activityRoute } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,7 @@ export function ActivityRow({ row }: { row: ActivityRowView }) {
   return (
     <Link href={activityRoute(row.id)} className="cg-interactive block rounded-card">
       <GlassCard className="flex items-center gap-4 rounded-card px-[22px] py-4 transition-colors hover:bg-white/[0.58]">
-        <IntensityMeter level={row.zone.level} label={`Intensitet: ${row.zone.label}`} />
+        <IntensityMeter level={row.zone.level} label={row.zone.label} />
 
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-semibold text-cobalt">{row.name}</div>
@@ -28,7 +29,7 @@ export function ActivityRow({ row }: { row: ActivityRowView }) {
             <span
               className={cn("font-semibold", row.zone.tone === "red" ? "text-red" : "text-cobalt")}
             >
-              {row.zone.label}
+              {zoneBadgeText(row.zone)}
             </span>
           </div>
         </div>

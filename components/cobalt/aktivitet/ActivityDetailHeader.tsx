@@ -3,6 +3,7 @@ import { IntensityMeter } from "@/components/cobalt/IntensityMeter";
 import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import type { ActivityDetailView } from "@/lib/cobalt/aktivitet";
 import { formatDanish } from "@/lib/cobalt/format";
+import { zoneBadgeText } from "@/lib/cobalt/zones";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +34,7 @@ export function ActivityDetailHeader({ view }: { view: ActivityDetailView }) {
               <IntensityMeter
                 level={view.zone.level}
                 size={48}
-                label={`Intensitet: ${view.zone.label}`}
+                label={view.zone.label}
                 className="hidden sm:flex"
               />
             ) : null}
@@ -47,7 +48,7 @@ export function ActivityDetailHeader({ view }: { view: ActivityDetailView }) {
                 view.zone.tone === "red" ? "text-red" : "text-cobalt"
               )}
             >
-              {view.zone.label}
+              {zoneBadgeText(view.zone)}
             </p>
           ) : (
             <p className="mt-3 font-cg-sans text-[14px] text-ink">Ingen pulsdata på denne tur.</p>
