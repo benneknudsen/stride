@@ -40,7 +40,7 @@ vi.mock("ai", async (importOriginal) => {
 });
 
 import { POST } from "@/app/api/ai/chat/route";
-import { getDashboardActivities, insertChatMessage } from "@/lib/db/queries";
+import { getChatHistory, getDashboardActivities, insertChatMessage } from "@/lib/db/queries";
 
 const MESSAGES: ChatMessage[] = [{ role: "user", content: "Hvad skal jeg løbe i dag?" }];
 
@@ -409,7 +409,7 @@ describe("POST /api/ai/chat", () => {
 
   it("marks a reply truncated when an error-part follows streamed text (#218)", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
-    // The provider streams some text and then reports failure as an `error`
+    // A provider that streams some text and then reports failure as an `error`
     // part (not a thrown exception). `onError` logs it, so the loop must
     // itself notice the error and treat the half answer as truncated —
     // otherwise the partial reply is persisted as if it were complete.
@@ -427,6 +427,38 @@ describe("POST /api/ai/chat", () => {
     const fullText = replies.map((r) => r.content).join("");
     expect(fullText).toContain("Det ser");
     expect(fullText).toContain("Svaret blev afbrudt");
+    expect(insertChatMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not duplicate a user turn on retry with the same clientMessageId (#205)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const clientId = "retry-id-1";
+
+    // First request succeeds and persists the turn.
+    const first = await POST(
+      chatRequest({ messages: [{ role: "user", content: "Hej", clientMessageId: clientId }] })
+    );
+    expect(first.status).toBe(200);
+    await readReplies(first);
+    expect(insertChatMessage).toHaveBeenCalledTimes(2);
+    expect(insertChatMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ id: clientId, userId: "user-1", role: "user", content: "Hej" })
+    );
+
+    // Second request carries the same clientMessageId: it should be treated as a
+    // retry and neither insert the user turn again nor add a second assistant.
+    vi.mocked(getChatHistory).mockResolvedValueOnce([
+      { id: clientId, role: "user", content: "Hej" },
+      { id: "assistant-1", role: "assistant", content: "Hej!" },
+    ]);
+    insertChatMessageMock.mockClear();
+
+    const second = await POST(
+      chatRequest({ messages: [{ role: "user", content: "Hej", clientMessageId: clientId }] })
+    );
+    expect(second.status).toBe(200);
+    await readReplies(second);
     expect(insertChatMessage).not.toHaveBeenCalled();
   });
 });
