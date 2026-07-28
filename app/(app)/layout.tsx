@@ -4,6 +4,7 @@ import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
 import { LandingChromeGate } from "@/components/cobalt/LandingChromeGate";
 import { NavBar } from "@/components/cobalt/NavBar";
 import { auth } from "@/lib/auth";
+import { getStravaTokens } from "@/lib/db/queries";
 
 // Shared Cobalt Glass shell for every (app) page.
 // Every page here is public (issue #100): each one falls back to the demo
@@ -15,6 +16,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = session?.user;
   // Email sign-in leaves `name` null, so fall back to the address' local part.
   const userName = user?.name?.trim() || user?.email?.split("@")[0] || undefined;
+  // Only a Strava-connected user gets a sync button that can succeed; the NavBar
+  // shows a connect CTA otherwise and nothing at all for visitors (#216).
+  const stravaConnected = user?.id ? (await getStravaTokens(user.id)) !== null : false;
 
   return (
     <div className="relative min-h-screen bg-silver font-cg-sans text-cobalt">
@@ -25,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             boundary around each bar. */}
         <Suspense fallback={null}>
           <LandingChromeGate signedIn={user !== undefined}>
-            <NavBar userName={userName} userImage={user?.image} />
+            <NavBar userName={userName} userImage={user?.image} stravaConnected={stravaConnected} />
           </LandingChromeGate>
         </Suspense>
         {children}

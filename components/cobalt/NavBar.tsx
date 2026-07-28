@@ -4,7 +4,7 @@ import { track } from "@vercel/analytics";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/cobalt/Logo";
 import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
@@ -28,12 +28,13 @@ const LINKS = [
   { label: "Plan", href: ROUTES.PLAN },
 ];
 
-/** How long the terminal state shows before the button returns to "Sync now". */
-const RESET_DELAY_MS = { synced: 2500, error: 4000 } as const;
+/** How long a terminal state shows before the button returns to "Synkronisér". */
+const RESET_DELAY_MS = { synced: 2500, error: 4000, rate_limited: 4000 } as const;
 
 export function NavBar({
   userName,
   userImage,
+  stravaConnected,
   activeHref,
   onSync,
 }: {
@@ -41,6 +42,12 @@ export function NavBar({
   userName?: string;
   /** Strava athlete avatar (session.user.image). Null when unset (#187). */
   userImage?: string | null;
+  /**
+   * Whether the signed-in user has Strava tokens on file (#216). Only a
+   * connected user gets a sync button that can succeed; without it we offer a
+   * connect CTA instead, and visitors get neither — there is no path to a 401.
+   */
+  stravaConnected?: boolean;
   activeHref?: string;
   /** Fired when a sync finishes successfully, after the router has refreshed. */
   onSync?: () => void;
@@ -80,7 +87,7 @@ export function NavBar({
     []
   );
 
-  const settle = useCallback((state: "synced" | "error") => {
+  const settle = useCallback((state: "synced" | "error" | "rate_limited") => {
     setSyncState(state);
     timerRef.current = setTimeout(() => setSyncState("idle"), RESET_DELAY_MS[state]);
   }, []);
@@ -100,6 +107,12 @@ export function NavBar({
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
+      // Strava throttled the pull (429) — a wait, not a failure. Show a calm
+      // "kørte for nylig" instead of the red retry button (#216).
+      if (res.status === 429) {
+        settle("rate_limited");
+        return;
+      }
       if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
 
       // The synced runs live in server-rendered pages — pull them in.
@@ -167,7 +180,32 @@ export function NavBar({
       </div>
 
       <div className="flex items-center gap-3">
-        <SyncButton state={syncState} onSync={handleSync} />
+        {/* The sync button only makes sense for a connected user (#216).
+            A visitor has no session, so it would always 401 — hide it. A
+            signed-in user without Strava gets a connect CTA into the OAuth
+            flow instead; only a connected user gets the real sync control. */}
+        {!userName ? null : !stravaConnected ? (
+          <button
+            type="button"
+            onClick={() => void signIn("strava", { callbackUrl: ROUTES.HOME })}
+            className="cg-interactive inline-flex items-center gap-2 rounded-pill bg-cobalt px-[18px] py-2 text-[12.5px] font-semibold text-silver transition-colors hover:bg-cobalt-light"
+            style={{
+              boxShadow: "0 6px 20px color-mix(in srgb, var(--color-cobalt) 25%, transparent)",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M12 5v14M5 12h14"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+              />
+            </svg>
+            Forbind Strava
+          </button>
+        ) : (
+          <SyncButton state={syncState} onSync={handleSync} />
+        )}
         {userName ? (
           // Hover open/close is a pointer-only nicety; keyboard and touch users
           // drive the menu through the button's click toggle below.

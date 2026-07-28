@@ -4,7 +4,7 @@ import { track } from "@vercel/analytics";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-export type SyncState = "idle" | "syncing" | "synced" | "error";
+export type SyncState = "idle" | "syncing" | "synced" | "error" | "rate_limited";
 
 // Sync control with four states. Controlled: the parent owns `state` and fires
 // `onSync` on click; the parent flips the state on the API response and drops
@@ -55,6 +55,23 @@ export function SyncButton({
     );
   }
 
+  // Strava's own API refused a fresh pull (429). That is not a failure the user
+  // can fix by retrying, so it reads as a calm status, not the red retry button.
+  if (state === "rate_limited") {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-ink",
+          className
+        )}
+        style={{ borderColor: "color-mix(in srgb, var(--color-ink) 25%, transparent)" }}
+      >
+        <span className="size-[7px] rounded-full bg-ink/50" />
+        KØRTE FOR NYLIG
+      </span>
+    );
+  }
+
   // A failed sync stays clickable — it's the retry affordance, not a dead label.
   if (state === "error") {
     return (
@@ -98,7 +115,7 @@ export function SyncButton({
           strokeLinejoin="round"
         />
       </svg>
-      Sync now
+      Synkronisér
     </button>
   );
 }
