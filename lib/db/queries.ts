@@ -429,6 +429,7 @@ export async function insertAnalysis(input: InsertAnalysisInput) {
 // ---------------------------------------------------------------------------
 
 export async function insertChatMessage(input: {
+  id?: string;
   userId: string;
   role: "user" | "assistant";
   content: string;
@@ -445,22 +446,23 @@ export async function insertChatMessage(input: {
 /**
  * The user's newest `limit` chat messages in chronological order, ready to be
  * prepended to the model context. System rows are excluded — the route owns
- * its own system prompt.
+ * its own system prompt. The row `id` is returned so retries can be
+ * deduplicated by client-provided id (issue #205).
  */
 export async function getChatHistory(
   userId: string,
   limit: number = 50
-): Promise<{ role: "user" | "assistant"; content: string }[]> {
+): Promise<{ id: string; role: "user" | "assistant"; content: string }[]> {
   try {
     const rows = await db
-      .select({ role: chatMessages.role, content: chatMessages.content })
+      .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
       .from(chatMessages)
       .where(
         and(eq(chatMessages.userId, userId), inArray(chatMessages.role, ["user", "assistant"]))
       )
       .orderBy(desc(chatMessages.createdAt))
       .limit(limit);
-    return rows.reverse() as { role: "user" | "assistant"; content: string }[];
+    return rows.reverse() as { id: string; role: "user" | "assistant"; content: string }[];
   } catch (err) {
     captureError("queries.getChatHistory", err);
     return [];

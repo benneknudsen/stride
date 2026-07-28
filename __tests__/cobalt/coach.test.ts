@@ -221,13 +221,13 @@ describe("buildLiveCoachView", () => {
 // The signed-in user's stored conversation (getChatHistory shape) must be shown
 // in the panel: prepended to the transcript, before the synthetic opener, as
 // real (non-synthetic) turns so it also serves as the route's fallback context.
-describe("buildLiveCoachView with persisted chat history (issue #202)", () => {
+describe("buildLiveCoachView with persisted chat history (issue #202 + #205)", () => {
   const history = [
-    { role: "user" as const, content: "Hvad skal jeg løbe i dag?" },
-    { role: "assistant" as const, content: "En rolig tur på 6 km." },
+    { id: "h-user-1", role: "user" as const, content: "Hvad skal jeg løbe i dag?" },
+    { id: "h-assistant-1", role: "assistant" as const, content: "En rolig tur på 6 km." },
   ];
 
-  it("prepends the history before the synthetic opener, in order", () => {
+  it("shows the persisted history and skips the synthetic opener (issue #205)", () => {
     const view = buildLiveCoachView(
       dashboard({ ratio: 1.0 }),
       liveActivities,
@@ -235,19 +235,18 @@ describe("buildLiveCoachView with persisted chat history (issue #202)", () => {
       undefined,
       history
     );
-    // two history turns + the single synthetic opener
-    expect(view.initialMessages).toHaveLength(3);
+    expect(view.initialMessages).toHaveLength(2);
     expect(view.initialMessages[0]).toMatchObject({
       role: "user",
       text: "Hvad skal jeg løbe i dag?",
+      clientId: "h-user-1",
     });
     expect(view.initialMessages[1]).toMatchObject({
       role: "coach",
       text: "En rolig tur på 6 km.",
+      clientId: "h-assistant-1",
     });
-    const opener = view.initialMessages[2];
-    expect(opener.role).toBe("coach");
-    expect(opener.synthetic).toBe(true);
+    expect(view.initialMessages.some((m) => m.synthetic)).toBe(false);
   });
 
   it("marks history turns as real (non-synthetic) so they persist as fallback context", () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { createId } from "@paralleldrive/cuid2";
 import * as Sentry from "@sentry/nextjs";
 import { useEffect, useRef, useState } from "react";
 import { MessageBubble } from "@/components/cobalt/coach/MessageBubble";
@@ -23,7 +24,14 @@ function formatRetryAfter(seconds: number | undefined): string {
   return `${minutes} minut${minutes === 1 ? "" : "ter"}`;
 }
 
-// Left column: the chat UI. Owns its own transcript, draft and typing state.
+/** Scroll-to-bottom threshold: auto-scroll only when this close to the bottom. */
+const SCROLL_THRESHOLD_PX = 80;
+
+function isNearBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD_PX;
+}
+
+// Left column: the chat UI. Owns its own transcript, draft and streaming state.
 // Sending a message (typed, or via a quick-prompt chip) appends the user
 // bubble, shows the 3-dot typing indicator and streams the coach's answer from
 // /api/ai/chat — NDJSON, one `ChatReply` fragment per line. The first fragment
@@ -52,32 +60,47 @@ export function ChatPanel({
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
+  const [streaming, setStreaming] = useState(false);
   const [typing, setTyping] = useState(false);
   const [failure, setFailure] = useState<ChatFailure | null>(null);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const failureRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Abort an in-flight stream when the panel unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // Keep the newest message in view as the transcript grows.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing/failure are the scroll triggers, not read in the body
+  // Focus the error bubble when it appears so screen-reader users notice it.
+  useEffect(() => {
+    if (failure) failureRef.current?.focus();
+  }, [failure]);
+
+  // Scroll to the bottom on first render, then only when the user is already
+  // near the bottom — never rip them back up while reading older messages.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing/failure are the scroll triggers, not read in the body
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && isNearBottom(el)) el.scrollTop = el.scrollHeight;
   }, [messages, typing, failure]);
 
   // Panel transcript → the role/content shape the chat route expects. Synthetic
   // turns (the scripted opening bubble) are dropped so the coach's own greeting
   // never becomes model context and no fabricated user turn is ever sent as if
-  // the visitor wrote it (issue #201).
+  // the visitor wrote it (issue #201). The client-generated id is forwarded for
+  // idempotent retries (issue #205).
   const toApiMessages = (transcript: ChatMessage[]): ApiChatMessage[] =>
     transcript
       .filter((m) => !m.synthetic)
       .map((m) => ({
         role: m.role === "user" ? "user" : "assistant",
         content: m.text,
+        ...(m.clientId ? { clientMessageId: m.clientId } : {}),
       }));
 
   /**
@@ -120,15 +143,28 @@ export function ChatPanel({
 
   /** POST the transcript, stream the coach's answer live into one coach bubble. */
   const streamReply = async (transcript: ChatMessage[]) => {
+    // Explicitly abort any previous stream before starting a new one, so two
+    // answers can never grow side-by-side (issue #205).
+    abortRef.current?.abort();
+
     const controller = new AbortController();
     abortRef.current = controller;
     setFailure(null);
+    setStreaming(true);
     setTyping(true);
     // Reserve this coach turn's id up-front so every fragment update targets
     // the same bubble.
     idRef.current += 1;
     const assistantTurnId = `c${idRef.current}`;
     let started = false;
+
+    const finish = () => {
+      // Only the stream that currently owns the controller may touch state.
+      if (abortRef.current !== controller) return;
+      setStreaming(false);
+      setTyping(false);
+      abortRef.current = null;
+    };
 
     // Render the answer-so-far: the first fragment (text or block) drops the
     // typing indicator and appends the coach bubble; later fragments patch it.
@@ -152,8 +188,9 @@ export function ChatPanel({
     };
 
     const reportFailure = (kind: FailureKind, retryAfter?: number) => {
+      if (abortRef.current !== controller) return;
       setFailure({ kind, retryAfter });
-      setTyping(false);
+      finish();
       Sentry.captureException(new Error(`ChatPanel request failed: ${kind}`), {
         tags: { context: "coach.chat.client" },
         extra: { kind, retryAfter },
@@ -192,6 +229,7 @@ export function ChatPanel({
           return;
         }
         render(folded.answer, folded.blocks);
+        finish();
         return;
       }
 
@@ -222,18 +260,24 @@ export function ChatPanel({
         return;
       }
       render(answer, blocks);
+      finish();
     } catch {
-      // Unmounted mid-stream — never touch state after abort.
-      if (controller.signal.aborted) return;
+      // Unmounted mid-stream or stopped by the user — never touch state after
+      // abort unless this is still the active stream.
+      if (abortRef.current !== controller) return;
       reportFailure("network");
     }
   };
 
   const send = (raw?: string) => {
     const text = (raw ?? draft).trim();
-    if (!text || typing) return;
+    if (!text || streaming) return;
+    const clientId = createId();
     idRef.current += 1;
-    const next: ChatMessage[] = [...messages, { id: `u${idRef.current}`, role: "user", text }];
+    const next: ChatMessage[] = [
+      ...messages,
+      { id: `u${idRef.current}`, clientId, role: "user", text },
+    ];
     setMessages(next);
     setDraft("");
     void streamReply(next);
@@ -253,18 +297,33 @@ export function ChatPanel({
   };
 
   // The failed transcript already ends with the user's message — re-send as is.
+  // The user turn carries the same clientId, so the route deduplicates if it
+  // was already persisted (issue #205).
   const retry = () => {
-    if (typing) return;
+    if (streaming) return;
     void streamReply(messages);
+  };
+
+  // Stop the current stream and clear the typing indicator.
+  const stop = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStreaming(false);
+    setTyping(false);
   };
 
   // The panel needs a bounded height, or it grows with the transcript and the
   // scroll container inside it never overflows — so `overflow-y-auto` never
-  // engages and old messages become unreachable (#97).
+  // engages and old messages become unreachable (#97). On small viewports the
+  // height is clamped so the composer stays visible without page scrolling.
   return (
-    <div className="cg-glass flex max-h-[calc(100dvh-260px)] min-h-[280px] flex-col rounded-widget [animation:cg-fade-up_0.6s_0.08s_ease_both] motion-reduce:[animation:none] lg:max-h-[calc(100dvh-320px)]">
+    <div className="cg-glass flex max-h-[calc(100dvh-260px)] min-h-[220px] flex-col rounded-widget [animation:cg-fade-up_0.6s_0.08s_ease_both] motion-reduce:[animation:none] lg:max-h-[calc(100dvh-320px)]">
       <div
         ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        aria-atomic="false"
+        aria-relevant="additions"
         className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-6 pt-6 pb-2.5"
       >
         {messages.map((message) => (
@@ -272,8 +331,9 @@ export function ChatPanel({
         ))}
 
         {typing ? (
-          <div className="flex justify-start">
+          <div className="flex justify-start" role="status" aria-label="Coachen skriver">
             <div className="flex items-center gap-[5px] rounded-[18px_18px_18px_6px] border border-white/85 bg-white/60 px-[18px] py-[14px]">
+              <span className="sr-only">Coachen skriver</span>
               {[0, 0.2, 0.4].map((delay) => (
                 <span
                   key={delay}
@@ -286,7 +346,7 @@ export function ChatPanel({
         ) : null}
 
         {failure ? (
-          <div className="flex justify-start">
+          <div ref={failureRef} tabIndex={-1} role="alert" className="flex justify-start">
             <div className="flex max-w-[82%] flex-col items-start gap-2.5 rounded-[18px_18px_18px_6px] border border-red/30 bg-white/60 px-[18px] py-[14px] text-[13.5px] leading-relaxed text-ink">
               {failure.kind === "unauthorized" ? (
                 <>
@@ -332,8 +392,9 @@ export function ChatPanel({
           <button
             key={prompt}
             type="button"
+            disabled={streaming}
             onClick={() => (visitor ? sendDemo(prompt) : send(prompt))}
-            className="cg-interactive rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
+            className="cg-interactive disabled:cursor-not-allowed disabled:opacity-50 rounded-pill border border-cobalt/28 bg-white/40 px-[15px] py-[7px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-cobalt/8"
           >
             {prompt}
           </button>
@@ -354,7 +415,7 @@ export function ChatPanel({
           </a>
         </div>
       ) : (
-        /* Input pill + round send button */
+        /* Input pill + round send/stop button */
         <div className="flex gap-2.5 border-t border-cobalt/12 px-[18px] pt-3.5 pb-[18px]">
           <input
             value={draft}
@@ -366,22 +427,36 @@ export function ChatPanel({
             aria-label="Skriv til din coach"
             className="min-w-0 flex-1 rounded-pill border border-white/90 bg-white/65 px-5 py-[13px] font-cg-sans text-[16px] text-cobalt outline-none placeholder:text-ink/70 focus:border-cobalt/40 sm:text-[14px]"
           />
-          <button
-            type="button"
-            onClick={() => send()}
-            aria-label="Send besked"
-            className="cg-interactive flex size-[46px] flex-none items-center justify-center rounded-full bg-cobalt text-silver transition-colors hover:bg-cobalt-light"
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M4 12 L20 12 M20 12 L13 5 M20 12 L13 19"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
+          {streaming ? (
+            <button
+              type="button"
+              onClick={stop}
+              aria-label="Stop svaret"
+              className="cg-interactive flex size-[46px] flex-none items-center justify-center rounded-full bg-red text-silver transition-colors hover:bg-red/90"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!draft.trim()}
+              onClick={() => send()}
+              aria-label="Send besked"
+              className="cg-interactive disabled:cursor-not-allowed disabled:opacity-50 flex size-[46px] flex-none items-center justify-center rounded-full bg-cobalt text-silver transition-colors hover:bg-cobalt-light"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M4 12 L20 12 M20 12 L13 5 M20 12 L13 19"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       )}
     </div>
