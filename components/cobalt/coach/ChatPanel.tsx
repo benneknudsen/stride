@@ -225,7 +225,7 @@ export function ChatPanel({
   // scroll container inside it never overflows — so `overflow-y-auto` never
   // engages and old messages become unreachable (#97).
   return (
-    <div className="cg-glass flex h-[calc(100dvh-260px)] min-h-[560px] flex-col rounded-widget [animation:cg-fade-up_0.6s_0.08s_ease_both] motion-reduce:[animation:none] lg:h-[calc(100dvh-320px)]">
+    <div className="cg-glass flex max-h-[calc(100dvh-260px)] min-h-[280px] flex-col rounded-widget [animation:cg-fade-up_0.6s_0.08s_ease_both] motion-reduce:[animation:none] lg:max-h-[calc(100dvh-320px)]">
       <div
         ref={scrollRef}
         className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-6 pt-6 pb-2.5"
