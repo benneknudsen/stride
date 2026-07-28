@@ -2,7 +2,9 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
+import { SessionProvider } from "@/components/providers/session-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { auth } from "@/lib/auth";
 import { bricolage, instrumentSans, instrumentSerif, splineMono } from "@/lib/fonts";
 import "./globals.css";
 
@@ -60,6 +62,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const session = await auth();
 
   return (
     <html
@@ -68,7 +71,9 @@ export default async function RootLayout({
       className={`${bricolage.variable} ${instrumentSans.variable} ${instrumentSerif.variable} ${splineMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-gradient-to-br from-bg to-bg-2">
-        <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
+        <ThemeProvider nonce={nonce}>
+          <SessionProvider session={session}>{children}</SessionProvider>
+        </ThemeProvider>
         <Analytics />
         <SpeedInsights />
       </body>
