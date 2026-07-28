@@ -82,7 +82,7 @@ export function LatestActivityCard({
         <Metric value={formatDanish(latest.km, 1)} unit="km" label="Distance" />
         <Metric value={latest.paceLabel} unit="/km" label="Snit-pace" />
         <Metric value={String(latest.hr)} unit="bpm" label="Puls" red />
-        <Metric value={String(latest.spm)} unit="spm" label="Kadence" />
+        {latest.spm > 0 ? <Metric value={String(latest.spm)} unit="spm" label="Kadence" /> : null}
       </div>
 
       {/* Live rows carry no per-activity pace stream — no curve to draw then. */}

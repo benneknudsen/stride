@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GlassCard } from "@/components/cobalt/GlassCard";
 import { ConfettiBurst } from "@/components/cobalt/hjem/ConfettiBurst";
 
 // One-time PR celebration (#122): confetti + a Cobalt Glass toast, fired the
@@ -56,17 +55,18 @@ export function PrCelebration({ activityId }: { activityId: string }) {
       {showToast ? (
         // Centered by a flex wrapper, not translate-x — cg-fade-up animates
         // `transform`, and the two must not fight. z-[60]: above the
-        // BottomTabBar (z-50), below the confetti (z-70); bottom-24 clears the
-        // tab bar on mobile.
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex justify-center">
-          <GlassCard
+        // BottomTabBar (z-50), below the confetti (z-70); top-24 sits under the
+        // NavBar and clear of the widget's numbers (#215). Solid bg-white (not
+        // GlassCard) so the text can't be read through the surface.
+        <div className="pointer-events-none fixed inset-x-0 top-24 z-[60] flex justify-center">
+          <div
             role="status"
-            className="rounded-pill px-6 py-3 [animation:cg-fade-up_0.4s_ease_both] motion-reduce:[animation:none]"
+            className="rounded-pill bg-white px-6 py-3 shadow-lg [animation:cg-fade-up_0.4s_ease_both] motion-reduce:[animation:none]"
           >
             <span className="whitespace-nowrap text-[14px] font-semibold text-cobalt">
               Ny personlig rekord! 🎉
             </span>
-          </GlassCard>
+          </div>
         </div>
       ) : null}
     </>
