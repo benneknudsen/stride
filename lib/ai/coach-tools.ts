@@ -30,6 +30,7 @@ import {
 } from "@/lib/coach/engine";
 import { recommendWorkout } from "@/lib/coach/recommender";
 import { ensureDate } from "@/lib/db/calendar-date";
+import { formatPace } from "@/lib/metrics";
 import { GOALS } from "@/lib/training/goals";
 import { computeSnapshot, type ProgressionActivityInput } from "@/lib/training/progression";
 import type { HrZone } from "@/types/domain";
@@ -54,6 +55,9 @@ function orUndefined<T>(value: T | null | undefined): T | undefined {
  * see the note on `AnalysisActivity` in `lib/ai/analysis.ts`.
  */
 export type CoachChatActivity = {
+  /** DB cuid or demo id — carried so `getRecentActivities` can emit a card that
+   *  links to the activity's detail page (issue #221). */
+  id: string;
   type: string;
   /** ISO string from the Neon driver, or a real Date (demo fixtures) — read it
    *  through `ensureDate`, never directly. See `ProgressionActivityInput`. */
@@ -106,6 +110,40 @@ export function buildCoachTools(
   const raceDate = race?.raceDate ?? undefined;
   const raceName = race?.raceName ?? undefined;
   return {
+    getRecentActivities: tool({
+      description:
+        'Hent brugerens seneste aktiviteter (op til 5) med id, type, dato, distance, pace og puls. Brug den når brugeren spørger til en tidligere tur — fx "hvad var mit seneste løb?". Kortene i svaret bygges af dette output, så id skal med.',
+      inputSchema: z.object({
+        limit: z
+          .number()
+          .int()
+          .nullish()
+          .describe("Antal seneste aktiviteter at hente (1-5, default 5)"),
+      }),
+      execute: async ({ limit }) => {
+        const count = Math.min(5, Math.max(1, limit ?? 5));
+        // Sort defensively by date desc: live rows already arrive newest-first
+        // and the demo fixtures too, but a resilient tool never trusts input
+        // order for "most recent". `ensureDate` normalises the Neon driver's
+        // ISO strings and the fixtures' real Dates alike.
+        return [...activities]
+          .sort((a, b) => ensureDate(b.startDate).getTime() - ensureDate(a.startDate).getTime())
+          .slice(0, count)
+          .map((a) => ({
+            id: a.id,
+            type: a.type,
+            startDate: ensureDate(a.startDate).toISOString(),
+            distance: a.distance,
+            movingTime: a.movingTime,
+            averageHeartrate: a.averageHeartrate ?? null,
+            // Readable derivations for the model's prose — the card rebuilds
+            // pace from distance/movingTime, so these are stripped from the block.
+            distanceKm: Math.round(a.distance / 100) / 10,
+            pace: formatPace(a.movingTime > 0 ? a.distance / a.movingTime : null),
+          }));
+      },
+    }),
+
     recommendWorkout: tool({
       description:
         "Anbefal brugerens næste pas som et workout card (type, distance, pace, pulsloft, sko, begrundelse, ugestrimmel). Progression og seneste løbetur læses automatisk fra brugerens egne aktiviteter.",
