@@ -21,6 +21,7 @@ import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
 import { computeSnapshot } from "@/lib/training/progression-core";
+import type { ChatBlock } from "@/types/chat";
 
 const DAY_MS = 86_400_000;
 
@@ -40,6 +41,13 @@ export interface ChatMessage {
   id: string;
   role: ChatRole;
   text: string;
+  /**
+   * Generative-UI blocks streamed alongside the text of a coach turn (issue
+   * #221): clickable activity cards and workout cards, built server-side from
+   * tool output. Absent on user turns, the synthetic opener, and replayed
+   * history (only the text is persisted), so those render exactly as before.
+   */
+  blocks?: ChatBlock[];
   /**
    * The scripted opening bubble is `synthetic: true`: it is shown so the panel
    * never starts empty, but the ChatPanel strips synthetic turns before POSTing
