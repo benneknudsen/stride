@@ -107,12 +107,14 @@ const NDJSON_HEADERS = {
 
 const NOT_CONFIGURED_REPLY: ChatReply = {
   role: "assistant",
+  type: "text",
   content:
     "AI coachen er ikke aktiveret endnu — der er ikke sat en AI-nøgle op. Indtil da kan du se dit næste pas på Coach-dashboardet.",
 };
 
 const PROVIDER_DOWN_REPLY: ChatReply = {
   role: "assistant",
+  type: "text",
   content:
     "Coachen kunne ikke svare lige nu — prøv igen om et øjeblik. Dit næste pas står stadig klar på Coach-dashboardet.",
 };
@@ -120,8 +122,62 @@ const PROVIDER_DOWN_REPLY: ChatReply = {
 /** Appended to an answer that was cut off by the total budget or a provider error after it started streaming (issue #198). */
 const TRUNCATED_REPLY: ChatReply = {
   role: "assistant",
+  type: "text",
   content: "\n\n[Svaret blev afbrudt — prøv igen om et øjeblik.]",
 };
+
+// ---------------------------------------------------------------------------
+// Block schemas (issue #221)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generative-UI blocks are built from tool OUTPUT, never from the model's free
+ * text, so the numbers on a card can't be fabricated (issue #221). These schemas
+ * validate the relevant tool's `execute` return before it is emitted as a block;
+ * a shape that doesn't match is simply not rendered (the prose still streams).
+ * zod strips unknown keys, so a tool's extra prose-only fields (e.g. a readable
+ * `pace`) and the recommendation's unused `weekStrip` fall away here.
+ */
+const chatActivitySchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  startDate: z.string(),
+  distance: z.number(),
+  movingTime: z.number(),
+  averageHeartrate: z.number().nullable(),
+});
+
+const workoutBlockSchema = z.object({
+  type: z.enum(["rest", "easy", "tempo", "long"]),
+  distanceKm: z.number(),
+  paceRange: z.object({ min: z.string(), max: z.string() }),
+  heartRateCap: z.number(),
+  shoe: z.enum(["vomero", "adios-pro-4"]),
+  reason: z.array(z.string()),
+});
+
+/**
+ * Turn a tool result into generative-UI blocks (issue #221). `getRecentActivities`
+ * yields one clickable activity card per activity; `recommendWorkout` yields a
+ * workout card. Any other tool (`getProgression`, `getWeekPlan`, `validateWorkout`)
+ * informs the model's prose but has no card, so it emits nothing here.
+ */
+function emitToolBlocks(toolName: string, output: unknown, emit: (reply: ChatReply) => void): void {
+  if (toolName === "getRecentActivities") {
+    const parsed = z.array(chatActivitySchema).safeParse(output);
+    if (!parsed.success) return;
+    for (const activity of parsed.data) {
+      emit({ role: "assistant", type: "block", block: { kind: "activity", activity } });
+    }
+    return;
+  }
+  if (toolName === "recommendWorkout") {
+    const parsed = workoutBlockSchema.safeParse(output);
+    if (parsed.success) {
+      emit({ role: "assistant", type: "block", block: { kind: "workout", workout: parsed.data } });
+    }
+  }
+}
 
 /** Stream an already-resolved set of replies (scripted fallback) as NDJSON. */
 function ndjsonResponse(replies: ChatReply[]): Response {
@@ -146,7 +202,8 @@ const COACH_SYSTEM_PROMPT = `Du er Stride — brugerens personlige løbecoach. D
 Regler:
 - Svar altid på dansk og sig "du" til brugeren.
 - Brug ALTID dine tools til at hente data — gæt aldrig, og opdig aldrig tal. Alt du siger om form, belastning og pas skal komme fra tool-output. Tools læser selv brugerens synkroniserede aktiviteter — du skal ikke levere dem.
-- Brug recommendWorkout når du skal anbefale næste pas.
+- Brug recommendWorkout når du skal anbefale næste pas — svaret vises som et workout-kort, så skriv kun den korte begrundelse, ikke tallene igen.
+- Brug getRecentActivities når brugeren spørger til en tidligere tur (fx "hvad var mit seneste løb?") — de seneste ture vises som klikbare kort, så du behøver ikke gentage tallene i teksten.
 - Brug getProgression når du skal forstå brugerens form og belastning.
 - Brug getWeekPlan når du skal kende ugens struktur.
 - Brug validateWorkout når du skal tjekke om et foreslået pas er forsvarligt.
@@ -318,12 +375,15 @@ export async function POST(req: NextRequest) {
               noteActivity();
               if (part.text.length === 0) continue;
               answer += part.text;
-              emit({ role: "assistant", content: part.text });
-            } else if (
-              part.type === "tool-call" ||
-              part.type === "tool-result" ||
-              part.type === "tool-input-start"
-            ) {
+              emit({ role: "assistant", type: "text", content: part.text });
+            } else if (part.type === "tool-result") {
+              // A completed tool call: count it as activity (so we don't fall
+              // back to another candidate) and render its output as generative
+              // UI. The block is built from the tool's own output — the model
+              // never authors it (issue #221).
+              noteActivity();
+              emitToolBlocks(part.toolName, part.output, emit);
+            } else if (part.type === "tool-call" || part.type === "tool-input-start") {
               // Tool-only activity counts as a response so we do not fall back
               // to another candidate, but it does not emit text by itself.
               noteActivity();

@@ -2,9 +2,18 @@
  * Shared types for the AI coach chat endpoint (`/api/ai/chat`).
  *
  * The request carries the running transcript as `ChatMessage[]`; the response
- * is NDJSON where every line is a `ChatReply` fragment — clients concatenate
- * `content` across lines to rebuild the assistant's answer as it streams.
+ * is NDJSON where every line is a `ChatReply` fragment. A reply is a
+ * discriminated union (issue #221): a `text` fragment carries a token of the
+ * streamed answer (clients concatenate `content` across lines), while a `block`
+ * fragment carries a piece of generative UI (a clickable activity card, a
+ * workout card) built from tool output — never from the model's free text, so
+ * the numbers can't be fabricated. Text and blocks can interleave in one answer.
+ *
+ * Backward compatibility: a legacy NDJSON line without a `type` field is treated
+ * as `{ type: "text", content }` by clients (see ChatPanel.parseLine).
  */
+
+import type { WorkoutCardView } from "@/lib/coach/dashboard";
 
 export type ChatRole = "user" | "assistant";
 
@@ -14,8 +23,38 @@ export interface ChatMessage {
   content: string;
 }
 
-/** One streamed NDJSON line of the assistant's reply. */
-export interface ChatReply {
-  role: "assistant";
-  content: string;
+/**
+ * An activity rendered as a clickable card in the coach chat (issue #221). The
+ * same shape as {@link CoachChatActivity} but with the `id` needed to link to
+ * the activity's detail page; `startDate` is an ISO string on the wire.
+ */
+export interface ChatActivity {
+  /** DB cuid or demo id ("demo-01") — the `activityRoute(id)` link target. */
+  id: string;
+  type: string;
+  /** ISO 8601 start timestamp. */
+  startDate: string;
+  /** Distance in meters. */
+  distance: number;
+  /** Moving time in seconds. */
+  movingTime: number;
+  averageHeartrate: number | null;
 }
+
+/**
+ * A piece of generative UI attached to an assistant turn (issue #221). Blocks
+ * are built server-side from validated tool output, so the model orchestrates
+ * which tool runs but never authors the block's contents.
+ *
+ * The workout block carries {@link WorkoutCardView} (the recommendation without
+ * its week strip, which the chat card does not render) so it feeds the existing
+ * `coach-dashboard/WorkoutCard` unchanged.
+ */
+export type ChatBlock =
+  | { kind: "activity"; activity: ChatActivity }
+  | { kind: "workout"; workout: WorkoutCardView };
+
+/** One streamed NDJSON line of the assistant's reply. */
+export type ChatReply =
+  | { role: "assistant"; type: "text"; content: string }
+  | { role: "assistant"; type: "block"; block: ChatBlock };
