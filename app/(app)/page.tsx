@@ -57,7 +57,6 @@ export default async function HjemPage({
       userName={user?.name?.trim() || user?.email?.split("@")[0] || undefined}
       stravaConnected={stravaTokens !== null}
       signedIn={userId !== undefined}
-      isDemo={userId === undefined && demo !== undefined}
     />
   );
 }

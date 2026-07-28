@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { BackgroundBlobs } from "@/components/cobalt/BackgroundBlobs";
 import { BottomTabBar } from "@/components/cobalt/BottomTabBar";
+import { DemoBanner } from "@/components/cobalt/DemoBanner";
 import { LandingChromeGate } from "@/components/cobalt/LandingChromeGate";
 import { NavBar } from "@/components/cobalt/NavBar";
 import { auth } from "@/lib/auth";
@@ -30,6 +31,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Suspense fallback={null}>
           <LandingChromeGate signedIn={user !== undefined}>
             <NavBar userName={userName} userImage={user?.image} stravaConnected={stravaConnected} />
+          </LandingChromeGate>
+        </Suspense>
+        <Suspense fallback={null}>
+          <LandingChromeGate signedIn={user !== undefined}>
+            <DemoBanner />
           </LandingChromeGate>
         </Suspense>
         {children}

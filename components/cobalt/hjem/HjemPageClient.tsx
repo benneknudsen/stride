@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { GlassCard } from "@/components/cobalt/GlassCard";
 import { AiCoachCard } from "@/components/cobalt/hjem/AiCoachCard";
 import { DataSourcesCard } from "@/components/cobalt/hjem/DataSourcesCard";
 import { Hero } from "@/components/cobalt/hjem/Hero";
@@ -17,7 +15,6 @@ import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
 import { useStartupReveal } from "@/hooks/useStartupReveal";
 import { greetingForHour, type HomeView } from "@/lib/cobalt/hjem";
-import { ROUTES } from "@/lib/routes";
 
 // Widget wrapper applying the staggered fadeUp entrance. `span` is the 12-col
 // grid span; `delay` staggers each widget's reveal. The wrapper stretches to its
@@ -47,14 +44,11 @@ export function HjemPageClient({
   userName,
   stravaConnected,
   signedIn,
-  isDemo = false,
 }: {
   view: HomeView;
   userName?: string;
   stravaConnected: boolean;
   signedIn: boolean;
-  /** True only for a visitor on `?demo=1` (#124) — never for a signed-in user. */
-  isDemo?: boolean;
 }) {
   const { loading, started } = useStartupReveal();
   // The greeting follows the visitor's clock, but `new Date()` during SSR reads
@@ -72,34 +66,6 @@ export function HjemPageClient({
 
   return (
     <main>
-      {/* Demo-markering (#124): a sticky glass bar so a visitor browsing the
-          demo dashboard always knows the numbers are fixtures — with the way
-          into the real thing one click away. Sticky (not fixed) so it scrolls
-          inside the page flow and can't detach on iOS like a fixed bar with
-          backdrop-filter would; z-40 keeps it under the BottomTabBar (z-50). */}
-      {isDemo ? (
-        <div className="sticky top-2 z-40 mt-3 flex justify-center sm:mt-4 [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
-          {/* A centered, content-wide pill — not a second full-width bar, which
-              stacked heavily right under the NavBar. One line always: the text
-              truncates and the login pill never wraps under it. */}
-          <GlassCard className="flex max-w-full items-center gap-3 rounded-pill py-1.5 pr-1.5 pl-4 sm:gap-4 sm:py-2 sm:pr-2">
-            <span className="flex-none rounded-pill bg-red px-2.5 py-1 cg-label tracking-[0.18em] font-semibold text-white">
-              Demo
-            </span>
-            <p className="m-0 min-w-0 truncate text-[13px] leading-snug text-ink">
-              <span className="sm:hidden">Du kigger på eksempeldata</span>
-              <span className="hidden sm:inline">Dette er en demo med eksempeldata</span>
-            </p>
-            <Link
-              href={ROUTES.LOGIN}
-              className="cg-interactive flex-none rounded-pill bg-cobalt px-4 py-1.5 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90 sm:px-5 sm:py-2 sm:text-[13px]"
-            >
-              Log ind
-            </Link>
-          </GlassCard>
-        </div>
-      ) : null}
-
       <Hero
         weekNumber={view.weekNumber}
         weeklyKm={view.weeklyKm}
