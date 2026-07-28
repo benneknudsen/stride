@@ -1,20 +1,45 @@
+"use client";
+
+import { useLayoutEffect, useRef, useState } from "react";
+
 // The self-drawing pace curve for the latest-activity widget. Samples (0–1,
 // higher = faster) become an SVG polyline that draws itself via stroke-dasharray
 // (pathLength normalised to 100) once `started` flips true, with a pulsing red
 // dot pinned to the final sample.
-const W = 320;
+//
+// The curve wants a fixed 96px-tall band at the card's full width. A fixed
+// viewBox stretched to fill (preserveAspectRatio="none") scales non-uniformly,
+// which broke the dash pattern (gap mid-line), turned the round end dot into an
+// ellipse and skewed the fill/gradient (#214). Instead we measure the rendered
+// width and draw in actual pixels, so the viewBox maps 1:1 to the element — no
+// scaling, no deformation.
 const H = 96;
-// SVGs are clipped to their viewBox by default (UA stylesheet sets
-// `overflow: hidden` on the root <svg>). The end dot sits exactly on the last
-// sample, so without inset its right half got cut off flush against the card
-// edge. Insetting both ends keeps the dot — and the round line cap — fully
-// on-canvas while the area fill still closes out to the true edges.
+// The end dot sits exactly on the last sample, so without inset its right half
+// gets clipped flush against the card edge (SVGs default to overflow: hidden).
+// Insetting both ends keeps the dot — and the round line cap — fully on-canvas.
 const PAD_X = 6;
+// SSR / first-paint fallback before the width is measured. Client's first render
+// uses the same value so hydration matches; the layout effect corrects it before
+// the browser paints.
+const W_FALLBACK = 320;
 
 export function PaceCurve({ samples, started }: { samples: number[]; started: boolean }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [width, setWidth] = useState(W_FALLBACK);
+
+  useLayoutEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const measure = () => setWidth(el.clientWidth || W_FALLBACK);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const n = samples.length;
   const points = samples.map((s, i) => {
-    const x = PAD_X + (i / (n - 1)) * (W - 2 * PAD_X);
+    const x = PAD_X + (i / (n - 1)) * (width - 2 * PAD_X);
     const y = H - 8 - s * (H - 20);
     return [x, y] as const;
   });
@@ -25,20 +50,32 @@ export function PaceCurve({ samples, started }: { samples: number[]; started: bo
 
   return (
     <svg
-      viewBox={`0 0 ${W} ${H}`}
+      ref={svgRef}
+      viewBox={`0 0 ${width} ${H}`}
       className="h-[96px] w-full"
       fill="none"
-      preserveAspectRatio="none"
       aria-hidden="true"
     >
       <path
-        d={`${d} L${W} ${H} L0 ${H} Z`}
+        // Close the fill along the curve's own x-range (PAD_X … width - PAD_X) so
+        // fill and stroke share an edge — closing to the raw viewBox edges left a
+        // sliver of fill past the line's inset ends.
+        d={`${d} L${(width - PAD_X).toFixed(1)} ${H} L${PAD_X} ${H} Z`}
         fill="url(#cg-pace-fill)"
         opacity={started ? 1 : 0}
         style={{ transition: "opacity 1.8s ease" }}
       />
       <defs>
-        <linearGradient id="cg-pace-fill" x1="0" y1="0" x2="0" y2="1">
+        {/* userSpaceOnUse pins the fade to the fixed 0…H band rather than the
+            fill's bounding box, so it covers the full curve height evenly. */}
+        <linearGradient
+          id="cg-pace-fill"
+          gradientUnits="userSpaceOnUse"
+          x1="0"
+          y1="0"
+          x2="0"
+          y2={H}
+        >
           {/* Relative color keeps the fade on the cobalt hue; color-mix() to
               transparent collapses the end stop to transparent black and grays
               the mid-tones. */}
@@ -53,7 +90,6 @@ export function PaceCurve({ samples, started }: { samples: number[]; started: bo
         strokeWidth={2.5}
         strokeLinecap="round"
         strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
         strokeDasharray={100}
         strokeDashoffset={started ? 0 : 100}
         className="motion-reduce:!transition-none"
