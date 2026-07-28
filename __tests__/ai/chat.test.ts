@@ -274,4 +274,27 @@ describe("POST /api/ai/chat", () => {
     expect(fullText).toContain("Svaret blev afbrudt");
     expect(insertChatMessage).not.toHaveBeenCalled();
   });
+
+  it("marks a reply truncated when an error-part follows streamed text (#218)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    // The provider streams some text and then reports failure as an `error`
+    // part (not a thrown exception). `onError` logs it, so the loop must
+    // itself notice the error and treat the half answer as truncated —
+    // otherwise the partial reply is persisted as if it were complete.
+    streamTextMock.mockImplementation(() => ({
+      fullStream: (async function* () {
+        yield { type: "text-delta", text: "Det ser " };
+        yield { type: "error", error: new Error("stream broke mid-answer") };
+      })(),
+    }));
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    const fullText = replies.map((r) => r.content).join("");
+    expect(fullText).toContain("Det ser");
+    expect(fullText).toContain("Svaret blev afbrudt");
+    expect(insertChatMessage).not.toHaveBeenCalled();
+  });
 });

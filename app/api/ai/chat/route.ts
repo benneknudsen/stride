@@ -279,6 +279,11 @@ export async function POST(req: NextRequest) {
       for (const { id, model } of getModelCandidates()) {
         if (sawActivity || budgetExceeded) break;
 
+        // Per-candidate: set when this model surfaces a mid-stream `error`
+        // part. Scoped inside the loop so a candidate that fails politely
+        // before producing output (issue #208) never taints the fallback
+        // candidate's completed answer (issue #218).
+        let candidateErrored = false;
         const candidateController = new AbortController();
         activeAbortController = candidateController;
 
@@ -322,9 +327,15 @@ export async function POST(req: NextRequest) {
               // Tool-only activity counts as a response so we do not fall back
               // to another candidate, but it does not emit text by itself.
               noteActivity();
+            } else if (part.type === "error") {
+              // A provider that fails mid-stream surfaces the failure as an
+              // `error` part rather than a thrown exception, so the loop never
+              // enters the catch below. `onError` above already reports it to
+              // Sentry; recording it here is what lets a candidate that
+              // errored *after* it started producing output be treated as
+              // truncated instead of persisted as a complete answer (#218).
+              candidateErrored = true;
             }
-            // `part.type === "error"` needs no branch: `onError` above already
-            // reports it. What matters is that it does NOT throw — see below.
           }
           // Only stop routing once a candidate actually produced something.
           // A provider that fails politely (bad model id, no endpoint that
@@ -333,7 +344,15 @@ export async function POST(req: NextRequest) {
           // stream simply ends. Breaking unconditionally here treated that as
           // an answer: the fallback model was never tried and every such
           // failure became the scripted floor.
-          if (sawActivity) break;
+          if (sawActivity) {
+            // Text already streamed and then the provider errored mid-answer:
+            // the reply is a half turn, so warn the user and keep it out of
+            // history rather than persisting it as complete (#218). An error
+            // part with no preceding output leaves `sawActivity` false and
+            // falls through to the next candidate instead (#208).
+            if (candidateErrored) isTruncated = true;
+            break;
+          }
         } catch (err) {
           // Timed out before first token, total budget reached, or provider
           // error. If the model already produced output we must not retry:
