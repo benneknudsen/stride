@@ -27,6 +27,7 @@ import { stepCountIs, streamText } from "ai";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { buildCoachTools, type CoachChatActivity } from "@/lib/ai/coach-tools";
+import { createHarmonyFilter } from "@/lib/ai/harmony";
 import { getModelCandidates, isAIConfigured } from "@/lib/ai/provider";
 import { auth } from "@/lib/auth";
 import {
@@ -368,6 +369,12 @@ export async function POST(req: NextRequest) {
         const candidateController = new AbortController();
         activeAbortController = candidateController;
 
+        // Strip harmony control tokens (`<|channel|>thought…`) that some models
+        // leak into the text stream, dropping their internal reasoning before
+        // it reaches the user or the persisted answer (issue #222). A fresh
+        // filter per candidate so a failed candidate can't taint the fallback.
+        const harmony = createHarmonyFilter();
+
         let firstTokenTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
           if (!sawActivity) {
             candidateController.abort(new Error("first token timeout"));
@@ -398,8 +405,10 @@ export async function POST(req: NextRequest) {
             if (part.type === "text-delta") {
               noteActivity();
               if (part.text.length === 0) continue;
-              answer += part.text;
-              emit({ role: "assistant", type: "text", content: part.text });
+              const clean = harmony.push(part.text);
+              if (clean.length === 0) continue;
+              answer += clean;
+              emit({ role: "assistant", type: "text", content: clean });
             } else if (part.type === "tool-result") {
               // A completed tool call: count it as activity (so we don't fall
               // back to another candidate) and render its output as generative
@@ -420,6 +429,13 @@ export async function POST(req: NextRequest) {
               // truncated instead of persisted as a complete answer (#218).
               candidateErrored = true;
             }
+          }
+          // Flush any harmony text held back for a split marker, or salvaged
+          // from a channel the model mis-tagged (issue #222).
+          const tail = harmony.flush();
+          if (tail.length > 0) {
+            answer += tail;
+            emit({ role: "assistant", type: "text", content: tail });
           }
           // Only stop routing once a candidate actually produced something.
           // A provider that fails politely (bad model id, no endpoint that
@@ -444,6 +460,9 @@ export async function POST(req: NextRequest) {
           // stream with a truncation marker.
           captureProviderError("catch", id, err);
           if (sawActivity) {
+            // Deliberately do NOT flush the harmony filter here: a truncated
+            // turn should surface neither a dangling partial marker nor the
+            // model's suppressed internal reasoning (issue #222).
             isTruncated = true;
             break;
           }

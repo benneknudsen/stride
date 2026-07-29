@@ -449,6 +449,54 @@ describe("POST /api/ai/chat", () => {
     expect(insertChatMessage).not.toHaveBeenCalled();
   });
 
+  it("strips harmony control tokens and internal reasoning from the reply (#222)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    stubTextStream([
+      "<|channel|>thought<|channel|>internal reasoning",
+      "<|channel|>final<|channel|>actual answer<|end|>",
+    ]);
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    const text = replies.map((r) => r.content).join("");
+    expect(text).toBe("actual answer");
+    expect(text).not.toContain("<|");
+    expect(text).not.toContain("internal reasoning");
+    // The persisted answer is the clean text only, never the control tokens.
+    expect(insertChatMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ role: "assistant", content: "actual answer" })
+    );
+  });
+
+  it("strips a harmony marker split across two text-delta parts (#222)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    // The opening channel marker is split mid-token between the two deltas.
+    stubTextStream([
+      "<|chan",
+      "nel|>thought<|channel|>skjult<|channel|>final<|channel|>svaret<|end|>",
+    ]);
+
+    const res = await POST(chatRequest());
+
+    const replies = await readReplies(res);
+    const text = replies.map((r) => r.content).join("");
+    expect(text).toBe("svaret");
+    expect(text).not.toContain("<|");
+    expect(text).not.toContain("skjult");
+  });
+
+  it("leaves a normal reply without markers unchanged (#222)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    stubTextStream(["Rolig 5 km ", "i zone 2."]);
+
+    const res = await POST(chatRequest());
+
+    const replies = await readReplies(res);
+    expect(replies.map((r) => r.content).join("")).toBe("Rolig 5 km i zone 2.");
+  });
+
   it("does not duplicate a user turn on retry with the same clientMessageId (#205)", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     const clientId = "retry-id-1";
