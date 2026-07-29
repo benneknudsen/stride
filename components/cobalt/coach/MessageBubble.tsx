@@ -1,4 +1,5 @@
 import { ActivityCard } from "@/components/cobalt/coach/ActivityCard";
+import { ChatMarkdown } from "@/components/cobalt/coach/ChatMarkdown";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import type { ChatMessage } from "@/lib/cobalt/coach";
 import { cn } from "@/lib/utils";
@@ -45,7 +46,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
               : "rounded-[18px_18px_18px_6px] border border-white/85 bg-white/60 text-cobalt"
           )}
         >
-          {message.text}
+          {isUser ? message.text : <ChatMarkdown text={message.text} />}
         </div>
       ) : null}
 
