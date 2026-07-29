@@ -6,6 +6,7 @@ import {
   type CoachLoadActivityLike,
   loadStatusFromRatio,
 } from "@/lib/cobalt/coach";
+import { demoActivities } from "@/lib/demo/data";
 
 /**
  * Unit tests for the Coach view-model (lib/cobalt/coach.ts).
@@ -74,8 +75,41 @@ describe("buildCoachView", () => {
     expect(view.demoReplies).toBeDefined();
     for (const prompt of view.prompts) {
       const reply = view.demoReplies?.[prompt];
-      expect(typeof reply).toBe("string");
-      expect((reply ?? "").length).toBeGreaterThan(0);
+      expect(typeof reply?.text).toBe("string");
+      expect((reply?.text ?? "").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("attaches the actual long run as a clickable ActivityCard block, matching the fixture (issue #235)", () => {
+    const from = NOW.getTime() - 7 * 86_400_000;
+    // The same fixture buildCoachView's longest-in-window read selects.
+    const longest = demoActivities
+      .filter((a) => a.startDate.getTime() >= from)
+      .reduce((best, a) => (a.distance > best.distance ? a : best));
+
+    const block = view.demoReplies?.["Analysér min uge"]?.blocks?.find(
+      (b) => b.kind === "activity"
+    );
+    expect(block).toBeDefined();
+    if (block?.kind === "activity") {
+      expect(block.activity.id).toBe(longest.id);
+      expect(block.activity.distance).toBe(longest.distance);
+      expect(block.activity.movingTime).toBe(longest.movingTime);
+      expect(block.activity.averageHeartrate).toBe(longest.averageHeartrate);
+      expect(block.activity.startDate).toBe(longest.startDate.toISOString());
+    }
+  });
+
+  it("attaches a 10 km tempo WorkoutCard block to the next-session reply (issue #235)", () => {
+    const block = view.demoReplies?.["Foreslå næste pas"]?.blocks?.find(
+      (b) => b.kind === "workout"
+    );
+    expect(block).toBeDefined();
+    if (block?.kind === "workout") {
+      expect(block.workout.type).toBe("tempo");
+      expect(block.workout.distanceKm).toBe(10);
+      expect(block.workout.paceRange).toEqual({ min: "4:25", max: "5:20" });
+      expect(block.workout.reason.length).toBeGreaterThan(0);
     }
   });
 

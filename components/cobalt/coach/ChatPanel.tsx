@@ -28,6 +28,12 @@ function formatRetryAfter(seconds: number | undefined): string {
 /** Scroll-to-bottom threshold: auto-scroll only when this close to the bottom. */
 const SCROLL_THRESHOLD_PX = 80;
 
+/** The question the visitor autoplay demo plays once (issue #235). Must be a key
+ *  in `demoReplies` so the reply (text + a clickable ActivityCard) exists. */
+const AUTOPLAY_PROMPT = "Analysér min uge";
+/** Typing-indicator beat before the autoplay coach reply lands. */
+const AUTOPLAY_TYPING_MS = 800;
+
 function isNearBottom(el: HTMLElement): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD_PX;
 }
@@ -89,6 +95,71 @@ export function ChatPanel({
     const el = scrollRef.current;
     if (el && isNearBottom(el)) el.scrollTop = el.scrollHeight;
   }, [messages, typing, failure]);
+
+  // Visitor autoplay (issue #235): the demo chat is otherwise silent until a chip
+  // is tapped, so a visitor might never see a coach turn carrying real
+  // generative-UI cards. When the panel first scrolls into view we play ONE
+  // scripted exchange — the "Analysér min uge" question and its reply (text + a
+  // clickable ActivityCard) — so the card moment is visible without any tap. It
+  // fires once, never loops, and leaves the quick-prompt chips fully working.
+  // Reduced-motion visitors get the exchange immediately, without the typing beat.
+  const autoplayedRef = useRef(false);
+  useEffect(() => {
+    if (!visitor || autoplayedRef.current) return;
+    // No IntersectionObserver (older WebView / jsdom) → skip the reveal rather
+    // than fabricate one; the chips still demo the same replies on tap.
+    if (typeof IntersectionObserver === "undefined") return;
+    const reply = demoReplies?.[AUTOPLAY_PROMPT];
+    const el = scrollRef.current;
+    if (!reply || !el) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const play = () => {
+      if (autoplayedRef.current) return;
+      autoplayedRef.current = true;
+      idRef.current += 1;
+      const userTurn: ChatMessage = {
+        id: `u${idRef.current}`,
+        role: "user",
+        text: AUTOPLAY_PROMPT,
+      };
+      idRef.current += 1;
+      const coachTurn: ChatMessage = {
+        id: `c${idRef.current}`,
+        role: "coach",
+        text: reply.text,
+        blocks: reply.blocks ?? [],
+      };
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        setMessages((prev) => [...prev, userTurn, coachTurn]);
+        return;
+      }
+      setMessages((prev) => [...prev, userTurn]);
+      setTyping(true);
+      timer = setTimeout(() => {
+        setTyping(false);
+        setMessages((prev) => [...prev, coachTurn]);
+      }, AUTOPLAY_TYPING_MS);
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[entries.length - 1];
+        if (entry?.isIntersecting) {
+          play();
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 }
+    );
+    observer.observe(el);
+
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [visitor, demoReplies]);
 
   // Panel transcript → the role/content shape the chat route expects. Synthetic
   // turns (the scripted opening bubble) are dropped so the coach's own greeting
@@ -293,7 +364,12 @@ export function ChatPanel({
     idRef.current += 1;
     const userTurn: ChatMessage = { id: `u${idRef.current}`, role: "user", text: prompt };
     idRef.current += 1;
-    const coachTurn: ChatMessage = { id: `c${idRef.current}`, role: "coach", text: reply };
+    const coachTurn: ChatMessage = {
+      id: `c${idRef.current}`,
+      role: "coach",
+      text: reply.text,
+      blocks: reply.blocks ?? [],
+    };
     setMessages((prev) => [...prev, userTurn, coachTurn]);
   };
 
@@ -347,6 +423,20 @@ export function ChatPanel({
   // height is clamped so the composer stays visible without page scrolling.
   return (
     <div className="cg-glass flex max-h-[calc(100dvh-260px)] min-h-[220px] flex-col rounded-widget [animation:cg-fade-up_0.6s_0.08s_ease_both] motion-reduce:[animation:none] lg:max-h-[calc(100dvh-320px)]">
+      {visitor ? (
+        // Signed-out demo (issue #235): mark the whole panel as an example so the
+        // scripted opener, the autoplayed exchange and the chip replies never read
+        // as the visitor's own live data.
+        <div className="flex items-center gap-2 border-b border-cobalt/10 px-6 pt-4 pb-2.5">
+          <span
+            aria-hidden="true"
+            className="size-1.5 rounded-full bg-red [animation:cg-pulse-dot_1.4s_ease-in-out_infinite] motion-reduce:[animation:none]"
+          />
+          <span className="cg-label text-[10.5px] font-semibold text-cobalt">
+            AI-coachen · Eksempel
+          </span>
+        </div>
+      ) : null}
       <div
         ref={scrollRef}
         role="log"
@@ -359,7 +449,7 @@ export function ChatPanel({
           <MessageBubble key={message.id} message={message} />
         ))}
 
-        {!hasRealMessages && !typing && !failure ? (
+        {!visitor && !hasRealMessages && !typing && !failure ? (
           <div className="flex flex-1 items-center justify-center">
             <p className="text-center text-[14px] text-ink/60">
               Din samtale er nulstillet. Stil et nyt spørgsmål nedenfor.
