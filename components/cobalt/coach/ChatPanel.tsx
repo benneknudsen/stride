@@ -3,6 +3,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import * as Sentry from "@sentry/nextjs";
 import { useEffect, useRef, useState } from "react";
+import { clearChatHistory } from "@/actions/chat";
 import { MessageBubble } from "@/components/cobalt/coach/MessageBubble";
 import type { ChatMessage, CoachView } from "@/lib/cobalt/coach";
 import { ROUTES } from "@/lib/routes";
@@ -312,6 +313,25 @@ export function ChatPanel({
     setTyping(false);
   };
 
+  const [clearing, setClearing] = useState(false);
+
+  // "Ryd samtale nu" (issue #229): wipe the persisted history server-side, then
+  // reset the panel to its opening bubble so the fresh start is immediate. Low
+  // risk, so no confirmation dialog. Aborts any in-flight stream first.
+  const clearConversation = async () => {
+    if (clearing) return;
+    setClearing(true);
+    abortRef.current?.abort();
+    setTyping(false);
+    setFailure(null);
+    const result = await clearChatHistory();
+    if (result.ok) {
+      setMessages(initialMessages);
+      setDraft("");
+    }
+    setClearing(false);
+  };
+
   // The panel needs a bounded height, or it grows with the transcript and the
   // scroll container inside it never overflows — so `overflow-y-auto` never
   // engages and old messages become unreachable (#97). On small viewports the
@@ -416,47 +436,62 @@ export function ChatPanel({
         </div>
       ) : (
         /* Input pill + round send/stop button */
-        <div className="flex gap-2.5 border-t border-cobalt/12 px-[18px] pt-3.5 pb-[18px]">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
-            }}
-            placeholder="Skriv til din coach…"
-            aria-label="Skriv til din coach"
-            className="min-w-0 flex-1 rounded-pill border border-white/90 bg-white/65 px-5 py-[13px] font-cg-sans text-[16px] text-cobalt outline-none placeholder:text-ink/70 focus:border-cobalt/40 sm:text-[14px]"
-          />
-          {streaming ? (
+        <div className="border-t border-cobalt/12 px-[18px] pt-3.5 pb-[18px]">
+          <div className="flex gap-2.5">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
+              }}
+              placeholder="Skriv til din coach…"
+              aria-label="Skriv til din coach"
+              className="min-w-0 flex-1 rounded-pill border border-white/90 bg-white/65 px-5 py-[13px] font-cg-sans text-[16px] text-cobalt outline-none placeholder:text-ink/70 focus:border-cobalt/40 sm:text-[14px]"
+            />
+            {streaming ? (
+              <button
+                type="button"
+                onClick={stop}
+                aria-label="Stop svaret"
+                className="cg-interactive flex size-[46px] flex-none items-center justify-center rounded-full bg-red text-silver transition-colors hover:bg-red/90"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!draft.trim()}
+                onClick={() => send()}
+                aria-label="Send besked"
+                className="cg-interactive disabled:cursor-not-allowed disabled:opacity-50 flex size-[46px] flex-none items-center justify-center rounded-full bg-cobalt text-silver transition-colors hover:bg-cobalt-light"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M4 12 L20 12 M20 12 L13 5 M20 12 L13 19"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+          {/* Retention notice + manual clear (issue #229). Signed-in only — a
+              visitor has no persisted history to expire. */}
+          <p className="mt-2.5 text-center text-[11px] text-ink/60">
+            Din chat-historik slettes automatisk efter 24 timer.{" "}
             <button
               type="button"
-              onClick={stop}
-              aria-label="Stop svaret"
-              className="cg-interactive flex size-[46px] flex-none items-center justify-center rounded-full bg-red text-silver transition-colors hover:bg-red/90"
+              onClick={() => void clearConversation()}
+              disabled={clearing}
+              className="cg-interactive font-semibold text-cobalt underline underline-offset-2 transition-opacity hover:opacity-80 disabled:opacity-50"
             >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
-              </svg>
+              Ryd samtale nu
             </button>
-          ) : (
-            <button
-              type="button"
-              disabled={!draft.trim()}
-              onClick={() => send()}
-              aria-label="Send besked"
-              className="cg-interactive disabled:cursor-not-allowed disabled:opacity-50 flex size-[46px] flex-none items-center justify-center rounded-full bg-cobalt text-silver transition-colors hover:bg-cobalt-light"
-            >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M4 12 L20 12 M20 12 L13 5 M20 12 L13 19"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
+          </p>
         </div>
       )}
     </div>
