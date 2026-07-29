@@ -51,7 +51,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       ) : null}
 
       {blocks.length > 0 ? (
-        <div className="flex w-full max-w-[88%] flex-col gap-2.5 [animation:cg-fade-up_0.4s_ease_both] motion-reduce:[animation:none]">
+        <div className="flex w-full max-w-[78%] flex-col gap-2.5 [animation:cg-fade-up_0.4s_ease_both] motion-reduce:[animation:none]">
           {keyedBlocks.map(({ block, key }) =>
             block.kind === "activity" ? (
               <ActivityCard key={key} activity={block.activity} />
