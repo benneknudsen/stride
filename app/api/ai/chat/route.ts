@@ -30,6 +30,7 @@ import { buildCoachTools, type CoachChatActivity } from "@/lib/ai/coach-tools";
 import { getModelCandidates, isAIConfigured } from "@/lib/ai/provider";
 import { auth } from "@/lib/auth";
 import {
+  deleteExpiredChatMessages,
   getChatHistory,
   getDashboardActivities,
   getRacePlan,
@@ -470,6 +471,11 @@ export async function POST(req: NextRequest) {
           });
         }
         await insertChatMessage({ userId, role: "assistant", content: answer });
+        // Opportunistic retention sweep (issue #229): drop this user's rows
+        // older than the window now that a fresh turn has landed. Best-effort
+        // inside the query helper — a failed sweep is captured, never thrown,
+        // so it can't break the response the user just received.
+        await deleteExpiredChatMessages(userId);
       }
 
       controller.close();

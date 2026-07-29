@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte, max } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lt, lte, max } from "drizzle-orm";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { cache } from "react";
 import {
@@ -22,6 +22,7 @@ import { db } from "./index";
  */
 const DASHBOARD_WINDOW_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CHAT_RETENTION_MS = DAY_MS;
 
 /**
  * TTL for the dashboard activities cache (issue #57) — activities rarely
@@ -424,8 +425,10 @@ export async function insertAnalysis(input: InsertAnalysisInput) {
 
 // ---------------------------------------------------------------------------
 // Chat messages (issue #74) — persisted AI coach conversation history.
-// Both functions are best-effort: a DB outage must never break the chat
-// route, so failures are swallowed and the chat degrades to stateless.
+// Reads and writes are best-effort: a DB outage must never break the chat
+// route, so failures are swallowed and the chat degrades to stateless. The
+// 24-hour retention window (issue #229) is enforced via CHAT_RETENTION_MS
+// declared above.
 // ---------------------------------------------------------------------------
 
 export async function insertChatMessage(input: {
@@ -458,7 +461,14 @@ export async function getChatHistory(
       .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
       .from(chatMessages)
       .where(
-        and(eq(chatMessages.userId, userId), inArray(chatMessages.role, ["user", "assistant"]))
+        and(
+          eq(chatMessages.userId, userId),
+          inArray(chatMessages.role, ["user", "assistant"]),
+          // Retention guarantee (issue #229): messages older than the window
+          // are never replayed to the user nor sent as model context, even if
+          // the sweep hasn't caught up with them yet.
+          gt(chatMessages.createdAt, new Date(Date.now() - CHAT_RETENTION_MS))
+        )
       )
       .orderBy(desc(chatMessages.createdAt))
       .limit(limit);
@@ -467,4 +477,53 @@ export async function getChatHistory(
     captureError("queries.getChatHistory", err);
     return [];
   }
+}
+
+/**
+ * Delete a user's chat messages older than the retention window (issue #229).
+ * Called opportunistically from the chat route after each new turn. Best-effort
+ * like the other chat-history writes — a failure is captured but never bubbles,
+ * so a sweep hiccup can't break the chat route. Returns the number of rows
+ * removed. The `chat_messages_user_created_idx` index covers this predicate.
+ */
+export async function deleteExpiredChatMessages(userId: string): Promise<number> {
+  try {
+    const cutoff = new Date(Date.now() - CHAT_RETENTION_MS);
+    const deleted = await db
+      .delete(chatMessages)
+      .where(and(eq(chatMessages.userId, userId), lt(chatMessages.createdAt, cutoff)))
+      .returning({ id: chatMessages.id });
+    return deleted.length;
+  } catch (err) {
+    captureError("queries.deleteExpiredChatMessages", err);
+    return 0;
+  }
+}
+
+/**
+ * Sweep expired chat messages across ALL users (issue #229) — the scheduled
+ * counterpart to `deleteExpiredChatMessages`, driven by the retention cron so
+ * inactive users' data is cleaned up too. Errors propagate so the cron can
+ * surface a 500 rather than silently reporting zero deletions.
+ */
+export async function deleteAllExpiredChatMessages(): Promise<number> {
+  const cutoff = new Date(Date.now() - CHAT_RETENTION_MS);
+  const deleted = await db
+    .delete(chatMessages)
+    .where(lt(chatMessages.createdAt, cutoff))
+    .returning({ id: chatMessages.id });
+  return deleted.length;
+}
+
+/**
+ * Delete every chat message a user owns (issue #229) — backs the "Ryd samtale
+ * nu" action so a user can wipe their coach history on demand. Returns the
+ * number of rows removed; errors propagate to the caller.
+ */
+export async function deleteAllChatMessages(userId: string): Promise<number> {
+  const deleted = await db
+    .delete(chatMessages)
+    .where(eq(chatMessages.userId, userId))
+    .returning({ id: chatMessages.id });
+  return deleted.length;
 }

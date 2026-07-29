@@ -32,6 +32,7 @@ vi.mock("@/lib/db/queries", () => ({
   getDashboardActivities: vi.fn().mockResolvedValue([]),
   getRacePlan: vi.fn().mockResolvedValue(null),
   insertChatMessage: insertChatMessageMock,
+  deleteExpiredChatMessages: vi.fn().mockResolvedValue(0),
 }));
 
 vi.mock("ai", async (importOriginal) => {

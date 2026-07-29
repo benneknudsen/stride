@@ -9,6 +9,10 @@ vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
 }));
 
+vi.mock("@/actions/chat", () => ({
+  clearChatHistory: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 const initialMessages = [{ id: "m1", role: "coach" as const, text: "Godmorgen!", synthetic: true }];
 
 const prompts = ["Analysér min uge", "Foreslå næste pas"];
