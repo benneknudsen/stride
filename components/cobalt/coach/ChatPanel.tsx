@@ -326,7 +326,11 @@ export function ChatPanel({
     setFailure(null);
     const result = await clearChatHistory();
     if (result.ok) {
-      setMessages(initialMessages);
+      // Reset to only the synthetic opening bubble — initialMessages contains
+      // the full server-loaded history, which would still show the wiped
+      // messages if we set it back to that.
+      const opening = initialMessages.filter((m) => m.synthetic);
+      setMessages(opening);
       setDraft("");
     }
     setClearing(false);
