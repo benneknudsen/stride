@@ -262,6 +262,12 @@ export const chatMessages = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     role: chatRoleEnum("role").notNull(),
     content: text("content").notNull(),
+    /**
+     * Persisted references to generative-UI blocks (issue #228): only activity
+     * ids are stored, then rehydrated from the current activities row on read
+     * so deleted activities never become dead links.
+     */
+    blocks: jsonb("blocks"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("chat_messages_user_created_idx").on(table.userId, table.createdAt)]
