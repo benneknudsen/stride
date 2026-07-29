@@ -20,6 +20,7 @@ const prompts = ["Analysér min uge", "Foreslå næste pas"];
 describe("ChatPanel — HTTP status error handling", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   test("strips synthetic opening turns from the /api/ai/chat request (issue #201)", async () => {
@@ -157,7 +158,7 @@ describe("ChatPanel — HTTP status error handling", () => {
         initialMessages={initialMessages}
         prompts={["Analysér min uge"]}
         visitor
-        demoReplies={{ "Analysér min uge": "Din uge ser stærk ud." }}
+        demoReplies={{ "Analysér min uge": { text: "Din uge ser stærk ud." } }}
       />
     );
 

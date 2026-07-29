@@ -16,9 +16,10 @@
 
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
 import { DEFAULT_RACE_DATE } from "@/lib/coach/engine";
+import { TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
-import { demoActivities } from "@/lib/demo/data";
+import { type DemoActivity, demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
 import { computeSnapshot } from "@/lib/training/progression-core";
 import type { ChatBlock } from "@/types/chat";
@@ -76,6 +77,18 @@ export interface LoadBar {
   accent: boolean;
 }
 
+/**
+ * A scripted visitor reply (issue #235): the answer text plus optional
+ * generative-UI blocks (clickable activity cards / workout cards) built from the
+ * same fixtures. The blocks render through the shared {@link ChatBlock} path, so
+ * MessageBubble can't tell a demo card from a live one — the visitor demo shows
+ * real interactive UI, not just prose.
+ */
+export interface DemoReply {
+  text: string;
+  blocks?: ChatBlock[];
+}
+
 export interface CoachView {
   /** Header count — "AI COACH · BASERET PÅ N TURE". */
   activityCount: number;
@@ -94,7 +107,7 @@ export interface CoachView {
    * firing a request that can only 401. Only `buildCoachView` (the demo
    * fallback) populates it; the live view leaves it undefined.
    */
-  demoReplies?: Record<string, string>;
+  demoReplies?: Record<string, DemoReply>;
   /** "Ugens fokus" — the week's headline recommendation (serif quote). */
   focusQuote: string;
   form: {
@@ -178,15 +191,43 @@ function weeksToRace(now: Date, raceDate: Date = DEFAULT_RACE_DATE): number {
   return Math.max(0, Math.round((raceDate.getTime() - now.getTime()) / (7 * DAY_MS)));
 }
 
-/** Longest run within the last `days`, or null when the window is empty. */
-function longestInWindow(activities: CoachActivityLike[], now: Date, days: number) {
+/** Longest run within the last `days`, or null when the window is empty.
+ *  Generic so it preserves the caller's row type — passed `demoActivities` it
+ *  returns a full {@link DemoActivity} whose `id`/`type`/`movingTime` the chat
+ *  ActivityCard block needs (issue #235). */
+function longestInWindow<T extends CoachLoadActivityLike>(
+  activities: T[],
+  now: Date,
+  days: number
+): T | null {
   const from = now.getTime() - days * DAY_MS;
-  let best: CoachActivityLike | null = null;
+  let best: T | null = null;
   for (const a of activities) {
     if (ensureDate(a.startDate).getTime() < from) continue;
     if (!best || a.distance > best.distance) best = a;
   }
   return best;
+}
+
+/**
+ * A demo fixture as a clickable chat ActivityCard block (issue #235). The
+ * `ChatActivity` shape is exactly what the live `/api/ai/chat` route emits from
+ * `getRecentActivities`, so the same MessageBubble/ActivityCard renders it and
+ * the card links to the activity's detail page — every number comes off the
+ * fixture, never hardcoded.
+ */
+function activityBlock(activity: DemoActivity): ChatBlock {
+  return {
+    kind: "activity",
+    activity: {
+      id: activity.id,
+      type: activity.type,
+      startDate: activity.startDate.toISOString(),
+      distance: activity.distance,
+      movingTime: activity.movingTime,
+      averageHeartrate: activity.averageHeartrate,
+    },
+  };
 }
 
 // ── Training load (shared by demo + live) ───────────────────────────────────
@@ -335,11 +376,37 @@ export function buildCoachView(now: Date = new Date(), userName?: string): Coach
   // Scripted answers for a signed-out visitor's chip taps (issue #203) — each
   // derived from the same fixtures the opener and dashboards read, so a demo
   // reply never contradicts what's on screen. Keyed by the exact chip labels.
-  const demoReplies: Record<string, string> = {
-    [COACH_PROMPTS[0]]: `${hrTrendLine} Din længste tur den seneste uge var ${longRunKm} km i snit ${longRunPace} /km med puls ${longRunHr}. Samlet ser ugen konsistent ud — god balance mellem rolige og hårde pas.`,
-    [COACH_PROMPTS[1]]:
-      "Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
-    [COACH_PROMPTS[2]]: `Din readiness ligger på ${pct}% — ${note.toLowerCase()}. Der er ${raceWeeks} uger til dit race, og formen udvikler sig planmæssigt. Hold fokus på de lange ture, så er du klar.`,
+  const demoReplies: Record<string, DemoReply> = {
+    // "Analysér min uge" — the week read, plus the actual long run as a clickable
+    // card so the card's numbers reinforce the text instead of just repeating it.
+    [COACH_PROMPTS[0]]: {
+      text: `${hrTrendLine} Din længste tur den seneste uge var ${longRunKm} km i snit ${longRunPace} /km med puls ${longRunHr}. Samlet ser ugen konsistent ud — god balance mellem rolige og hårde pas.`,
+      blocks: [activityBlock(longRun)],
+    },
+    // "Foreslå næste pas" — the same 10 km progressive session the opener and the
+    // focus card name, rendered as the workout card the live route would emit.
+    [COACH_PROMPTS[1]]: {
+      text: "Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
+      blocks: [
+        {
+          kind: "workout",
+          workout: {
+            type: "tempo",
+            distanceKm: 10,
+            paceRange: { min: "4:25", max: "5:20" },
+            heartRateCap: TEMPO_HR_CAP_BPM,
+            shoe: "adios-pro-4",
+            reason: [
+              "Progressiv 10 km — start 5:20, slut 4:25.",
+              "Bygger tempo-tolerance uden at koste restitutionen.",
+            ],
+          },
+        },
+      ],
+    },
+    [COACH_PROMPTS[2]]: {
+      text: `Din readiness ligger på ${pct}% — ${note.toLowerCase()}. Der er ${raceWeeks} uger til dit race, og formen udvikler sig planmæssigt. Hold fokus på de lange ture, så er du klar.`,
+    },
   };
 
   return {
