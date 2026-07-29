@@ -2,9 +2,10 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import * as Sentry from "@sentry/nextjs";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { clearChatHistory } from "@/actions/chat";
 import { MessageBubble } from "@/components/cobalt/coach/MessageBubble";
+import { useKeyboardOpen, useVisualViewport } from "@/hooks/useVisualViewport";
 import type { ChatMessage, CoachView } from "@/lib/cobalt/coach";
 import { ROUTES } from "@/lib/routes";
 import type { ChatMessage as ApiChatMessage, ChatBlock, ChatReply } from "@/types/chat";
@@ -27,6 +28,16 @@ function formatRetryAfter(seconds: number | undefined): string {
 
 /** Scroll-to-bottom threshold: auto-scroll only when this close to the bottom. */
 const SCROLL_THRESHOLD_PX = 80;
+
+/** Below Tailwind's `lg` the panel height follows the visual viewport (the mobile
+ *  keyboard fix); at/above it the CSS `dvh` clamp stays in charge (issue #226). */
+const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
+/** Breathing room under the panel when the keyboard is open — the bottom tab bar
+ *  is folded away then, so only a little gap is needed above the keyboard. */
+const KEYBOARD_BOTTOM_GAP_PX = 16;
+/** Desktop `min-h` floor, clamped to the available height on mobile so a short
+ *  keyboard viewport can't push the composer back under the keyboard (#226). */
+const PANEL_MIN_HEIGHT_PX = 220;
 
 /** The question the visitor autoplay demo plays once (issue #235). Must be a key
  *  in `demoReplies` so the reply (text + a clickable ActivityCard) exists. */
@@ -74,6 +85,10 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const failureRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const { height: viewportHeight, offsetTop: viewportOffsetTop } = useVisualViewport();
+  const keyboardOpen = useKeyboardOpen();
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
 
   // Abort an in-flight stream when the panel unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -95,6 +110,41 @@ export function ChatPanel({
     const el = scrollRef.current;
     if (el && isNearBottom(el)) el.scrollTop = el.scrollHeight;
   }, [messages, typing, failure]);
+
+  // Mobile keyboard fix (issue #226): when a field is focused the on-screen
+  // keyboard eats the bottom of the viewport, and the panel's `dvh` clamp both
+  // over- and under-shoots. Drive the height off the *visual* viewport instead so
+  // the composer settles just above the keyboard; keep the latest message in view
+  // if the user was already at the bottom. Desktop (lg+) keeps the CSS clamp, and
+  // with the keyboard closed the empty inline style hands the clamp back too.
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el || !keyboardOpen || viewportHeight == null) {
+      setPanelStyle({});
+      return;
+    }
+    if (window.matchMedia?.(DESKTOP_MEDIA_QUERY).matches) {
+      setPanelStyle({});
+      return;
+    }
+    // Distance from the panel's top down to the bottom of the visible region.
+    const top = el.getBoundingClientRect().top;
+    const available = Math.max(
+      viewportOffsetTop + viewportHeight - top - KEYBOARD_BOTTOM_GAP_PX,
+      0
+    );
+    const stickToBottom = scrollRef.current ? isNearBottom(scrollRef.current) : false;
+    setPanelStyle({
+      maxHeight: `${available}px`,
+      minHeight: `${Math.min(PANEL_MIN_HEIGHT_PX, available)}px`,
+    });
+    if (stickToBottom) {
+      requestAnimationFrame(() => {
+        const s = scrollRef.current;
+        if (s) s.scrollTop = s.scrollHeight;
+      });
+    }
+  }, [keyboardOpen, viewportHeight, viewportOffsetTop]);
 
   // Visitor autoplay (issue #235): the demo chat is otherwise silent until a chip
   // is tapped, so a visitor might never see a coach turn carrying real
@@ -422,7 +472,11 @@ export function ChatPanel({
   // engages and old messages become unreachable (#97). On small viewports the
   // height is clamped so the composer stays visible without page scrolling.
   return (
-    <div className="cg-glass flex max-h-[calc(100dvh-260px)] min-h-[220px] flex-col rounded-widget [animation:cg-fade-up_0.6s_0.08s_ease_both] motion-reduce:[animation:none] lg:max-h-[calc(100dvh-320px)]">
+    <div
+      ref={wrapperRef}
+      style={panelStyle}
+      className="cg-glass flex max-h-[calc(100dvh-260px)] min-h-[220px] flex-col rounded-widget [animation:cg-fade-up_0.6s_0.08s_ease_both] motion-reduce:[animation:none] lg:max-h-[calc(100dvh-320px)]"
+    >
       {visitor ? (
         // Signed-out demo (issue #235): mark the whole panel as an example so the
         // scripted opener, the autoplayed exchange and the chip replies never read

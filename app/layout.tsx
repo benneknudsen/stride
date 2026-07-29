@@ -42,8 +42,12 @@ export const metadata: Metadata = {
 // viewport-fit=cover lets the Cobalt Glass mobile shell read the iOS safe-area
 // insets (env(safe-area-inset-*)) so the topbar clears the status bar and the
 // floating tab bar clears the home indicator.
+// interactiveWidget=resizes-content tells Android Chrome to resize the layout
+// viewport when the keyboard opens, so `dvh` and fixed elements settle above it
+// (issue #226). iOS Safari ignores it — there the visualViewport hook is the fix.
 export const viewport: Viewport = {
   viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 /**
