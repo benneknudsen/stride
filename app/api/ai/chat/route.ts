@@ -39,7 +39,7 @@ import {
 import { demoActivities } from "@/lib/demo/data";
 import { captureError } from "@/lib/observability";
 import { rateLimit } from "@/lib/rate-limit";
-import type { ChatReply } from "@/types/chat";
+import type { ChatBlockReference, ChatReply } from "@/types/chat";
 
 export const runtime = "nodejs";
 // Tool loop (up to MAX_STEPS model round-trips) needs more headroom than the
@@ -339,8 +339,16 @@ export async function POST(req: NextRequest) {
       let activeAbortController: AbortController | null = null;
       let budgetExceeded = false;
 
+      // Persistable block references collected from emitted activity cards.
+      // Workout blocks are intentionally omitted — they are time-sensitive and
+      // would be stale if replayed from history (issue #228).
+      const blocks: ChatBlockReference[] = [];
+
       const emit = (reply: ChatReply) => {
         controller.enqueue(encoder.encode(`${JSON.stringify(reply)}\n`));
+        if (reply.type === "block" && reply.block.kind === "activity") {
+          blocks.push({ kind: "activity", id: reply.block.activity.id });
+        }
       };
 
       const budgetTimer = setTimeout(() => {
@@ -461,6 +469,8 @@ export async function POST(req: NextRequest) {
 
       // Persist only complete model answers. Scripted floors and truncated
       // answers stay out of history so retried questions don't duplicate.
+      // Activity blocks are stored as references and rehydrated on read
+      // (issue #228); workout blocks are omitted because they go stale.
       if (answer.length > 0 && !isTruncated && !latestAlreadyInHistory) {
         if (latest?.role === "user") {
           await insertChatMessage({
@@ -470,7 +480,12 @@ export async function POST(req: NextRequest) {
             content: latest.content,
           });
         }
-        await insertChatMessage({ userId, role: "assistant", content: answer });
+        await insertChatMessage({
+          userId,
+          role: "assistant",
+          content: answer,
+          blocks: blocks.length > 0 ? blocks : undefined,
+        });
         // Opportunistic retention sweep (issue #229): drop this user's rows
         // older than the window now that a fresh turn has landed. Best-effort
         // inside the query helper — a failed sweep is captured, never thrown,

@@ -278,6 +278,47 @@ describe("buildLiveCoachView with persisted chat history (issue #202 + #205)", (
     expect(view.initialMessages).toHaveLength(1);
     expect(view.initialMessages[0].synthetic).toBe(true);
   });
+
+  it("replays rehydrated activity blocks on persisted assistant turns (issue #228)", () => {
+    const history = [
+      { id: "h-user-1", role: "user" as const, content: "Hvad var mit seneste løb?" },
+      {
+        id: "h-assistant-1",
+        role: "assistant" as const,
+        content: "Her er turen.",
+        blocks: [
+          {
+            kind: "activity" as const,
+            activity: {
+              id: "act-42",
+              type: "Run",
+              startDate: "2026-07-25T06:00:00.000Z",
+              distance: 8000,
+              movingTime: 2400,
+              averageHeartrate: 148,
+            },
+          },
+        ],
+      },
+    ];
+
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.0 }),
+      liveActivities,
+      NOW,
+      undefined,
+      history
+    );
+
+    expect(view.initialMessages).toHaveLength(2);
+    expect(view.initialMessages[1]).toMatchObject({
+      role: "coach",
+      text: "Her er turen.",
+      clientId: "h-assistant-1",
+    });
+    expect(view.initialMessages[1].blocks).toHaveLength(1);
+    expect(view.initialMessages[1].blocks?.[0].kind).toBe("activity");
+  });
 });
 
 // Production regression (issue #194): live activities come from Neon with
