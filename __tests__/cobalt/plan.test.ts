@@ -235,15 +235,20 @@ describe("buildPlanView — data-driven week (issue #115)", () => {
     // Wednesday is the peak block's tempo day, Sunday its long run.
     expect(SESSIONS[2].type).toBe("tempo");
     expect(SESSIONS[6].type).toBe("long");
-    expect(view.days[2].name).toBe("Tempo");
+    // `now` is Thursday, so Wednesday's tempo is behind us with no run logged: it
+    // reads as missed, and the quality session is rescued onto a later run day
+    // rather than silently dropped (issue #211).
+    expect(view.days[2].kind).toBe("missed");
+    expect(view.days.some((day) => day.name === "Tempo")).toBe(true);
     expect(view.days[6].name).toBe("Lang tur");
   });
 
   it("derives every pace target from the race predictor — no template text survives", () => {
     const view = live();
-    // Thursday's `now`, so Wednesday's tempo and Sunday's long run are both
+    // Thursday's `now`: the rescued tempo and Sunday's long run are both
     // prescriptions, not results.
-    expect(view.days[2].meta).toBe(`MÅL ${formatPaceRange(PACES.tempo)}`);
+    const tempo = view.days.find((day) => day.name === "Tempo");
+    expect(tempo?.meta).toBe(`MÅL ${formatPaceRange(PACES.tempo)}`);
     expect(view.days[6].meta).toBe(`MÅL ${formatPaceRange(PACES.long)}`);
     // None of the template's hardcoded paces can appear.
     const metas = view.days.map((day) => day.meta).join(" ");
@@ -317,8 +322,9 @@ describe("buildPlanView — data-driven week (issue #115)", () => {
       return h * 3600 + m * 60;
     };
     expect(seconds(withHrMax.race.aiEstimate)).toBeGreaterThan(seconds(observed.race.aiEstimate));
-    // Cautious end to end: the pace targets move with the prediction.
-    expect(withHrMax.days[2].meta).not.toBe(observed.days[2].meta);
+    // Cautious end to end: the pace targets move with the prediction. Sunday's
+    // long run is prescribed in both views, so its target is a stable probe.
+    expect(withHrMax.days[6].meta).not.toBe(observed.days[6].meta);
   });
 });
 
@@ -417,5 +423,123 @@ describe("buildPlanView — race card & states", () => {
     expect(view.race.name).toBe(DEFAULT_RACE_NAME);
     expect(view.totalWeeks).toBe(planTotalWeeks());
     expect(view.racePassed).toBe(false);
+  });
+});
+
+describe("buildPlanView — dynamic week (issue #211)", () => {
+  // Adapt is the simplest block for the neighbour rules: four easy run days,
+  // Monday/Wednesday/Friday/Sunday, no tempo or long run to muddy the picture.
+  const ADAPT_MONDAY = (() => {
+    const mid = midOf("adapt");
+    return addDays(mid, -((mid.getDay() + 6) % 7));
+  })();
+
+  function run(
+    daysFromMonday: number,
+    km: number,
+    paceSecPerKm: number,
+    hr: number
+  ): HomeActivityLike {
+    const startDate = addDays(ADAPT_MONDAY, daysFromMonday);
+    startDate.setHours(7, 30, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysFromMonday}-${km}`,
+      name: `Tur ${daysFromMonday}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: hr,
+      averageCadence: 88,
+      totalElevationGain: 15,
+    };
+  }
+
+  // Prior-week runs that anchor a prediction — a hard 10 km plus a steady base.
+  // None fall inside the current training week, so this week starts empty.
+  const HISTORY: HomeActivityLike[] = [
+    run(-6, 10, 270, 168),
+    run(-8, 16, 330, 150),
+    run(-10, 8, 345, 138),
+    run(-13, 9, 340, 142),
+    run(-15, 14, 335, 148),
+    run(-20, 10, 335, 144),
+    run(-27, 8, 345, 138),
+    run(-31, 15, 335, 150),
+    run(-40, 10, 340, 142),
+  ];
+
+  const WEDNESDAY = addDays(ADAPT_MONDAY, 2);
+
+  it("(a) shows a past run day with no activity as missed, not pending", () => {
+    const view = buildPlanView(HISTORY, WEDNESDAY, RACE, RACE_NAME, true);
+    expect(view.dataDriven).toBe(true);
+    // Monday was a prescribed easy run; nothing was logged and it's behind us.
+    expect(view.days[0].kind).toBe("missed");
+    expect(view.days[0].name).toBe("Ikke gennemført");
+    expect(view.days[0].meta).toBeUndefined();
+    expect(view.days[0].distance).toBeUndefined();
+  });
+
+  it("(a) drops missed volume from weekPlannedKm and adjusts the remaining days", () => {
+    const missedView = buildPlanView(HISTORY, WEDNESDAY, RACE, RACE_NAME, true);
+    // The same week with Monday actually run — nothing missed.
+    const doneView = buildPlanView(
+      [...HISTORY, run(0, 7, 340, 138)],
+      WEDNESDAY,
+      RACE,
+      RACE_NAME,
+      true
+    );
+    expect(missedView.days[0].kind).toBe("missed");
+    expect(doneView.days[0].kind).toBe("done");
+    // The adjusted plan asks less of the week than the untouched skeleton would.
+    expect(missedView.weekPlannedKm).toBeLessThan(doneView.weekPlannedKm);
+  });
+
+  it("(b) treats an unplanned hard run yesterday as a hard day — lighter today", () => {
+    const withoutHard = buildPlanView(HISTORY, WEDNESDAY, RACE, RACE_NAME, true);
+    // A fast, unplanned run on Tuesday (a planned rest day).
+    const hardTuesday = run(1, 10, 230, 178);
+    const withHard = buildPlanView([...HISTORY, hardTuesday], WEDNESDAY, RACE, RACE_NAME, true);
+
+    // Wednesday is an ordinary easy day when nothing hard preceded it…
+    expect(withoutHard.days[2].name).toBe("Rolig tur");
+    // …but a recovery jog once Tuesday's hard effort is on the books.
+    expect(withHard.days[1].kind).toBe("done");
+    expect(withHard.days[2].name).toBe("Recovery Jog");
+  });
+
+  it("(c) merges two runs logged on the same day into one completed card", () => {
+    const view = buildPlanView(
+      [...HISTORY, run(0, 5, 340, 135), run(0, 4, 320, 150)],
+      WEDNESDAY,
+      RACE,
+      RACE_NAME,
+      true
+    );
+    expect(view.days[0].kind).toBe("done");
+    expect(view.days[0].name).toBe("2 ture");
+    expect(view.days[0].distance).toBe("9,0 km");
+  });
+
+  it("rescues a missed tempo onto a remaining run day instead of dropping it", () => {
+    // Peak has a Wednesday tempo; on Thursday it's behind us with no run logged.
+    const peakMid = midOf("peak");
+    const peakMonday = addDays(peakMid, -((peakMid.getDay() + 6) % 7));
+    const thursday = addDays(peakMonday, 3);
+    const peakHistory: HomeActivityLike[] = HISTORY.map((activity, i) => {
+      const startDate = addDays(peakMonday, -6 - i * 3);
+      startDate.setHours(7, 30, 0, 0);
+      return { ...activity, id: `peak-${i}`, startDate };
+    });
+
+    const view = buildPlanView(peakHistory, thursday, RACE, RACE_NAME, true);
+    expect(view.dataDriven).toBe(true);
+    expect(view.days[2].kind).toBe("missed"); // Wednesday's tempo, unrun
+    expect(view.days.some((day) => day.name === "Tempo")).toBe(true); // rescued
   });
 });
