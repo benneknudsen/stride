@@ -54,7 +54,7 @@ export function ActivityCard({ activity }: { activity: ChatActivity }) {
       href={activityRoute(activity.id)}
       className="cg-interactive cg-glass block rounded-[14px] px-4 py-3 transition-colors hover:bg-white/[0.58]"
     >
-      <div className="flex items-center gap-3.5">
+      <div className="flex items-center gap-3">
         <div
           className="flex size-9 flex-none items-center justify-center rounded-full bg-cobalt/10 text-cobalt"
           aria-hidden="true"
@@ -67,23 +67,23 @@ export function ActivityCard({ activity }: { activity: ChatActivity }) {
           {date ? <div className="mt-0.5 text-[12px] text-ink">{date}</div> : null}
         </div>
 
-        <div className="flex flex-none items-baseline gap-3.5 font-cg-mono">
-          <div className="text-right">
+        <div className="grid flex-none auto-cols-[2.5rem] grid-flow-col items-end gap-2.5 text-right font-cg-mono">
+          <div>
             <div className="text-[15px] font-bold tracking-[-0.02em] text-cobalt">
               {formatDanish(km, 1)}
             </div>
             <div className="text-[10px] text-ink">km</div>
           </div>
-          <div className="text-right">
+          <div>
             <div className="text-[15px] font-bold tracking-[-0.02em] text-cobalt">{pace}</div>
             <div className="text-[10px] text-ink">/km</div>
           </div>
           {hr !== null ? (
-            <div className="flex items-center gap-1 text-right text-cobalt">
-              <HeartPulse size={13} strokeWidth={2} className="text-red" aria-hidden="true" />
-              <div>
-                <div className="text-[15px] font-bold tracking-[-0.02em]">{hr}</div>
-                <div className="text-[10px] text-ink">bpm</div>
+            <div>
+              <div className="text-[15px] font-bold tracking-[-0.02em] text-cobalt">{hr}</div>
+              <div className="flex items-center justify-end gap-0.5 text-[10px] text-ink">
+                <HeartPulse size={10} strokeWidth={2} className="text-red" aria-hidden="true" />
+                bpm
               </div>
             </div>
           ) : null}
