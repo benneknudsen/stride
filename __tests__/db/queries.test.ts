@@ -18,6 +18,22 @@ const mock = vi.hoisted(() => {
   const calls: Record<string, Any[][]> = {};
   let result: Any = [];
   let rejection: Any = null;
+  /** Queue of results returned in order for multi-query tests. */
+  let resultQueue: Any[] = [];
+
+  const nextOutcome = (): { type: "resolve"; value: Any } | { type: "reject"; error: Any } => {
+    if (resultQueue.length > 0) {
+      const value = resultQueue.shift();
+      if (value instanceof Error) {
+        return { type: "reject", error: value };
+      }
+      return { type: "resolve", value };
+    }
+    if (rejection) {
+      return { type: "reject", error: rejection };
+    }
+    return { type: "resolve", value: result };
+  };
 
   const record = (name: string, args: Any[]) => {
     if (!calls[name]) {
@@ -30,11 +46,12 @@ const mock = vi.hoisted(() => {
   // returns the builder; `then` resolves/rejects with the configured outcome.
   const builder: Any = {
     // biome-ignore lint/suspicious/noThenProperty: an intentional thenable that stubs Drizzle's awaitable query builder
-    then: (onFulfilled: Any, onRejected: Any) =>
-      (rejection ? Promise.reject(rejection) : Promise.resolve(result)).then(
-        onFulfilled,
-        onRejected
-      ),
+    then: (onFulfilled: Any, onRejected: Any) => {
+      const outcome = nextOutcome();
+      return (
+        outcome.type === "reject" ? Promise.reject(outcome.error) : Promise.resolve(outcome.value)
+      ).then(onFulfilled, onRejected);
+    },
   };
   for (const m of [
     "from",
@@ -77,10 +94,18 @@ const mock = vi.hoisted(() => {
     setResult(r: Any) {
       result = r;
       rejection = null;
+      resultQueue = [];
     },
     /** Make the next awaited query reject with `e`. */
     setError(e: Any) {
       rejection = e;
+      resultQueue = [];
+    },
+    /** Make the next awaited queries resolve to each result in order. */
+    setNextResults(...results: Any[]) {
+      resultQueue = results;
+      result = [];
+      rejection = null;
     },
     reset() {
       for (const k of Object.keys(calls)) {
@@ -88,6 +113,7 @@ const mock = vi.hoisted(() => {
       }
       result = [];
       rejection = null;
+      resultQueue = [];
       select.mockClear();
       insert.mockClear();
       update.mockClear();
@@ -593,6 +619,17 @@ describe("insertChatMessage", () => {
     mock.setError(DB_ERROR);
     await expect(insertChatMessage(input)).resolves.toBeUndefined();
   });
+
+  it("persists activity-block references alongside assistant turns (issue #228)", async () => {
+    mock.setResult([]);
+    const withBlocks = {
+      ...input,
+      role: "assistant" as const,
+      blocks: [{ kind: "activity" as const, id: "act-42" }],
+    };
+    await expect(insertChatMessage(withBlocks)).resolves.toBeUndefined();
+    expect(mock.calls.values?.[0]?.[0]).toEqual(withBlocks);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -627,5 +664,100 @@ describe("getChatHistory", () => {
   it("returns an empty array when the query throws", async () => {
     mock.setError(DB_ERROR);
     expect(await getChatHistory("u1")).toEqual([]);
+  });
+
+  it("rehydrates persisted activity references into ChatBlock cards (issue #228)", async () => {
+    mock.setNextResults(
+      [
+        {
+          id: "msg-2",
+          role: "assistant",
+          content: "Her er turen.",
+          blocks: [{ kind: "activity", id: "act-42" }],
+        },
+      ],
+      [
+        {
+          id: "act-42",
+          type: "Run",
+          startDate: "2026-07-25T06:00:00.000Z",
+          distance: 8000,
+          movingTime: 2400,
+          averageHeartrate: 148,
+        },
+      ]
+    );
+
+    const history = await getChatHistory("u1");
+
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      id: "msg-2",
+      role: "assistant",
+      content: "Her er turen.",
+    });
+    expect(history[0].blocks).toHaveLength(1);
+    expect(history[0].blocks?.[0]).toEqual({
+      kind: "activity",
+      activity: {
+        id: "act-42",
+        type: "Run",
+        startDate: "2026-07-25T06:00:00.000Z",
+        distance: 8000,
+        movingTime: 2400,
+        averageHeartrate: 148,
+      },
+    });
+  });
+
+  it("omits activity blocks for deleted activities so there is no dead link (issue #228)", async () => {
+    mock.setNextResults(
+      [
+        {
+          id: "msg-2",
+          role: "assistant",
+          content: "Her er turen.",
+          blocks: [{ kind: "activity", id: "deleted-1" }],
+        },
+      ],
+      []
+    );
+
+    const history = await getChatHistory("u1");
+
+    expect(history).toEqual([{ id: "msg-2", role: "assistant", content: "Her er turen." }]);
+  });
+
+  it("falls back to plain text when the rehydration lookup fails (issue #228)", async () => {
+    mock.setNextResults(
+      [
+        {
+          id: "msg-2",
+          role: "assistant",
+          content: "Her er turen.",
+          blocks: [{ kind: "activity", id: "act-42" }],
+        },
+      ],
+      DB_ERROR
+    );
+
+    const history = await getChatHistory("u1");
+
+    expect(history).toEqual([{ id: "msg-2", role: "assistant", content: "Her er turen." }]);
+  });
+
+  it("ignores malformed blocks JSON and returns the text turn (issue #228)", async () => {
+    mock.setResult([
+      {
+        id: "msg-2",
+        role: "assistant",
+        content: "Her er turen.",
+        blocks: { notAnArray: true },
+      },
+    ]);
+
+    const history = await getChatHistory("u1");
+
+    expect(history).toEqual([{ id: "msg-2", role: "assistant", content: "Her er turen." }]);
   });
 });

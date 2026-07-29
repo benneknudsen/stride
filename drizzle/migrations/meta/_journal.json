@@ -50,6 +50,13 @@
       "when": 1784920396964,
       "tag": "0006_chemical_johnny_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785311080997,
+      "tag": "0007_brown_nightmare",
+      "breakpoints": true
     }
   ]
 }

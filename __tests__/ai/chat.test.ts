@@ -318,6 +318,15 @@ describe("POST /api/ai/chat", () => {
       .map((r) => r.content)
       .join("");
     expect(text).toBe("Din seneste tur var stærk.");
+    // Persisted as a lightweight reference so the card is rehydrated on replay
+    // and stays in sync with the current activity row (issue #228).
+    expect(insertChatMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        role: "assistant",
+        blocks: [{ kind: "activity", id: "act-42" }],
+      })
+    );
   });
 
   it("emits a workout block from a recommendWorkout tool result (#221)", async () => {
@@ -360,6 +369,15 @@ describe("POST /api/ai/chat", () => {
         reason: ["Tempo-tolerance", "Restitution ok"],
       },
     });
+    // Workout recommendations are time-sensitive and intentionally not persisted
+    // so a replayed turn does not present stale advice as current (issue #228).
+    expect(insertChatMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        role: "assistant",
+        blocks: undefined,
+      })
+    );
   });
 
   it("skips a block when the tool output fails validation (no fabrication) (#221)", async () => {

@@ -336,6 +336,11 @@ export function ChatPanel({
     setClearing(false);
   };
 
+  // After "Ryd samtale nu" (issue #232) only the synthetic opening bubble
+  // remains. Show a centred placeholder so the wrapper never reads as an empty,
+  // collapsed panel; it disappears the moment a real turn is appended.
+  const hasRealMessages = messages.some((m) => !m.synthetic);
+
   // The panel needs a bounded height, or it grows with the transcript and the
   // scroll container inside it never overflows — so `overflow-y-auto` never
   // engages and old messages become unreachable (#97). On small viewports the
@@ -353,6 +358,14 @@ export function ChatPanel({
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
+
+        {!hasRealMessages && !typing && !failure ? (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="text-center text-[14px] text-ink/60">
+              Din samtale er nulstillet. Stil et nyt spørgsmål nedenfor.
+            </p>
+          </div>
+        ) : null}
 
         {typing ? (
           <div className="flex justify-start" role="status" aria-label="Coachen skriver">
