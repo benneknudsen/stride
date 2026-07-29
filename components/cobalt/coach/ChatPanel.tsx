@@ -2,7 +2,7 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import * as Sentry from "@sentry/nextjs";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { clearChatHistory } from "@/actions/chat";
 import { MessageBubble } from "@/components/cobalt/coach/MessageBubble";
 import { useKeyboardOpen, useVisualViewport } from "@/hooks/useVisualViewport";
@@ -83,6 +83,12 @@ export function ChatPanel({
   const [failure, setFailure] = useState<ChatFailure | null>(null);
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Auto-scroll intent, tracked by user action instead of by measuring the DOM
+  // after commit (issue #234). Starts pinned; a real user scroll away from the
+  // bottom releases it, scrolling back re-pins it. `programmaticScrollRef` masks
+  // the scroll events our own `scrollTop` writes fire, so they never flip intent.
+  const stickToBottomRef = useRef(true);
+  const programmaticScrollRef = useRef(false);
   const failureRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -98,17 +104,40 @@ export function ChatPanel({
     if (failure) failureRef.current?.focus();
   }, [failure]);
 
-  // Scroll to the bottom on first render, then only when the user is already
-  // near the bottom — never rip them back up while reading older messages.
+  // Scroll to the bottom on first render; the panel starts pinned.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing/failure are the scroll triggers, not read in the body
+  // Track scroll intent from *real* user scrolls only. Measuring near-bottom
+  // here — before any new content is committed — is reliable, unlike measuring
+  // it in the post-commit scroll effect where tall new content already inflated
+  // `scrollHeight` (issue #234). Programmatic scrolls we trigger are masked.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el && isNearBottom(el)) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const handleScroll = () => {
+      if (!programmaticScrollRef.current) {
+        stickToBottomRef.current = isNearBottom(el);
+      }
+      programmaticScrollRef.current = false;
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Keep the newest content in view on every message/typing/failure change —
+  // including every streaming fragment — but only while pinned, so a user who
+  // scrolled up to read history is never dragged back down. `useLayoutEffect`
+  // sets the position before paint, avoiding a visible jump (issue #234).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages/typing/failure are the scroll triggers, not read in the body
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickToBottomRef.current) {
+      programmaticScrollRef.current = true;
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages, typing, failure]);
 
   // Mobile keyboard fix (issue #226): when a field is focused the on-screen
@@ -133,15 +162,17 @@ export function ChatPanel({
       viewportOffsetTop + viewportHeight - top - KEYBOARD_BOTTOM_GAP_PX,
       0
     );
-    const stickToBottom = scrollRef.current ? isNearBottom(scrollRef.current) : false;
     setPanelStyle({
       maxHeight: `${available}px`,
       minHeight: `${Math.min(PANEL_MIN_HEIGHT_PX, available)}px`,
     });
-    if (stickToBottom) {
+    if (stickToBottomRef.current) {
       requestAnimationFrame(() => {
         const s = scrollRef.current;
-        if (s) s.scrollTop = s.scrollHeight;
+        if (s) {
+          programmaticScrollRef.current = true;
+          s.scrollTop = s.scrollHeight;
+        }
       });
     }
   }, [keyboardOpen, viewportHeight, viewportOffsetTop]);
@@ -168,6 +199,7 @@ export function ChatPanel({
     const play = () => {
       if (autoplayedRef.current) return;
       autoplayedRef.current = true;
+      stickToBottomRef.current = true;
       idRef.current += 1;
       const userTurn: ChatMessage = {
         id: `u${idRef.current}`,
@@ -394,6 +426,9 @@ export function ChatPanel({
   const send = (raw?: string) => {
     const text = (raw ?? draft).trim();
     if (!text || streaming) return;
+    // Sending is an explicit intent to follow the conversation — re-pin so the
+    // sent bubble and the streamed reply stay in view (issue #234).
+    stickToBottomRef.current = true;
     const clientId = createId();
     idRef.current += 1;
     const next: ChatMessage[] = [
@@ -411,6 +446,7 @@ export function ChatPanel({
   const sendDemo = (prompt: string) => {
     const reply = demoReplies?.[prompt];
     if (!reply) return;
+    stickToBottomRef.current = true;
     idRef.current += 1;
     const userTurn: ChatMessage = { id: `u${idRef.current}`, role: "user", text: prompt };
     idRef.current += 1;
@@ -428,6 +464,7 @@ export function ChatPanel({
   // was already persisted (issue #205).
   const retry = () => {
     if (streaming) return;
+    stickToBottomRef.current = true;
     void streamReply(messages);
   };
 
