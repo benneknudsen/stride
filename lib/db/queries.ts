@@ -9,6 +9,8 @@ import {
   stravaTokens,
   users,
 } from "../../drizzle/schema";
+import type { ChatBlock, ChatBlockReference } from "../../types/chat";
+import { chatBlockReferenceSchema } from "../../types/chat";
 import type { AnalysisScope, HrZone } from "../../types/domain";
 import { captureError } from "../observability";
 import { ensureDate, fromDbDate, toDbDate } from "./calendar-date";
@@ -436,6 +438,9 @@ export async function insertChatMessage(input: {
   userId: string;
   role: "user" | "assistant";
   content: string;
+  /** Persisted activity-block references (issue #228). Best-effort: a failed
+   *  insert is swallowed so the chat reply still reaches the user. */
+  blocks?: ChatBlockReference[];
 }): Promise<void> {
   try {
     await db.insert(chatMessages).values(input);
@@ -451,14 +456,30 @@ export async function insertChatMessage(input: {
  * prepended to the model context. System rows are excluded — the route owns
  * its own system prompt. The row `id` is returned so retries can be
  * deduplicated by client-provided id (issue #205).
+ *
+ * Assistant rows may carry `blocks`: generative-UI activity cards are persisted
+ * as lightweight references and rehydrated from the current activity rows on
+ * read, so a deleted activity never becomes a dead card (issue #228).
  */
+type ChatHistoryRow = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  blocks: unknown | null;
+};
+
 export async function getChatHistory(
   userId: string,
   limit: number = 50
-): Promise<{ id: string; role: "user" | "assistant"; content: string }[]> {
+): Promise<{ id: string; role: "user" | "assistant"; content: string; blocks?: ChatBlock[] }[]> {
   try {
     const rows = await db
-      .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
+      .select({
+        id: chatMessages.id,
+        role: chatMessages.role,
+        content: chatMessages.content,
+        blocks: chatMessages.blocks,
+      })
       .from(chatMessages)
       .where(
         and(
@@ -472,7 +493,80 @@ export async function getChatHistory(
       )
       .orderBy(desc(chatMessages.createdAt))
       .limit(limit);
-    return rows.reverse() as { id: string; role: "user" | "assistant"; content: string }[];
+
+    const history = rows.reverse() as ChatHistoryRow[];
+
+    // Rehydrate persisted activity references from the current activities table
+    // so replayed cards always reflect the latest data and deleted activities
+    // simply drop out instead of rendering a dead link (#228).
+    const activityIds = new Set<string>();
+    const referencesByIndex = new Map<number, ChatBlockReference[]>();
+    for (const [index, row] of history.entries()) {
+      if (row.role !== "assistant" || !row.blocks) continue;
+      const parsed = chatBlockReferenceSchema.safeParse(row.blocks);
+      if (!parsed.success) continue;
+      const refs = parsed.data;
+      referencesByIndex.set(index, refs);
+      for (const ref of refs) {
+        if (ref.kind === "activity") activityIds.add(ref.id);
+      }
+    }
+
+    if (activityIds.size === 0) {
+      return history.map(({ id, role, content }) => ({ id, role, content }));
+    }
+
+    let activityRows: {
+      id: string;
+      type: string;
+      startDate: Date | string;
+      distance: number;
+      movingTime: number;
+      averageHeartrate: number | null;
+    }[] = [];
+    try {
+      activityRows = await db
+        .select({
+          id: activities.id,
+          type: activities.type,
+          startDate: activities.startDate,
+          distance: activities.distance,
+          movingTime: activities.movingTime,
+          averageHeartrate: activities.averageHeartrate,
+        })
+        .from(activities)
+        .where(and(eq(activities.userId, userId), inArray(activities.id, [...activityIds])));
+    } catch (err) {
+      // Best-effort rehydration: if the lookup fails, fall back to plain text
+      // so the chat history still loads.
+      captureError("queries.getChatHistory.rehydrate", err);
+      return history.map(({ id, role, content }) => ({ id, role, content }));
+    }
+
+    const activityById = new Map(activityRows.map((a) => [a.id, a]));
+
+    return history.map(({ id, role, content }, index) => {
+      const refs = referencesByIndex.get(index);
+      if (!refs) return { id, role, content };
+      const blocks: ChatBlock[] = [];
+      for (const ref of refs) {
+        if (ref.kind !== "activity") continue;
+        const activity = activityById.get(ref.id);
+        if (!activity) continue; // deleted activity — omit, no dead link
+        blocks.push({
+          kind: "activity",
+          activity: {
+            id: activity.id,
+            type: activity.type,
+            startDate: ensureDate(activity.startDate).toISOString(),
+            distance: activity.distance,
+            movingTime: activity.movingTime,
+            averageHeartrate: activity.averageHeartrate,
+          },
+        });
+      }
+      return blocks.length > 0 ? { id, role, content, blocks } : { id, role, content };
+    });
   } catch (err) {
     captureError("queries.getChatHistory", err);
     return [];

@@ -36,6 +36,8 @@ export interface ChatHistoryEntry {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Rehydrated generative-UI blocks for assistant turns (issue #228). */
+  blocks?: ChatBlock[];
 }
 
 export interface ChatMessage {
@@ -45,8 +47,9 @@ export interface ChatMessage {
   /**
    * Generative-UI blocks streamed alongside the text of a coach turn (issue
    * #221): clickable activity cards and workout cards, built server-side from
-   * tool output. Absent on user turns, the synthetic opener, and replayed
-   * history (only the text is persisted), so those render exactly as before.
+   * tool output. Absent on user turns and the synthetic opener; replayed
+   * history carries persisted activity references rehydrated on read (issue
+   * #228), while workout blocks are intentionally omitted because they go stale.
    */
   blocks?: ChatBlock[];
   /**
@@ -262,6 +265,7 @@ function historyMessages(history: ChatHistoryEntry[]): ChatMessage[] {
     clientId: entry.id,
     role: entry.role === "assistant" ? "coach" : "user",
     text: entry.content,
+    blocks: entry.blocks,
   }));
 }
 

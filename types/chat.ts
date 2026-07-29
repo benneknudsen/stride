@@ -13,6 +13,7 @@
  * as `{ type: "text", content }` by clients (see ChatPanel.parseLine).
  */
 
+import { z } from "zod";
 import type { WorkoutCardView } from "@/lib/coach/dashboard";
 
 export type ChatRole = "user" | "assistant";
@@ -27,6 +28,23 @@ export interface ChatMessage {
    */
   clientMessageId?: string;
 }
+
+/**
+ * A lightweight, persistable reference to a generative-UI block stored in the
+ * chat history (issue #228). Only activity references are kept: rehydrating
+ * from the current activity row keeps the card in sync with deletions/edits.
+ * Workout blocks are intentionally omitted because they are time-sensitive and
+ * would be stale on replay.
+ */
+export type ChatBlockReference = { kind: "activity"; id: string };
+
+/** Zod schema for validating a JSONB column of block references on read. */
+export const chatBlockReferenceSchema = z.array(
+  z.object({
+    kind: z.literal("activity"),
+    id: z.string(),
+  })
+);
 
 /**
  * An activity rendered as a clickable card in the coach chat (issue #221). The
