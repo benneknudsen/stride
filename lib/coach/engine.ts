@@ -355,12 +355,23 @@ export function getCurrentPhase(
 export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 
+/**
+ * How an easy Zone-2 run is shaped within the week (issue #211). The `type` stays
+ * `"easy"` — this refines it so the week reads as a varied progression rather than
+ * four identical jogs: a short `recovery` day sits after a hard effort, an
+ * `easy-strides` day carries the strides before the long run, and `easy`/`medium`
+ * alternate to give the volume a short/long wave.
+ */
+export type EasySubtype = "recovery" | "easy" | "easy-strides" | "medium";
+
 /** One day in a generated training week. Non-run days carry `type: "rest"`. */
 export interface PlannedSession {
   weekday: Weekday;
   /** Concrete calendar date — only set when `getWeekPlan` is given a week start. */
   date?: Date;
   type: SessionType;
+  /** Refines an `easy` run into recovery/easy/strides/medium (issue #211). */
+  easySubtype?: EasySubtype;
   /** Target HR zone for run days. */
   zone?: number;
   distanceKm?: number;
@@ -408,6 +419,53 @@ export function getWeekPlan(
   const tempoDay: Weekday | null = rules.hasTempoSession ? "wed" : null;
   const longDay: Weekday | null = rules.hasLongRun ? "sun" : null;
 
+  // The base kind of a run day, before easy days get their subtype (issue #211).
+  const baseType = (weekday: Weekday): SessionType => {
+    if (weekday === longDay) return "long";
+    if (weekday === tempoDay) return "tempo";
+    return "easy";
+  };
+
+  // Run days in week order, so an easy day can see the run before/after it —
+  // wrapping Sunday→Monday, since the week repeats.
+  const runIndices = WEEKDAYS.map((_, index) => index).filter((index) =>
+    runDays.includes(WEEKDAYS[index])
+  );
+
+  // Assign each easy day a subtype: recovery after a hard effort, strides before
+  // the long run, and an easy/medium/recovery wave for the rest so the volume
+  // rises and falls instead of sitting flat at the minimum.
+  const easySubtypes = new Map<number, EasySubtype>();
+  const WAVE: EasySubtype[] = ["medium", "easy", "recovery"];
+  let waveStep = 0;
+  runIndices.forEach((index, pos) => {
+    if (baseType(WEEKDAYS[index]) !== "easy") return;
+    const prev = baseType(WEEKDAYS[runIndices[(pos - 1 + runIndices.length) % runIndices.length]]);
+    const next = baseType(WEEKDAYS[runIndices[(pos + 1) % runIndices.length]]);
+    if (next === "long") {
+      easySubtypes.set(index, "easy-strides");
+    } else if (prev === "long" || prev === "tempo" || prev === "race") {
+      easySubtypes.set(index, "recovery");
+    } else {
+      easySubtypes.set(index, WAVE[waveStep % WAVE.length]);
+      waveStep++;
+    }
+  });
+
+  const midKm = roundHalf((rules.minDistanceKm + rules.maxDistanceKm) / 2);
+  const easyKm = (subtype: EasySubtype): number =>
+    subtype === "recovery"
+      ? rules.minDistanceKm
+      : subtype === "medium"
+        ? rules.maxDistanceKm
+        : midKm;
+  const easyDescription: Record<EasySubtype, string> = {
+    recovery: "Let restitution",
+    easy: "Rolig Z2",
+    medium: "Rolig Z2 (lang)",
+    "easy-strides": "Rolig + strides",
+  };
+
   return WEEKDAYS.map((weekday, index) => {
     const date = startDate ? addDays(startDate, index) : undefined;
 
@@ -434,15 +492,22 @@ export function getWeekPlan(
         description: "Tempo",
       };
     }
+    const subtype = easySubtypes.get(index) ?? "easy";
     return {
       weekday,
       date,
       type: "easy",
+      easySubtype: subtype,
       zone: 2,
-      distanceKm: rules.minDistanceKm,
-      description: "Rolig Z2",
+      distanceKm: easyKm(subtype),
+      description: easyDescription[subtype],
     };
   });
+}
+
+/** Prescribed distances sit on a half-km grid — "7,5 km", never "7,25 km". */
+function roundHalf(km: number): number {
+  return Math.round(km * 2) / 2;
 }
 
 /**

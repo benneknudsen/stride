@@ -213,6 +213,15 @@ describe("buildWeekStrip", () => {
     const strip = buildWeekStrip(allRest, BURN_WEDNESDAY);
     expect(strip.every((d) => !d.isNext)).toBe(true);
   });
+
+  it("carries the varied easy-day descriptions so the strip isn't flat (issue #211)", () => {
+    // The same engine week the /plan page derives from — the strip must show its
+    // variety, not four identical "Rolig Z2" jogs.
+    const strip = buildWeekStrip(getWeekPlan("burn", undefined, TEST_RACE_DATE), BURN_WEDNESDAY);
+    const easyDescriptions = strip.filter((d) => d.type === "easy").map((d) => d.description);
+    expect(easyDescriptions.length).toBeGreaterThan(1);
+    expect(new Set(easyDescriptions).size).toBeGreaterThan(1);
+  });
 });
 
 describe("buildCoachDashboard", () => {

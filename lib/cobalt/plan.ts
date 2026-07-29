@@ -25,7 +25,9 @@ import {
   buildPhases,
   DEFAULT_RACE_DATE,
   DEFAULT_RACE_NAME,
+  type EasySubtype,
   getCurrentPhase,
+  getPhaseRules,
   getWeekPlan,
   MAX_WEEKLY_INCREASE_RATIO,
   type PhaseKey,
@@ -105,7 +107,7 @@ export interface DayPlan {
   id: string;
   /** Weekday label, mono uppercase (e.g. "MAN", "ONS · I DAG"). */
   dow: string;
-  kind: "done" | "today" | "ai" | "rest" | "planned";
+  kind: "done" | "today" | "ai" | "rest" | "planned" | "missed";
   name: string;
   /** Distance/volume prefix, e.g. "5,0 km" (omitted on rest/AI days). */
   distance?: string;
@@ -394,18 +396,137 @@ function completedDay(index: number, runs: HomeActivityLike[], today: boolean): 
   };
 }
 
+/** A past day the plan called a run for, but no run was logged — dropped, not pending. */
+function missedDay(index: number): DayPlan {
+  return {
+    id: DOW_IDS[index],
+    dow: DOW_LABELS[index],
+    kind: "missed",
+    name: "Ikke gennemført",
+    zoneLabel: "Sprunget over",
+    zoneTone: "muted",
+    metaTone: "muted",
+  };
+}
+
+/**
+ * Whether a day's logged runs amount to a hard effort — tempo pace or faster
+ * over the day's total distance. Used so a hard *actual* run leaves the legs
+ * needing an easy day after it even when the plan never scheduled one (#211).
+ */
+function wasHardActual(runs: HomeActivityLike[], paces: Record<PaceZone, number>): boolean {
+  const distanceKm = runs.reduce((sum, run) => sum + run.distance, 0) / 1000;
+  if (distanceKm <= 0) return false;
+  const seconds = runs.reduce((sum, run) => sum + run.movingTime, 0);
+  return seconds / distanceKm <= paces.tempo;
+}
+
+/** How much of a missed easy day's volume is folded into the remaining easy days. */
+const MISSED_RECOVERY_FRACTION = 0.6;
+
+/** The adjusted week: the skeleton reshaped around what actually happened (#211). */
+interface WeekAdjustment {
+  /** Sessions, with a missed quality session rescued onto a remaining run day. */
+  sessions: PlannedSession[];
+  /** Final prescribed distance per day (km) — missed days are 0. */
+  dayKm: number[];
+  /** Which days are missed: a past run day with nothing logged. */
+  missed: boolean[];
+}
+
+/**
+ * Reshape the phase skeleton around what the runner actually did (#211 #4):
+ *   - a past run day with no logged run is *missed* and carries no volume;
+ *   - a missed tempo is rescued onto the earliest remaining easy day so the
+ *     week keeps its quality session (unless one is still ahead or already run);
+ *   - a share of the missed *easy* volume is redistributed across the remaining
+ *     easy days, capped at the phase's session ceiling so the week never asks
+ *     for more than the runner can absorb.
+ */
+function adjustRemainingDays(
+  sessions: PlannedSession[],
+  runsByDay: HomeActivityLike[][],
+  todayIndex: number,
+  scale: number,
+  maxEasyKm: number,
+  qualityDone: boolean
+): WeekAdjustment {
+  const missed = sessions.map(
+    (session, index) =>
+      runsByDay[index].length === 0 && index < todayIndex && session.type !== "rest"
+  );
+  const adjusted = sessions.map((session) => ({ ...session }));
+
+  const missedTempo = sessions.find((session, index) => missed[index] && session.type === "tempo");
+  const tempoStillAhead = sessions.some(
+    (session, index) =>
+      index >= todayIndex && session.type === "tempo" && runsByDay[index].length === 0
+  );
+  if (missedTempo && !tempoStillAhead && !qualityDone) {
+    const target = adjusted.findIndex(
+      (session, index) =>
+        index >= todayIndex && session.type === "easy" && runsByDay[index].length === 0
+    );
+    if (target >= 0) {
+      adjusted[target] = {
+        ...adjusted[target],
+        type: "tempo",
+        zone: 4,
+        easySubtype: undefined,
+        distanceKm: missedTempo.distanceKm,
+        description: "Tempo",
+      };
+    }
+  }
+
+  const dayKm = adjusted.map((session, index) =>
+    missed[index] ? 0 : roundHalfKm((session.distanceKm ?? 0) * scale)
+  );
+
+  const missedEasyKm = sessions.reduce(
+    (sum, session, index) =>
+      missed[index] && session.type === "easy" ? sum + (session.distanceKm ?? 0) * scale : sum,
+    0
+  );
+  const remainingEasy = adjusted
+    .map((session, index) => ({ session, index }))
+    .filter(
+      ({ session, index }) =>
+        index >= todayIndex && session.type === "easy" && runsByDay[index].length === 0
+    )
+    .map(({ index }) => index);
+  if (missedEasyKm > 0 && remainingEasy.length > 0) {
+    const bump = (missedEasyKm * MISSED_RECOVERY_FRACTION) / remainingEasy.length;
+    for (const index of remainingEasy) {
+      dayKm[index] = roundHalfKm(Math.min(maxEasyKm, dayKm[index] + bump));
+    }
+  }
+
+  return { sessions: adjusted, dayKm, missed };
+}
+
+/** The easy-day shape once neighbours (planned or actual) have had their say. */
+function neighbourSubtype(previous: PlannedSession, next: PlannedSession): EasySubtype {
+  if (next.type === "long") return "easy-strides";
+  if (HARD_TYPES.has(previous.type)) return "recovery";
+  return "easy";
+}
+
 /**
  * A day still ahead of the runner: the phase engine says what the session is,
  * the predictor says how fast. `sessions` is the whole week so a day can see its
- * neighbours — the easy day after a hard one is a recovery jog, and the easy day
- * before the long run carries the strides.
+ * neighbours — the easy day after a hard one (planned *or* actually run) is a
+ * recovery jog, and the easy day before the long run carries the strides.
+ * `actualHard[i]` marks a day whose logged run was a hard effort; `dayKm` holds
+ * each day's adjusted distance.
  */
 function prescribedDay(
   index: number,
   sessions: PlannedSession[],
+  actualHard: boolean[],
+  dayKm: number[],
   paces: Record<PaceZone, number>,
   prediction: RacePrediction,
-  scale: number,
   today: boolean,
   raceName: string
 ): DayPlan {
@@ -425,10 +546,11 @@ function prescribedDay(
     };
   }
 
-  const km = roundHalfKm((session.distanceKm ?? 0) * scale);
+  const km = dayKm[index];
   const distance = km > 0 ? { distance: `${formatDanish(km)} km` } : {};
   // The week repeats, so Monday's "yesterday" is the previous Sunday.
-  const previous = sessions[(index + 6) % 7];
+  const previousIndex = (index + 6) % 7;
+  const previous = sessions[previousIndex];
   const next = sessions[(index + 1) % 7];
 
   if (session.type === "race") {
@@ -474,7 +596,15 @@ function prescribedDay(
     };
   }
 
-  if (HARD_TYPES.has(previous.type)) {
+  // A hard effort yesterday — one the plan scheduled OR one the runner just ran —
+  // earns a recovery jog today. Otherwise the day keeps the subtype the phase
+  // engine gave it (falling back to its neighbours when none was set, e.g. taper).
+  const prevHard = HARD_TYPES.has(previous.type) || actualHard[previousIndex];
+  const subtype: EasySubtype = prevHard
+    ? "recovery"
+    : (session.easySubtype ?? neighbourSubtype(previous, next));
+
+  if (subtype === "recovery") {
     return {
       id,
       dow,
@@ -488,7 +618,7 @@ function prescribedDay(
     };
   }
 
-  if (next.type === "long") {
+  if (subtype === "easy-strides") {
     return {
       id,
       dow,
@@ -508,7 +638,7 @@ function prescribedDay(
     kind: today ? "today" : "planned",
     name: "Rolig tur",
     ...distance,
-    zoneLabel: "Rolig snak-fart",
+    zoneLabel: subtype === "medium" ? "Rolig snak-fart · længere" : "Rolig snak-fart",
     zoneTone: "muted",
     meta: `MÅL ${formatPaceRange(paces.easy)}`,
     metaTone: "cobalt",
@@ -625,17 +755,47 @@ function buildDerivedWeek(
     }
   }
 
-  const days = sessions.map((_, index) =>
-    runsByDay[index].length > 0
-      ? completedDay(index, runsByDay[index], index === todayIndex)
-      : prescribedDay(index, sessions, paces, prediction, scale, index === todayIndex, raceName)
-  );
+  // Which days carried a hard *actual* run, and whether the week's quality box is
+  // already ticked (a hard run logged up to today) — so a missed tempo isn't
+  // needlessly rescued onto a later day.
+  const actualHard = runsByDay.map((dayRuns) => wasHardActual(dayRuns, paces));
+  const qualityDone = actualHard.some((hard, index) => hard && index <= todayIndex);
+
+  // Reshape the skeleton around what actually happened (#211): missed days drop
+  // out, a missed tempo is rescued, and the remaining easy days absorb a share of
+  // the lost volume, all under the phase's session ceiling.
+  const maxEasyKm = getPhaseRules(phase, raceDate).maxDistanceKm;
+  const {
+    sessions: adjusted,
+    dayKm,
+    missed,
+  } = adjustRemainingDays(sessions, runsByDay, todayIndex, scale, maxEasyKm, qualityDone);
+
+  const days = adjusted.map((_, index) => {
+    if (runsByDay[index].length > 0) {
+      return completedDay(index, runsByDay[index], index === todayIndex);
+    }
+    if (missed[index]) {
+      return missedDay(index);
+    }
+    return prescribedDay(
+      index,
+      adjusted,
+      actualHard,
+      dayKm,
+      paces,
+      prediction,
+      index === todayIndex,
+      raceName
+    );
+  });
 
   return {
     week: {
       days,
-      // What the plan asks of the week, against what the runner has actually run.
-      weekPlannedKm: Math.round(prescribedWeekKm(sessions) * scale),
+      // What the *adjusted* plan asks of the week — missed days dropped, remaining
+      // days reshaped — not the untouched skeleton (#211 #6).
+      weekPlannedKm: Math.round(dayKm.reduce((sum, km) => sum + km, 0)),
       weekDoneKm: getWeeklyVolume(runs, 0, now) / 1000,
       upcomingWeeks: derivedUpcomingWeeks(weekStart, weekOfPlan, raceDate, raceName, paces, scale),
       prediction,

@@ -25,6 +25,20 @@ function DayCard({ day }: { day: DayPlan }) {
     );
   }
 
+  // A past run day the athlete skipped: muted, dotted, no pace target (#211).
+  if (day.kind === "missed") {
+    return (
+      <div
+        className={`${base} border border-dashed border-ink/25 opacity-70`}
+        style={{ background: "rgba(255,255,255,0.18)" }}
+      >
+        <span className="cg-label text-ink/70">{day.dow}</span>
+        <div className="text-[13.5px] font-semibold text-ink">{day.name}</div>
+        <div className="text-[11.5px] text-ink/70">{day.zoneLabel}</div>
+      </div>
+    );
+  }
+
   if (day.kind === "ai") {
     return (
       <div className={`cg-glass-cobalt ${base} text-silver`}>
