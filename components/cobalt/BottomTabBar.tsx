@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useKeyboardOpen } from "@/hooks/useVisualViewport";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -74,9 +75,16 @@ export function BottomTabBar({
   signedIn?: boolean;
 }) {
   const pathname = usePathname() ?? "";
+  // On mobile the fixed bar sits at the bottom edge — right where the keyboard
+  // (and the chat composer above it) land. Fold it away while a field is focused
+  // so it can never cover the input (issue #226).
+  const keyboardOpen = useKeyboardOpen();
+
   const tabs = signedIn
     ? TABS
     : TABS.map((tab) => (tab.href === ROUTES.HOME ? { ...tab, href: DEMO_HOME_ROUTE } : tab));
+
+  if (keyboardOpen) return null;
 
   return (
     <nav
