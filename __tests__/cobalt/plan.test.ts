@@ -303,7 +303,7 @@ describe("buildPlanView — data-driven week (issue #115)", () => {
   it("keeps the demo template for visitors — same call, live off", () => {
     const view = buildPlanView(RUNS, LIVE_NOW, RACE, RACE_NAME);
     expect(view.dataDriven).toBe(false);
-    expect(view.days[0].name).toBe("Recovery Jog");
+    expect(view.days[0].name).toBe("Rolig jog");
     expect(view.weekPlannedKm).toBe(53);
     expect(view.race.aiEstimate).toBe("3:41");
     // A visitor's demo card is designed, not derived — nothing to unlock.
@@ -373,7 +373,7 @@ describe("buildPlanView — locked race card (issue #117)", () => {
     expect(view.race.lock?.requiredKm).toBe(5.5);
     expect(view.race.lock?.message).toContain("5,5 km");
     // The template's sessions still stand in — only the race numbers are withheld.
-    expect(view.days[0].name).toBe("Recovery Jog");
+    expect(view.days[0].name).toBe("Rolig jog");
   });
 
   it("locks it when the runs are all older than the lookback window", () => {
@@ -510,7 +510,7 @@ describe("buildPlanView — dynamic week (issue #211)", () => {
     expect(withoutHard.days[2].name).toBe("Rolig tur");
     // …but a recovery jog once Tuesday's hard effort is on the books.
     expect(withHard.days[1].kind).toBe("done");
-    expect(withHard.days[2].name).toBe("Recovery Jog");
+    expect(withHard.days[2].name).toBe("Rolig jog");
   });
 
   it("(c) merges two runs logged on the same day into one completed card", () => {
