@@ -9,9 +9,10 @@ import {
   stravaTokens,
   users,
 } from "../../drizzle/schema";
-import type { ChatBlock, ChatBlockReference } from "../../types/chat";
+import type { ChatActivity, ChatBlock, ChatBlockReference } from "../../types/chat";
 import { chatBlockReferenceSchema } from "../../types/chat";
 import type { AnalysisScope, HrZone } from "../../types/domain";
+import { demoActivities } from "../demo/data";
 import { captureError } from "../observability";
 import { ensureDate, fromDbDate, toDbDate } from "./calendar-date";
 import { db } from "./index";
@@ -543,7 +544,36 @@ export async function getChatHistory(
       return history.map(({ id, role, content }) => ({ id, role, content }));
     }
 
-    const activityById = new Map(activityRows.map((a) => [a.id, a]));
+    // Resolve every referenced id to the card shape, keyed by id. Real rows win;
+    // any id with no matching row may still be a demo fixture — a signed-in user
+    // with no synced runs falls back to demoActivities, so the coach can surface
+    // a card persisted as { kind: "activity", id: "demo-01" } that lives only in
+    // the fixtures (issue #236). Ids in neither source are genuinely deleted and
+    // still drop out, preserving the "no dead link" behaviour (#228).
+    const activityById = new Map<string, ChatActivity>();
+    for (const a of activityRows) {
+      activityById.set(a.id, {
+        id: a.id,
+        type: a.type,
+        startDate: ensureDate(a.startDate).toISOString(),
+        distance: a.distance,
+        movingTime: a.movingTime,
+        averageHeartrate: a.averageHeartrate,
+      });
+    }
+    for (const refId of activityIds) {
+      if (activityById.has(refId)) continue;
+      const demo = demoActivities.find((d) => d.id === refId);
+      if (!demo) continue;
+      activityById.set(refId, {
+        id: demo.id,
+        type: demo.type,
+        startDate: ensureDate(demo.startDate).toISOString(),
+        distance: demo.distance,
+        movingTime: demo.movingTime,
+        averageHeartrate: demo.averageHeartrate,
+      });
+    }
 
     return history.map(({ id, role, content }, index) => {
       const refs = referencesByIndex.get(index);
@@ -553,17 +583,7 @@ export async function getChatHistory(
         if (ref.kind !== "activity") continue;
         const activity = activityById.get(ref.id);
         if (!activity) continue; // deleted activity — omit, no dead link
-        blocks.push({
-          kind: "activity",
-          activity: {
-            id: activity.id,
-            type: activity.type,
-            startDate: ensureDate(activity.startDate).toISOString(),
-            distance: activity.distance,
-            movingTime: activity.movingTime,
-            averageHeartrate: activity.averageHeartrate,
-          },
-        });
+        blocks.push({ kind: "activity", activity });
       }
       return blocks.length > 0 ? { id, role, content, blocks } : { id, role, content };
     });
