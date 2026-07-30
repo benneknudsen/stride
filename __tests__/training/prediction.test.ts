@@ -6,12 +6,9 @@ import {
   goalTimeFor,
   HALF_MARATHON_KM,
   minBasisKm,
-  PACE_ZONE_SPEED_FRACTION,
-  type PaceZone,
   type PredictionActivity,
   predictRace,
   type RacePrediction,
-  zonePaceSeconds,
   zonePaces,
 } from "@/lib/training/prediction";
 
@@ -284,13 +281,92 @@ describe("zone paces", () => {
     expect(paces.interval).toBeLessThan(prediction.paceSecPerKm);
   });
 
-  it.each(
-    Object.keys(PACE_ZONE_SPEED_FRACTION) as PaceZone[]
-  )("derives %s pace as a fraction of race speed", (zone) => {
-    const expected = prediction.paceSecPerKm / PACE_ZONE_SPEED_FRACTION[zone];
-    // Rounded to the 5-second grid a coach actually says out loud.
-    expect(zonePaceSeconds(prediction, zone)).toBe(Math.round(expected / 5) * 5);
-    expect(zonePaceSeconds(prediction, zone) % 5).toBe(0);
+  it("hangs the ladder off easy as fixed second offsets, not a speed fraction (issue #231)", () => {
+    // No heart rate → no observed floor, so easy is race pace plus a fixed margin
+    // and every other zone is a fixed number of seconds from it. Offsets in
+    // seconds behave the same for a 4:00 and an 8:30 runner; a fraction of race
+    // *speed* explodes at the slow end (the bug this replaces).
+    const paces = zonePaces(prediction);
+    const race = prediction.paceSecPerKm;
+    expect(paces.easy).toBe(Math.round((race + 80) / 5) * 5);
+    expect(paces.recovery).toBe(paces.easy + 60);
+    expect(paces.long).toBe(paces.easy - 35);
+    expect(paces.tempo).toBe(paces.easy - 65);
+    expect(paces.interval).toBe(paces.easy - 110);
+  });
+
+  it("keeps every target on the 5-second grid a coach says out loud", () => {
+    const paces = zonePaces(prediction);
+    for (const seconds of Object.values(paces)) {
+      expect(seconds % 5).toBe(0);
+    }
+  });
+});
+
+describe("zone paces — floored against the runner's own easy pace (issue #231)", () => {
+  // The runner from the issue: one 8,1 km jog at 7:17/km (437 s/km) and 142 bpm
+  // against a 190 bpm max, training for a half. Riegel discounts the jog for its
+  // low effort, so the race estimate turns slow — and the old fraction model then
+  // divided *that* slow pace by 0.75 again, prescribing an 11:25/km "easy" run
+  // four minutes slower than the runner actually jogs.
+  const REGRESSION = [run(1, 8.1, 437, "Run", 142)];
+  const HR_MAX = 190;
+
+  it("reads the runner's own easy pace off their low-effort runs", () => {
+    // 142/190 = 75% effort — an easy run, so its pace is the observed easy pace.
+    const prediction = predicted(REGRESSION, HR_MAX);
+    expect(prediction.observedEasyPaceSecPerKm).toBeCloseTo(437, 0);
+  });
+
+  it("never prescribes an easy pace slower than the runner's actual easy runs", () => {
+    const prediction = predicted(REGRESSION, HR_MAX);
+    const observed = prediction.observedEasyPaceSecPerKm ?? Number.POSITIVE_INFINITY;
+    expect(zonePaces(prediction).easy).toBeLessThanOrEqual(observed);
+  });
+
+  it("never lets the catastrophic 11:25/km (685 s/km) target appear", () => {
+    const paces = zonePaces(predicted(REGRESSION, HR_MAX));
+    // 11:25/km is 685 s/km — the exact number the issue reported.
+    expect(paces.easy).toBeLessThan(685);
+    expect(paces.recovery).toBeLessThan(685);
+    expect(paces.easy).toBeLessThan(600); // and under the absurdity ceiling
+  });
+
+  it("does not discount the runner's restraint twice", () => {
+    // predictRace already slowed the race estimate because the anchor was easy.
+    // The easy target must not be slowed a *second* time on the way down from race
+    // pace — it lands on the observed easy pace, well below race pace.
+    const prediction = predicted(REGRESSION, HR_MAX);
+    expect(zonePaces(prediction).easy).toBeLessThan(prediction.paceSecPerKm);
+  });
+
+  it("keeps the zone ordering even when the observed floor pulls the ladder down", () => {
+    const paces = zonePaces(predicted(REGRESSION, HR_MAX));
+    expect(paces.recovery).toBeGreaterThan(paces.easy);
+    expect(paces.easy).toBeGreaterThan(paces.long);
+    expect(paces.long).toBeGreaterThan(paces.tempo);
+    expect(paces.tempo).toBeGreaterThan(paces.interval);
+  });
+
+  it("stays plausible for both a 4:00 and an 8:30 runner", () => {
+    // A genuine fast runner (hard 10 km anchor + an easy day) and a genuine slow
+    // runner (8:30/km efforts), both with easy runs on record.
+    const fast = zonePaces(
+      predicted([run(3, 10, 240, "Run", 175), run(2, 8, 300, "Run", 140)], 190)
+    );
+    const slow = zonePaces(
+      predicted([run(3, 8, 510, "Run", 150), run(2, 6, 540, "Run", 140)], 185)
+    );
+    expect(fast.easy).toBeGreaterThan(240); // slower than race pace
+    expect(fast.easy).toBeLessThan(360); // but under 6:00/km — a plausible easy
+    // 8:30/km is 510 s/km; even the slow runner's easy stays sane, no 11:25 blow-up.
+    expect(slow.easy).toBeLessThan(600);
+  });
+
+  it("has no observed floor to apply when no run carried heart rate", () => {
+    // Without HR there is no effort discount and so no double penalty — and
+    // nothing to read an easy pace off. The model pace stands.
+    expect(predicted([run(3, 10, 270)]).observedEasyPaceSecPerKm).toBeNull();
   });
 });
 
