@@ -142,6 +142,7 @@ import {
   updateRacePlan,
   upsertStravaTokens,
 } from "@/lib/db/queries";
+import { demoActivities } from "@/lib/demo/data";
 
 const DB_ERROR = new Error("connection refused");
 
@@ -718,6 +719,61 @@ describe("getChatHistory", () => {
           role: "assistant",
           content: "Her er turen.",
           blocks: [{ kind: "activity", id: "deleted-1" }],
+        },
+      ],
+      []
+    );
+
+    const history = await getChatHistory("u1");
+
+    expect(history).toEqual([{ id: "msg-2", role: "assistant", content: "Her er turen." }]);
+  });
+
+  it("rehydrates demo-fixture references for a signed-in user on demo fallback (issue #236)", async () => {
+    // A signed-in user with no synced runs falls back to demoActivities, so the
+    // coach can persist a card whose id ("demo-01") lives only in the fixtures.
+    const demo = demoActivities.find((d) => d.id === "demo-01");
+    expect(demo).toBeDefined();
+    if (!demo) return;
+    mock.setNextResults(
+      [
+        {
+          id: "msg-2",
+          role: "assistant",
+          content: "Dit seneste løb.",
+          blocks: [{ kind: "activity", id: "demo-01" }],
+        },
+      ],
+      // No real activity rows come back — the user has no synced runs.
+      []
+    );
+
+    const history = await getChatHistory("u1");
+
+    expect(history[0].blocks).toHaveLength(1);
+    expect(history[0].blocks?.[0]).toEqual({
+      kind: "activity",
+      activity: {
+        id: "demo-01",
+        type: demo.type,
+        startDate: demo.startDate.toISOString(),
+        distance: demo.distance,
+        movingTime: demo.movingTime,
+        averageHeartrate: demo.averageHeartrate,
+      },
+    });
+  });
+
+  it("still drops references absent from both the activities table and the demo fixtures (issue #236)", async () => {
+    // "demo-999" is neither a synced row nor a real fixture (demo-01..demo-30),
+    // so it is a genuinely deleted activity and must still drop out (#228).
+    mock.setNextResults(
+      [
+        {
+          id: "msg-2",
+          role: "assistant",
+          content: "Her er turen.",
+          blocks: [{ kind: "activity", id: "demo-999" }],
         },
       ],
       []
