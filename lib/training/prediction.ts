@@ -71,18 +71,22 @@ const PACE_RANGE_SPREAD_SECONDS = 10;
 export type PaceZone = "recovery" | "easy" | "tempo" | "interval" | "long";
 
 /**
- * Each training pace as a fraction of race **speed** (issue #115) — so a
- * fraction below 1 is slower than race pace and above 1 is faster. Working in
- * speed rather than in the pace number is what keeps the ordering intuitive:
- * intervals (1.05) are the only zone run faster than the race itself.
+ * The training-pace ladder is built in **seconds per km**, not as a fraction of
+ * race speed (issue #231). A fraction (easy = race ÷ 0.75) explodes at the slow
+ * end — it turns an 8:30 racer's easy run into 11:25 — because the same speed
+ * ratio is a far bigger pace gap the slower you go. A fixed "+80 s/km" behaves
+ * the same for a 4:00 and an 8:30 runner.
+ *
+ * Easy is the anchor: `race + {@link EASY_OVER_RACE_SECONDS}`, then floored
+ * against the runner's own observed easy pace (see {@link zonePaces}). Every
+ * other zone is a fixed offset from easy, so the ordering
+ * recovery > easy > long > tempo > interval holds by construction at any level.
  */
-export const PACE_ZONE_SPEED_FRACTION: Record<PaceZone, number> = {
-  recovery: 0.65,
-  easy: 0.75,
-  tempo: 0.88,
-  interval: 1.05,
-  long: 0.8,
-};
+const EASY_OVER_RACE_SECONDS = 80;
+const RECOVERY_OVER_EASY_SECONDS = 60;
+const LONG_UNDER_EASY_SECONDS = 35;
+const TEMPO_UNDER_EASY_SECONDS = 65;
+const INTERVAL_UNDER_EASY_SECONDS = 110;
 
 /**
  * The heart-rate fraction of max a runner holds when they actually race. An
@@ -158,6 +162,13 @@ export interface RacePrediction {
    * — never below — when it was run easier than a race.
    */
   hrAdjustment: number;
+  /**
+   * The runner's own easy pace (seconds per km), read off their recent easy runs
+   * (issue #231) — the floor {@link zonePaces} anchors the easy target against so
+   * it can never be slower than what the runner already jogs. Null when no run
+   * carried heart rate, or none was run easy.
+   */
+  observedEasyPaceSecPerKm: number | null;
 }
 
 /** Why the predictor couldn't predict — each one names a thing the runner can do. */
@@ -239,6 +250,39 @@ function hrAdjustmentFor(activity: PredictionActivity, hrMax: number | null): nu
   return Math.min(MAX_HR_ADJUSTMENT, 1 + HR_EFFORT_STRENGTH * (RACE_EFFORT_FRACTION - effort));
 }
 
+/**
+ * Up to this share of max heart rate, a run counts as easy (Zone 1–2) — evidence
+ * of the runner's easy pace rather than of a workout (issue #231).
+ */
+const EASY_EFFORT_CEILING = 0.82;
+
+/**
+ * The runner's own easy pace (seconds per km): the median pace of their recent
+ * runs held at or below {@link EASY_EFFORT_CEILING} of max heart rate. This is
+ * the reality {@link zonePaces} floors the easy target against, so the plan can
+ * never ask a runner to jog *slower* than they already do (issue #231) — the
+ * cheapest guard against the whole class of "urealistisk langsom" targets.
+ *
+ * Null when no run carried heart rate, or none was run easy: then there is
+ * nothing to floor against and the model pace stands. That's the same condition
+ * under which the double discount can't arise — the effort discount that causes
+ * it needs heart rate too — so the floor is available exactly when it's needed.
+ */
+function observedEasyPace(runs: PredictionActivity[], hrMax: number | null): number | null {
+  if (!hrMax) return null;
+  const paces: number[] = [];
+  for (const activity of runs) {
+    const hr = activity.averageHeartrate ?? 0;
+    if (hr <= 0 || activity.distance <= 0 || activity.movingTime <= 0) continue;
+    if (hr / hrMax > EASY_EFFORT_CEILING) continue;
+    paces.push(activity.movingTime / (activity.distance / 1000));
+  }
+  if (paces.length === 0) return null;
+  paces.sort((a, b) => a - b);
+  const mid = Math.floor(paces.length / 2);
+  return paces.length % 2 === 0 ? (paces[mid - 1] + paces[mid]) / 2 : paces[mid];
+}
+
 /** A basis at least this share of the race distance makes Riegel a short hop, not a leap. */
 const CONFIDENT_BASIS_SHARE = 0.4;
 
@@ -316,6 +360,7 @@ export function predictRace(
       hrMax,
       hrMaxSource,
       hrAdjustment,
+      observedEasyPaceSecPerKm: observedEasyPace(recent, hrMax),
     },
     reason: null,
     message: null,
@@ -323,23 +368,36 @@ export function predictRace(
   };
 }
 
-/**
- * The target pace for a training zone, in seconds per km, rounded to the
- * {@link PACE_GRID_SECONDS} grid a coach would actually say out loud.
- */
-export function zonePaceSeconds(prediction: RacePrediction, zone: PaceZone): number {
-  const seconds = prediction.paceSecPerKm / PACE_ZONE_SPEED_FRACTION[zone];
-  return Math.round(seconds / PACE_GRID_SECONDS) * PACE_GRID_SECONDS;
+/** Round a pace to the {@link PACE_GRID_SECONDS} grid a coach would say out loud. */
+function grid(secondsPerKm: number): number {
+  return Math.round(secondsPerKm / PACE_GRID_SECONDS) * PACE_GRID_SECONDS;
 }
 
-/** Every zone's target pace (seconds per km) for one prediction. */
+/**
+ * Every zone's target pace (seconds per km) for one prediction (issue #231).
+ *
+ * The ladder hangs off the **easy** pace and every other zone is a fixed number
+ * of seconds from it — offsets, not fractions of race speed (see
+ * {@link EASY_OVER_RACE_SECONDS}). Easy is anchored on race pace but floored
+ * against the runner's own {@link RacePrediction.observedEasyPaceSecPerKm}: never
+ * slower than the easy runs they already log. That floor is what stops the double
+ * discount — when Riegel has already slowed the race estimate because the anchor
+ * was an easy jog, dividing again toward easy would prescribe a pace slower than
+ * the jog it came from; the observed pace caps it. Because every zone is a fixed
+ * offset from easy, the ordering recovery > easy > long > tempo > interval holds
+ * by construction, at any level (the offsets are multiples of the grid, so
+ * rounding easy keeps the whole ladder on the grid too).
+ */
 export function zonePaces(prediction: RacePrediction): Record<PaceZone, number> {
+  const modelEasy = prediction.paceSecPerKm + EASY_OVER_RACE_SECONDS;
+  const observed = prediction.observedEasyPaceSecPerKm;
+  const easy = grid(observed !== null ? Math.min(modelEasy, observed) : modelEasy);
   return {
-    recovery: zonePaceSeconds(prediction, "recovery"),
-    easy: zonePaceSeconds(prediction, "easy"),
-    tempo: zonePaceSeconds(prediction, "tempo"),
-    interval: zonePaceSeconds(prediction, "interval"),
-    long: zonePaceSeconds(prediction, "long"),
+    recovery: easy + RECOVERY_OVER_EASY_SECONDS,
+    easy,
+    long: easy - LONG_UNDER_EASY_SECONDS,
+    tempo: easy - TEMPO_UNDER_EASY_SECONDS,
+    interval: easy - INTERVAL_UNDER_EASY_SECONDS,
   };
 }
 

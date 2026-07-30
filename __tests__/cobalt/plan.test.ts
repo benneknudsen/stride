@@ -394,6 +394,80 @@ describe("buildPlanView — locked race card (issue #117)", () => {
   });
 });
 
+describe("buildPlanView — honest uncertainty at low confidence (issue #231)", () => {
+  const NOW = midOf("burn");
+
+  function liveRun(
+    daysAgo: number,
+    km: number,
+    paceSecPerKm: number,
+    hr: number
+  ): HomeActivityLike {
+    const startDate = addDays(NOW, -daysAgo);
+    startDate.setHours(7, 30, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysAgo}`,
+      name: `Tur ${daysAgo}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: hr,
+      averageCadence: 88,
+      totalElevationGain: 10,
+    };
+  }
+
+  /** The width (seconds) of a "MÅL m:ss–m:ss" range meta, or null if it isn't one. */
+  function rangeWidth(meta: string | undefined): number | null {
+    const m = meta?.match(/(\d+):(\d\d)–(\d+):(\d\d)/);
+    if (!m) return null;
+    return Number(m[3]) * 60 + Number(m[4]) - (Number(m[1]) * 60 + Number(m[2]));
+  }
+
+  it("widens the pace range when the prediction rests on a single run", () => {
+    // One qualifying run → low confidence. The plan must show a broader interval
+    // rather than fake the precision of a tight target.
+    const prediction = predictRace([liveRun(3, 8, 330, 140)], NOW).prediction;
+    expect(prediction?.confidence).toBe("low");
+
+    const view = buildPlanView([liveRun(3, 8, 330, 140)], NOW, RACE, RACE_NAME, true);
+    const widths = view.days
+      .map((day) => rangeWidth(day.meta))
+      .filter((w): w is number => w !== null);
+    expect(widths.length).toBeGreaterThan(0);
+    // Every prescribed range is wider than the default ±10 s (20 s total).
+    for (const width of widths) {
+      expect(width).toBeGreaterThan(20);
+    }
+  });
+
+  it("keeps a tight range when the prediction is well-founded", () => {
+    // Six qualifying runs with a close basis → high confidence → the default range.
+    const runs = [
+      liveRun(2, 18, 300, 165),
+      liveRun(5, 10, 320, 150),
+      liveRun(8, 12, 330, 148),
+      liveRun(11, 9, 335, 145),
+      liveRun(14, 10, 330, 146),
+      liveRun(17, 8, 340, 142),
+    ];
+    expect(predictRace(runs, NOW).prediction?.confidence).toBe("high");
+
+    const view = buildPlanView(runs, NOW, RACE, RACE_NAME, true);
+    const widths = view.days
+      .map((day) => rangeWidth(day.meta))
+      .filter((w): w is number => w !== null);
+    expect(widths.length).toBeGreaterThan(0);
+    for (const width of widths) {
+      expect(width).toBe(20);
+    }
+  });
+});
+
 describe("buildPlanView — race card & states", () => {
   it("threads the race name, title and date-input value through", () => {
     const view = buildPlanView(undefined, midOf("burn"), RACE, RACE_NAME);

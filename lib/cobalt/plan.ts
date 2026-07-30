@@ -322,6 +322,13 @@ const DOW_IDS = WEEK_TEMPLATE.map((day) => day.id);
 /** Session types that leave the legs needing an easy day after them. */
 const HARD_TYPES = new Set(["tempo", "long", "race"]);
 
+/**
+ * Half-width of a pace-target range when the prediction is low-confidence (issue
+ * #231) — wider than {@link formatPaceRange}'s default so the plan shows honest
+ * uncertainty rather than fake precision on a target it rests one run on.
+ */
+const LOW_CONFIDENCE_PACE_SPREAD = 25;
+
 /** Targets are prescribed on a half-km grid — "7,5 km", never "7,4 km". */
 function roundHalfKm(km: number): number {
   return Math.round(km * 2) / 2;
@@ -534,6 +541,11 @@ function prescribedDay(
   const dow = today ? `${DOW_LABELS[index]} · I DAG` : DOW_LABELS[index];
   const id = DOW_IDS[index];
 
+  // A low-confidence prediction (one run, or one far shorter than the race) can't
+  // honestly claim a tight target — widen the range instead of faking precision
+  // (issue #231). undefined keeps formatPaceRange's default half-width.
+  const spread = prediction.confidence === "low" ? LOW_CONFIDENCE_PACE_SPREAD : undefined;
+
   if (session.type === "rest") {
     return {
       id,
@@ -577,7 +589,7 @@ function prescribedDay(
       ...distance,
       zoneLabel: "Kvalitetspas · hårdt tempo",
       zoneTone: "red",
-      meta: `MÅL ${formatPaceRange(paces.tempo)}`,
+      meta: `MÅL ${formatPaceRange(paces.tempo, spread)}`,
       metaTone: "red",
     };
   }
@@ -591,7 +603,7 @@ function prescribedDay(
       ...distance,
       zoneLabel: "Moderat tempo",
       zoneTone: "muted",
-      meta: `MÅL ${formatPaceRange(paces.long)}`,
+      meta: `MÅL ${formatPaceRange(paces.long, spread)}`,
       metaTone: "red",
     };
   }
@@ -613,7 +625,7 @@ function prescribedDay(
       ...distance,
       zoneLabel: "Rolig restitution",
       zoneTone: "muted",
-      meta: `MÅL ${formatPaceRange(paces.recovery)}`,
+      meta: `MÅL ${formatPaceRange(paces.recovery, spread)}`,
       metaTone: "cobalt",
     };
   }
@@ -627,7 +639,7 @@ function prescribedDay(
       ...distance,
       zoneLabel: `Rolig + 6×20 sek. @ ${formatPaceClock(paces.interval)}`,
       zoneTone: "muted",
-      meta: `MÅL ${formatPaceRange(paces.easy)}`,
+      meta: `MÅL ${formatPaceRange(paces.easy, spread)}`,
       metaTone: "cobalt",
     };
   }
@@ -640,7 +652,7 @@ function prescribedDay(
     ...distance,
     zoneLabel: subtype === "medium" ? "Rolig snak-fart · længere" : "Rolig snak-fart",
     zoneTone: "muted",
-    meta: `MÅL ${formatPaceRange(paces.easy)}`,
+    meta: `MÅL ${formatPaceRange(paces.easy, spread)}`,
     metaTone: "cobalt",
   };
 }

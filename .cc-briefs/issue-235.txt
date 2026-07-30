@@ -1,0 +1,75 @@
+Issue #235 — [P2] Demo mode viser aldrig et svar med UI-komponenter
+
+## Goal
+Visitors on `/demo` see coach responses with real clickable Activity/Workout cards (ChatBlock[]), not just plain text. Add an autoplay demo sequence that fires once when the chat scrolls into view.
+
+## Context
+- `types/chat.ts` defines `ChatBlock` = `{ kind: "activity", activity: ChatActivity } | { kind: "workout", workout: WorkoutCardView }`
+- `ChatPanel.tsx` internal `ChatMessage` already has `blocks?: ChatBlock[]` and `MessageBubble` renders them
+- `sendDemo()` (ChatPanel.tsx:~289) currently only sets `text` on the coach turn — never `blocks`
+- `demoReplies` in `CoachView` (lib/cobalt/coach.ts:94) is `Record<string, string>` — text only
+- `buildCoachView()` (lib/cobalt/coach.ts:268) builds demo data from `demoActivities` fixtures
+- `CoachTeaser.tsx` has an IntersectionObserver + typewriter autoplay pattern to reference
+- COACH_PROMPTS = ["Analysér min uge", "Foreslå næste pas", "Er jeg klar til halvmarathon?"]
+
+## Changes needed
+
+### 1. Extend demoReplies type (lib/cobalt/coach.ts)
+Change `demoReplies` from `Record<string, string>` to `Record<string, { text: string; blocks?: ChatBlock[] }>` (or a similar structure that carries both text and optional blocks).
+
+### 2. Build demo blocks from fixtures (lib/cobalt/coach.ts, buildCoachView)
+In `buildCoachView()`, build actual ChatBlock[] for at least two chip replies:
+- "Analysér min uge" → include an ActivityCard block using `demoActivities[0]` (the latest activity). Map it to `ChatActivity` shape: `{ id: "demo-01", type, startDate (ISO), distance, movingTime, averageHeartrate }`.
+- "Foreslå næste pas" → include a WorkoutCard block. Build a `WorkoutCardView` shape matching what the real route produces (10 km progressive Thursday as mentioned in the opener).
+
+The text replies stay as they are — blocks are additive.
+
+### 3. Update sendDemo (components/cobalt/coach/ChatPanel.tsx)
+Change `sendDemo()` to read the new reply shape and set `blocks` on the coach turn:
+```ts
+const reply = demoReplies?.[prompt];
+if (!reply) return;
+// reply is now { text, blocks? }
+const coachTurn: ChatMessage = {
+  id: `c${idRef.current}`,
+  role: "coach",
+  text: reply.text,
+  blocks: reply.blocks ?? [],
+};
+```
+
+### 4. Add autoplay demo sequence (ChatPanel.tsx or a new component)
+Add an IntersectionObserver-gated autoplay that fires ONCE when the chat panel enters viewport:
+- Show a scripted user message ("Analysér min uge")
+- Brief typing indicator delay (~800ms)
+- Show the coach reply with text + ActivityCard block
+- Add an "Eksempel" label (similar to CoachTeaser's "AI-coachen · Eksempel på analyse")
+- Respects prefers-reduced-motion (skip animation, show immediately)
+- Does NOT loop — fires once, then the user can still tap chips normally
+
+### 5. Example labeling
+The autoplay turn must be clearly marked as an example so it doesn't look like live data. Use a subtle label like CoachTeaser does.
+
+## Constraints
+- Reuse ChatBlock types unchanged — MessageBubble must not know if it's rendering demo or real blocks
+- All numeric claims must come from demoActivities fixtures (never hardcoded)
+- Chip taps must still work as before (the autoplay is additive, not a replacement)
+- Do NOT hit /api/ai/chat — this is visitor mode, session-gated (#203)
+- Biome lint, vitest, tsc must pass
+
+## Acceptance criteria
+- [ ] Visitor on `/demo` sees at least one coach response with a real ActivityCard or WorkoutCard
+- [ ] Card numbers match the demo fixtures used elsewhere on the page
+- [ ] Clear "example" labeling so it doesn't appear as live data
+- [ ] Autoplay starts only when chat is in viewport, plays once, doesn't loop
+- [ ] Chip taps still work as before
+
+## QA
+Run from ~/code/stride:
+```bash
+cd ~/code/stride
+export PATH="$PWD/node_modules/.bin:$PATH"
+biome check .
+tsc --noEmit
+npm test -- --run --reporter=dot
+```
