@@ -98,6 +98,45 @@ describe("heuristicBlocks", () => {
       expect(comparison.deltaLabel).toBe("+1:00");
     }
   });
+
+  // Issue #210: the deterministic fallback (rendered when no AI key is set, or
+  // when the provider errors) must speak Danish like the rest of the product —
+  // never the old English strings. This runs with no AI key: heuristicBlocks is
+  // pure arithmetic, so it exercises the exact production fallback path.
+  it("returns Danish titles, never the English originals", () => {
+    const blocks = heuristicBlocks(buildAnalysisInput(SAMPLE, "overall", NOW));
+
+    // The user-facing English strings this issue replaced — none may survive.
+    const ENGLISH = [
+      "Weekly volume",
+      "Average pace",
+      "Training load",
+      "Easy recovery run",
+      "Tempo intervals",
+    ];
+    for (const block of blocks) {
+      for (const english of ENGLISH) {
+        expect(block.title).not.toContain(english);
+      }
+    }
+
+    // The volume trend, pace comparison and insight blocks are always present
+    // for SAMPLE, and their Danish titles are locked here.
+    const titles = blocks.map((b) => b.title);
+    expect(titles).toContain("Ugentligt volumen");
+    expect(titles).toContain("Gennemsnitsfart: sidste 7 dage vs forrige");
+    expect(titles).toContain("Træningsbelastning");
+
+    // workoutType renders raw in the card pill (CoachFeed.tsx), so it too must
+    // be Danish. SAMPLE builds volume this week, so the fallback prescribes a
+    // recovery session.
+    const workout = blocks.find((b) => b.tool === "workoutRecommendation");
+    expect(workout).toBeDefined();
+    if (workout?.tool === "workoutRecommendation") {
+      expect(workout.title).toBe("Rolig restitutions-tur");
+      expect(workout.workoutType).toBe("Restitution");
+    }
+  });
 });
 
 describe("blockToToolCall / toolCallToBlock", () => {

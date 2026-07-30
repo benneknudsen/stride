@@ -197,7 +197,14 @@ export const ANALYSIS_SYSTEM_PROMPT = [
   "Produce 3 to 5 blocks total, ordered most-important first.",
   "Ground every statement in the provided numbers; never invent data.",
   "Favour a mix of block types: at least one trend or comparison, and one workout recommendation.",
-  "Be specific and encouraging but honest about regressions. Use pace as min:sec /km.",
+  "Be specific and encouraging but honest about regressions. Use pace as min:sek /km.",
+  // Hard language rule (issue #210): the entire product is Danish, so every
+  // user-facing field the model emits — titles, bodies, metrics, labels,
+  // workout types and recommendations — MUST be written in Danish, addressing
+  // the runner as 'du'. This mirrors how the chat route enforces Danish. Never
+  // emit English in any field; translate running terminology naturally
+  // (fx "tempo", "intervaller", "langtur", "rolig tur", "/km" for fart).
+  "SVAR ALTID PÅ DANSK. Skriv ALLE titler, sætninger, metrics, labels, pas-typer og anbefalinger på dansk, og sig 'du' til brugeren. Brug aldrig engelsk i noget felt.",
 ].join(" ");
 
 /** Build the user prompt from the summarised input. */
@@ -251,18 +258,19 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
 
   if ((loadRisk === "elevated" || loadRisk === "high") && loadRatio !== null) {
     const pctChange = Math.round((loadRatio - 1) * 100);
+    const riskLabel = loadRisk === "high" ? "høj" : "forhøjet";
     return {
       tool: "coachInsight",
       type: "warning",
-      title: "Load is climbing fast",
-      body: `Your last 7 days carry ${loadRatio}× the training load of your 4-week base — that's ${loadRisk} injury-risk territory.`,
+      title: "Belastningen stiger hurtigt",
+      body: `Dine sidste 7 dage bærer ${loadRatio}× træningsbelastningen fra dit 4-ugers fundament — det er ${riskLabel} skadesrisiko-zone.`,
       data: {
-        label: "Load ratio",
+        label: "Belastningsforhold",
         value: loadRatio.toFixed(2),
         direction: "up",
         changeLabel: `${pctChange >= 0 ? "+" : ""}${pctChange}%`,
       },
-      action: "Plan an easy week",
+      action: "Planlæg en rolig uge",
     };
   }
 
@@ -270,10 +278,10 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
     return {
       tool: "coachInsight",
       type: "milestone",
-      title: "100 km month unlocked",
-      body: `${volumeKm} km over the last 4 weeks — a serious aerobic base most runners never build.`,
-      data: { label: "4-week volume", value: `${volumeKm} km`, direction: "up" },
-      action: "Keep the streak going",
+      title: "100 km-måned låst op",
+      body: `${volumeKm} km over de sidste 4 uger — et seriøst aerobt fundament, som de fleste løbere aldrig bygger.`,
+      data: { label: "4-ugers volumen", value: `${volumeKm} km`, direction: "up" },
+      action: "Hold stimen i gang",
     };
   }
 
@@ -281,14 +289,14 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
     return {
       tool: "coachInsight",
       type: "insight",
-      title: "Room to build",
-      body: "Your training load sits in the optimal band, so your body is absorbing the work — you can safely add volume this week.",
+      title: "Plads til at bygge",
+      body: "Din træningsbelastning ligger i det optimale bånd, så kroppen absorberer arbejdet — du kan trygt øge mængden denne uge.",
       data: {
-        label: "Load ratio",
+        label: "Belastningsforhold",
         value: loadRatio !== null ? loadRatio.toFixed(2) : "optimal",
         direction: "flat",
       },
-      action: "Add up to 10% this week",
+      action: "Øg med op til 10% denne uge",
     };
   }
 
@@ -308,16 +316,16 @@ export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
   const volDirection = volChange > 4 ? "up" : volChange < -4 ? "down" : "flat";
   blocks.push({
     tool: "trendCallout",
-    title: "Weekly volume",
+    title: "Ugentligt volumen",
     direction: volDirection,
     changeLabel: `${volChange >= 0 ? "+" : ""}${volChange}%`,
-    metric: `${thisWeek} km this week`,
+    metric: `${thisWeek} km i denne uge`,
     body:
       volDirection === "up"
-        ? "You're building load — keep the increase under ~10% week-over-week to stay injury-free."
+        ? "Du bygger mængde — hold stigningen under ~10% fra uge til uge for at undgå skader."
         : volDirection === "down"
-          ? "Volume eased off this week, which is fine if it was a planned recovery block."
-          : "Volume held steady — a solid, sustainable base to build from.",
+          ? "Volumen faldt denne uge, hvilket er fint, hvis det var en planlagt restitutionsuge."
+          : "Volumen holdt stabilt — et solidt, holdbart fundament at bygge videre på.",
   });
 
   // 2) Pace comparison, last 7 vs prior 7 days.
@@ -331,8 +339,8 @@ export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
     const deltaSec = absDelta % 60;
     blocks.push({
       tool: "metricComparison",
-      title: "Average pace: last 7 days vs prior",
-      metric: "Average pace",
+      title: "Gennemsnitsfart: sidste 7 dage vs forrige",
+      metric: "Gennemsnitsfart",
       current: `${formatPaceSecPerKm(input.avgPaceLast7)} /km`,
       previous: `${formatPaceSecPerKm(input.avgPacePrev7)} /km`,
       deltaLabel: `${faster ? "−" : "+"}${deltaMin}:${deltaSec.toString().padStart(2, "0")}`,
@@ -343,13 +351,13 @@ export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
   // 3) A grounded headline insight.
   blocks.push({
     tool: "insightCard",
-    title: "Training load",
+    title: "Træningsbelastning",
     metric: `${input.totalDistanceKm} km`,
     sentiment: input.totalRuns >= 8 ? "positive" : "neutral",
-    body: `Across ${input.totalRuns} runs you've covered ${input.totalDistanceKm} km, with a longest run of ${input.longestRunKm} km. ${
+    body: `På ${input.totalRuns} ture har du løbet ${input.totalDistanceKm} km, med en længste tur på ${input.longestRunKm} km. ${
       input.avgHrLast7 !== null
-        ? `Recent runs averaged ${input.avgHrLast7} bpm.`
-        : "Connect a heart-rate source to unlock zone analysis."
+        ? `De seneste ture lå i snit på ${input.avgHrLast7} bpm.`
+        : "Tilslut en pulskilde for at låse op for zoneanalyse."
     }`,
   });
 
@@ -361,22 +369,22 @@ export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
   if (volDirection === "up") {
     blocks.push({
       tool: "workoutRecommendation",
-      title: "Easy recovery run",
-      workoutType: "Recovery",
-      details: `40 min relaxed${recoveryPace ? ` around ${recoveryPace} /km` : ""}`,
+      title: "Rolig restitutions-tur",
+      workoutType: "Restitution",
+      details: `40 min afslappet${recoveryPace ? ` omkring ${recoveryPace} /km` : ""}`,
       rationale:
-        "You're ramping volume — bank an easy day to absorb the load before the next hard session.",
+        "Du øger mængden — læg en rolig dag ind for at absorbere belastningen før næste hårde pas.",
       ...(recoveryPace ? { targetPace: `${recoveryPace} /km` } : {}),
       distanceKm: 7,
     });
   } else {
     blocks.push({
       tool: "workoutRecommendation",
-      title: "Tempo intervals",
+      title: "Tempo-intervaller",
       workoutType: "Tempo",
-      details: `4 × 1 km${tempoPace ? ` @ ${tempoPace} /km` : ""} with 90s easy jog between`,
+      details: `4 × 1 km${tempoPace ? ` @ ${tempoPace} /km` : ""} med 90 sek. rolig jog imellem`,
       rationale:
-        "Volume is steady, so it's a good window to add quality and sharpen your threshold.",
+        "Volumen er stabilt, så det er et godt tidspunkt at tilføje kvalitet og skærpe din tærskel.",
       ...(tempoPace ? { targetPace: `${tempoPace} /km` } : {}),
       distanceKm: 8,
     });
