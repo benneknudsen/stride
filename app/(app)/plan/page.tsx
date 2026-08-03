@@ -26,6 +26,10 @@ export default async function PlanPage() {
     : [[], null, null];
   const raceDate = racePlan?.raceDate ?? undefined;
   const raceName = racePlan?.raceName ?? (raceDate ? "Din race" : undefined);
+  // Per-user race distance + goal (issue #238) — thread the stored values so the
+  // predictor targets the runner's distance and the card shows their goal.
+  const raceDistanceKm = racePlan?.raceDistanceKm ?? undefined;
+  const goalTimeSeconds = racePlan?.goalTimeSeconds ?? undefined;
 
   // Data-driven (issue #115): a runner with a race of their own gets a week
   // derived from their own data — sessions from the phase engine, volume from
@@ -43,7 +47,9 @@ export default async function PlanPage() {
     raceDate,
     raceName,
     live,
-    hrMax
+    hrMax,
+    raceDistanceKm,
+    goalTimeSeconds
   );
 
   return <PlanPageClient view={view} canEditRace={!!userId} hasOwnRace={!!raceDate} />;

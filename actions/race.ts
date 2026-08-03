@@ -13,10 +13,27 @@ import { updateRacePlan } from "@/lib/db/queries";
 /** How far ahead a race may be planned. */
 const MAX_YEARS_AHEAD = 2;
 
+/** A race may be anywhere from a 1 km parkrun to a 100 km ultra. */
+const MIN_RACE_DISTANCE_KM = 1;
+const MAX_RACE_DISTANCE_KM = 100;
+/** A goal finish time must be at least a minute and at most a day. */
+const MIN_GOAL_SECONDS = 60;
+const MAX_GOAL_SECONDS = 86_400;
+
 const raceInputSchema = z.object({
   /** The native date-input value, "YYYY-MM-DD" — parsed as a local calendar day. */
   raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   raceName: z.string().trim().min(1).max(80).optional(),
+  /**
+   * Race distance in km (issue #238). Nullish so it can be cleared; a preset
+   * (10 / 21,0975 / 42,195) or a custom distance inside a sane range.
+   */
+  raceDistanceKm: z.number().min(MIN_RACE_DISTANCE_KM).max(MAX_RACE_DISTANCE_KM).nullish(),
+  /**
+   * Goal finish time in seconds (issue #238). Nullish so it can be cleared; the
+   * UI converts a target time or target pace to a single canonical finish time.
+   */
+  goalTimeSeconds: z.number().int().min(MIN_GOAL_SECONDS).max(MAX_GOAL_SECONDS).nullish(),
 });
 
 export type SaveRacePlanResult = { ok: true } | { ok: false; error: string };
@@ -30,13 +47,15 @@ export type SaveRacePlanResult = { ok: true } | { ok: false; error: string };
 export async function saveRacePlan(input: {
   raceDate: string;
   raceName?: string;
+  raceDistanceKm?: number | null;
+  goalTimeSeconds?: number | null;
 }): Promise<SaveRacePlanResult> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return { ok: false, error: "Du skal være logget ind for at vælge en race." };
 
   const parsed = raceInputSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Ugyldig dato eller racenavn." };
+  if (!parsed.success) return { ok: false, error: "Ugyldig dato, racenavn, distance eller mål." };
 
   const [year, month, day] = parsed.data.raceDate.split("-").map(Number);
   const raceDate = new Date(year, month - 1, day);
@@ -61,7 +80,12 @@ export async function saveRacePlan(input: {
     return { ok: false, error: `Race-datoen kan højst ligge ${MAX_YEARS_AHEAD} år frem.` };
   }
 
-  await updateRacePlan(userId, { raceDate, raceName: parsed.data.raceName ?? null });
+  await updateRacePlan(userId, {
+    raceDate,
+    raceName: parsed.data.raceName ?? null,
+    raceDistanceKm: parsed.data.raceDistanceKm ?? null,
+    goalTimeSeconds: parsed.data.goalTimeSeconds ?? null,
+  });
   revalidateProgression();
   return { ok: true };
 }

@@ -35,6 +35,9 @@ import {
 } from "@/lib/coach/engine";
 import { formatDanish } from "@/lib/cobalt/format";
 import { buildHomeView, type HomeActivityLike, zoneForHeartRate } from "@/lib/cobalt/hjem";
+// The goal display reuses race-estimate's clock format (h:mm above the hour,
+// m:ss below), so a 10K goal reads "50:00" rather than "0:50" (issue #238).
+import { formatRaceTime as formatGoalClock } from "@/lib/cobalt/race-estimate";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { getWeeklyVolume } from "@/lib/metrics";
@@ -43,6 +46,7 @@ import {
   formatPaceRange,
   formatRaceTime,
   goalTimeFor,
+  HALF_MARATHON_KM,
   type PaceZone,
   type PredictionLockReason,
   predictRace,
@@ -181,6 +185,16 @@ export interface PlanView {
     dayLabel: string;
     /** The race date as a `<input type="date">` value ("2026-09-20"). */
     dateValue: string;
+    /**
+     * The user's chosen race distance in km (issue #238), or null when they
+     * haven't picked one (demo/visitor/legacy) — the dialog then defaults it.
+     */
+    distanceKm: number | null;
+    /**
+     * The user's goal finish time in seconds (issue #238), or null when no goal
+     * is set — the dialog prefills the goal field from it.
+     */
+    goalTimeSeconds: number | null;
     goalTime: string;
     racePace: string;
     aiEstimate: string;
@@ -761,10 +775,20 @@ function buildDerivedWeek(
   raceDate: Date,
   raceName: string,
   weekOfPlan: number,
-  hrMaxOverride?: number | null
+  hrMaxOverride?: number | null,
+  /**
+   * The user's chosen race distance in km (issue #238) — the distance the
+   * predictor targets. undefined keeps the half-marathon default (demo/visitor).
+   */
+  raceDistanceKm?: number | null,
+  /**
+   * The user's goal finish time in seconds (issue #238). When set, the week's
+   * pace grid anchors on goal pace instead of the pure prediction.
+   */
+  goalTimeSeconds?: number | null
 ): DerivedWeekResult {
   const runs = activities.filter((activity) => /run/i.test(activity.type));
-  const result = predictRace(runs, now, undefined, hrMaxOverride);
+  const result = predictRace(runs, now, raceDistanceKm ?? undefined, hrMaxOverride);
   const prediction = result.prediction;
   if (!prediction) {
     // All three are non-null whenever `prediction` is null — the predictor's contract.
@@ -780,7 +804,22 @@ function buildDerivedWeek(
     };
   }
 
-  const paces = zonePaces(prediction);
+  // When the runner has set a goal (issue #238), the week trains toward goal
+  // pace: the pace grid anchors on goal pace instead of the pure prediction, so
+  // the tempo/long/race targets reflect what they're aiming for. The estimate
+  // itself (the race card's AI-estimat) still comes from the true prediction —
+  // only the prescribed targets move. Goal pace = goal time ÷ race distance,
+  // against the same distance the predictor used.
+  const goalPaceSecPerKm =
+    goalTimeSeconds != null && goalTimeSeconds > 0
+      ? goalTimeSeconds / (raceDistanceKm ?? HALF_MARATHON_KM)
+      : null;
+  const pacePrediction: RacePrediction =
+    goalPaceSecPerKm !== null
+      ? { ...prediction, paceSecPerKm: Math.round(goalPaceSecPerKm) }
+      : prediction;
+
+  const paces = zonePaces(pacePrediction);
   const weekStart = startOfTrainingWeek(now);
   const phase = getCurrentPhase(now, raceDate);
   const sessions = getWeekPlan(phase, weekStart, raceDate, raceName);
@@ -828,7 +867,7 @@ function buildDerivedWeek(
       actualHard,
       dayKm,
       paces,
-      prediction,
+      pacePrediction,
       index === todayIndex,
       raceName
     );
@@ -880,9 +919,21 @@ export function buildPlanView(
    * predictor measures each effort's HR against it; without it, it falls back to
    * the hardest average HR among the runs.
    */
-  hrMax?: number | null
+  hrMax?: number | null,
+  /**
+   * The user's chosen race distance in km (issue #238). Threads to the predictor
+   * (which targets it) and prefills the dialog. undefined keeps today's
+   * half-marathon default for demo/visitor traffic.
+   */
+  raceDistanceKm?: number | null,
+  /**
+   * The user's goal finish time in seconds (issue #238). When set, the header
+   * and race card show the goal (and goal pace) instead of the prediction, and
+   * the week's pace grid anchors on goal pace.
+   */
+  goalTimeSeconds?: number | null
 ): PlanView {
-  const home = buildHomeView(activities, now, raceDate, raceName);
+  const home = buildHomeView(activities, now, raceDate, raceName, raceDistanceKm, goalTimeSeconds);
   const weekOfPlan = home.plan.weekOfPlan;
   const totalWeeks = home.plan.totalWeeks;
   const daysToRace = home.plan.daysToRace;
@@ -938,7 +989,16 @@ export function buildPlanView(
   // *sessions* are a reasonable stand-in, but its race numbers are not the
   // runner's, so the card shows what would unlock theirs instead.
   const derivedResult = live
-    ? buildDerivedWeek(activities, now, raceDate, raceName, weekOfPlan, hrMax)
+    ? buildDerivedWeek(
+        activities,
+        now,
+        raceDate,
+        raceName,
+        weekOfPlan,
+        hrMax,
+        raceDistanceKm,
+        goalTimeSeconds
+      )
     : null;
   const derived = derivedResult?.week ?? null;
   const lock = derivedResult?.lock ?? null;
@@ -1001,11 +1061,20 @@ export function buildPlanView(
   // goal is the round number just above it — the same relationship the design
   // shows (an estimate sitting just under the goal), but computed. Demo keeps the
   // designed numbers.
+  //
+  // When the runner has set their own goal (issue #238), it takes over the goal
+  // time and race pace: "Måltid" shows their target, "Race-pace" shows goal pace
+  // (goal time ÷ distance), and "AI-estimat" still shows the model's prediction —
+  // so the card contrasts what they're aiming for with what the model expects.
   const prediction = derived?.prediction;
+  const hasGoal = goalTimeSeconds != null && goalTimeSeconds > 0;
+  const goalDistanceKm =
+    raceDistanceKm != null && raceDistanceKm > 0 ? raceDistanceKm : HALF_MARATHON_KM;
+  const goalRacePace = hasGoal ? formatPaceClock(goalTimeSeconds / goalDistanceKm) : null;
   const race = prediction
     ? {
-        goalTime: goalTimeFor(prediction.timeSeconds),
-        racePace: formatPaceClock(prediction.paceSecPerKm),
+        goalTime: hasGoal ? formatGoalClock(goalTimeSeconds) : goalTimeFor(prediction.timeSeconds),
+        racePace: goalRacePace ?? formatPaceClock(prediction.paceSecPerKm),
         aiEstimate: formatRaceTime(prediction.timeSeconds),
       }
     : { goalTime: "3:45", racePace: "5:20", aiEstimate: "3:41" };
@@ -1014,13 +1083,16 @@ export function buildPlanView(
     totalWeeks,
     weekOfPlan,
     daysToRace,
-    // A locked card can't be headlined by the demo's goal — the runner would
-    // read someone else's target as their own.
-    goalLabel: prediction
-      ? `Mål under ${race.goalTime}`
-      : lock
-        ? "Mål på vej"
-        : home.plan.goalLabel,
+    // The runner's own goal is the headline when they've set one; otherwise the
+    // prediction-derived target. A locked card can't be headlined by the demo's
+    // goal — the runner would read someone else's target as their own.
+    goalLabel: hasGoal
+      ? `Mål under ${formatGoalClock(goalTimeSeconds)}`
+      : prediction
+        ? `Mål under ${race.goalTime}`
+        : lock
+          ? "Mål på vej"
+          : home.plan.goalLabel,
     planTitle: home.plan.planTitle,
     racePassed: home.plan.racePassed,
     dataDriven: derived !== null,
@@ -1035,6 +1107,8 @@ export function buildPlanView(
       name: raceName,
       dayLabel: raceDayLabel,
       dateValue: dateInputValue(raceDate),
+      distanceKm: raceDistanceKm ?? null,
+      goalTimeSeconds: goalTimeSeconds ?? null,
       ...race,
       lock,
     },

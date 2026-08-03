@@ -62,6 +62,17 @@ export const users = pgTable(
     raceDate: date("race_date", { mode: "date" }),
     /** Valgfrit racenavn til UI ("Silkeborg Halvmarathon"). */
     raceName: text("race_name"),
+    /**
+     * Race-distancen i km (issue #238) — driver phase-motorens race-uge og
+     * predictoren. Null = ingen distance valgt → halvmarathon-standarden.
+     */
+    raceDistanceKm: doublePrecision("race_distance_km"),
+    /**
+     * Valgfri måltid som sluttid i sekunder (issue #238). Målpacen udledes som
+     * goalTimeSeconds / raceDistanceKm — én kanonisk kolonne frem for to der kan
+     * modsige hinanden. Null = intet mål sat.
+     */
+    goalTimeSeconds: integer("goal_time_seconds"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

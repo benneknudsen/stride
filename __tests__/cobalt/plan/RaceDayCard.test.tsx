@@ -14,6 +14,8 @@ const RACE: PlanView["race"] = {
   name: "CPH Half",
   dayLabel: "Søndag 20. september",
   dateValue: "2026-09-20",
+  distanceKm: 21.0975,
+  goalTimeSeconds: null,
   goalTime: "1:40",
   racePace: "4:45",
   aiEstimate: "1:38",
@@ -37,6 +39,21 @@ describe("RaceDayCard — unlocked", () => {
     render(<RaceDayCard race={RACE} daysToRace={68} />);
     expect(screen.getByText("68 dage")).toBeDefined();
     expect(screen.getByTestId("race-day-card").textContent).toContain("Søndag 20. september");
+  });
+
+  it("shows the runner's own goal time and pace when a goal is set (issue #238)", () => {
+    // The view-model has already resolved the goal into goalTime/racePace; the
+    // card just renders whatever it's handed under the "Måltid"/"Race-pace" labels.
+    const withGoal: PlanView["race"] = {
+      ...RACE,
+      goalTimeSeconds: 2700,
+      goalTime: "45:00",
+      racePace: "4:30",
+    };
+    render(<RaceDayCard race={withGoal} daysToRace={68} />);
+    expect(screen.getByText("45:00")).toBeDefined();
+    expect(screen.getByText("4:30")).toBeDefined();
+    expect(screen.getByText("Måltid")).toBeDefined();
   });
 });
 

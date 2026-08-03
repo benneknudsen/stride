@@ -111,6 +111,8 @@ export function PlanPageClient({
           onClose={() => setDialogOpen(false)}
           currentDateValue={view.race.dateValue}
           currentName={hasOwnRace ? view.race.name : ""}
+          currentDistanceKm={hasOwnRace ? view.race.distanceKm : null}
+          currentGoalTimeSeconds={hasOwnRace ? view.race.goalTimeSeconds : null}
         />
       ) : null}
     </main>

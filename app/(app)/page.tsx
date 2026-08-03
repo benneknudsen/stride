@@ -43,12 +43,18 @@ export default async function HjemPage({
     : [[], null, null];
   const raceDate = racePlan?.raceDate ?? undefined;
   const raceName = racePlan?.raceName ?? (raceDate ? "Din race" : undefined);
+  // Per-user race distance + goal (issue #238) — the stored distance is preferred
+  // over the name-inferred one, and a set goal drives the header's goal label.
+  const raceDistanceKm = racePlan?.raceDistanceKm ?? undefined;
+  const goalTimeSeconds = racePlan?.goalTimeSeconds ?? undefined;
 
   const view = buildHomeView(
     activities.length > 0 ? activities : undefined,
     new Date(),
     raceDate,
-    raceName
+    raceName,
+    raceDistanceKm,
+    goalTimeSeconds
   );
 
   return (

@@ -13,6 +13,7 @@ import { DEFAULT_RACE_DATE, DEFAULT_RACE_NAME, planTotalWeeks } from "@/lib/coac
 import { decodePolyline } from "@/lib/cobalt/polyline";
 import {
   estimateRaceTime,
+  formatRaceTime,
   goalTimeFromEstimate,
   inferRaceDistanceKm,
   type RaceEstimate,
@@ -341,7 +342,18 @@ export function buildHomeView(
   activities: HomeActivityLike[] = demoActivities,
   now: Date = new Date(),
   raceDate: Date = DEFAULT_RACE_DATE,
-  raceName: string = DEFAULT_RACE_NAME
+  raceName: string = DEFAULT_RACE_NAME,
+  /**
+   * The user's stored race distance in km (issue #238) — preferred over the
+   * name-inferred distance when set. Null/undefined for demo, visitor and legacy
+   * name-only rows, which keep {@link inferRaceDistanceKm} as the fallback.
+   */
+  storedDistanceKm?: number | null,
+  /**
+   * The user's goal finish time in seconds (issue #238). When set, the plan
+   * header's goal label shows their target instead of the estimate-derived one.
+   */
+  goalTimeSeconds?: number | null
 ): HomeView {
   // Pace, volume and zones are only meaningful over runs — a ride or a swim
   // would skew every one of them. Same predicate as lib/coach/dashboard.ts and
@@ -448,11 +460,23 @@ export function buildHomeView(
       : "Hold intensiteten nede i dag. En rolig snak-fart bygger form uden at koste restitution.";
 
   // Race numbers are derived, never asserted: a Riegel prediction from the
-  // athlete's own recent runs against the distance the race's name implies.
-  const raceDistanceKm = inferRaceDistanceKm(raceName);
+  // athlete's own recent runs against the race distance. The user's stored
+  // distance wins (issue #238); the name-inferred distance is the fallback for
+  // demo, visitor and legacy name-only rows.
+  const raceDistanceKm =
+    storedDistanceKm != null && storedDistanceKm > 0
+      ? storedDistanceKm
+      : inferRaceDistanceKm(raceName);
   const estimate = raceDistanceKm !== null ? estimateRaceTime(runs, raceDistanceKm, now) : null;
+  // A user-set goal (issue #238) is the headline target when present — shown as
+  // their exact goal, not rounded up like an estimate-derived one. Otherwise the
+  // goal is derived from the estimate, and null when there's nothing to derive.
   const goalLabel =
-    estimate !== null ? `Mål under ${goalTimeFromEstimate(estimate.seconds)}` : null;
+    goalTimeSeconds != null && goalTimeSeconds > 0
+      ? `Mål under ${formatRaceTime(goalTimeSeconds)}`
+      : estimate !== null
+        ? `Mål under ${goalTimeFromEstimate(estimate.seconds)}`
+        : null;
 
   return {
     weekNumber: isoWeek(now),

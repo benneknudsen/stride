@@ -10,7 +10,12 @@ import {
 } from "@/lib/coach/engine";
 import { buildHomeView, type HomeActivityLike } from "@/lib/cobalt/hjem";
 import { buildPlanView } from "@/lib/cobalt/plan";
-import { formatPaceRange, predictRace, zonePaces } from "@/lib/training/prediction";
+import {
+  formatPaceClock,
+  formatPaceRange,
+  predictRace,
+  zonePaces,
+} from "@/lib/training/prediction";
 
 // View-model tests for the race parameterisation (issue #99): the countdown,
 // plan title and phase timeline must all re-anchor to an arbitrary race date,
@@ -497,6 +502,99 @@ describe("buildPlanView — race card & states", () => {
     expect(view.race.name).toBe(DEFAULT_RACE_NAME);
     expect(view.totalWeeks).toBe(planTotalWeeks());
     expect(view.racePassed).toBe(false);
+  });
+});
+
+describe("buildPlanView — race distance + goal (issue #238)", () => {
+  const NOW = midOf("burn");
+
+  function liveRun(
+    daysAgo: number,
+    km: number,
+    paceSecPerKm: number,
+    hr: number
+  ): HomeActivityLike {
+    const startDate = addDays(NOW, -daysAgo);
+    startDate.setHours(7, 30, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysAgo}`,
+      name: `Tur ${daysAgo}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: hr,
+      averageCadence: 88,
+      totalElevationGain: 15,
+    };
+  }
+
+  // A hard 10 km to anchor the prediction, plus a steady base of longer runs.
+  const RUNS: HomeActivityLike[] = [
+    liveRun(6, 10, 270, 168),
+    liveRun(9, 12, 330, 148),
+    liveRun(13, 9, 335, 145),
+    liveRun(17, 10, 330, 146),
+    liveRun(24, 8, 340, 142),
+    liveRun(31, 15, 335, 150),
+  ];
+
+  /** A finish time "h:mm[:ss]" or "m:ss" as total seconds. */
+  const seconds = (time: string) => {
+    const parts = time.split(":").map(Number);
+    return parts.length === 3
+      ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+      : parts[0] * 3600 + parts[1] * 60;
+  };
+
+  it("targets the chosen distance, not the half-marathon default", () => {
+    const tenK = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10);
+    const half = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 21.0975);
+    // The same runs predict a much faster finish over 10 km than over a half.
+    expect(seconds(tenK.race.aiEstimate)).toBeLessThan(seconds(half.race.aiEstimate));
+    expect(tenK.race.distanceKm).toBe(10);
+  });
+
+  it("shows the runner's own goal as the headline and race pace, keeping the estimate", () => {
+    // A 40:00 goal over 10 km → 4:00 /km, faster than the ~45:00 the model predicts.
+    const view = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10, 2400);
+    expect(view.race.goalTime).toBe("40:00");
+    expect(view.race.racePace).toBe(formatPaceClock(240));
+    expect(view.goalLabel).toBe("Mål under 40:00");
+    expect(view.race.goalTimeSeconds).toBe(2400);
+    expect(view.race.distanceKm).toBe(10);
+    // The AI estimate is still the model's prediction, distinct from the goal.
+    expect(view.race.aiEstimate).not.toBe(view.race.goalTime);
+  });
+
+  it("anchors the week's pace grid on goal pace when a goal is set", () => {
+    const withGoal = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10, 2400);
+    const withoutGoal = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10);
+    // Ambitious goal pace pulls the prescribed targets faster than the pure
+    // prediction would — the two weeks can't read identically.
+    const metas = (view: ReturnType<typeof buildPlanView>) =>
+      view.days.map((day) => day.meta ?? "").join(" ");
+    expect(metas(withGoal)).not.toBe(metas(withoutGoal));
+  });
+
+  it("keeps the prediction-derived goal when no goal is set (old behavior)", () => {
+    const view = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10);
+    expect(view.race.goalTimeSeconds).toBeNull();
+    // Headline is the prediction's committable goal, not a user target.
+    expect(view.goalLabel).toBe(`Mål under ${view.race.goalTime}`);
+  });
+
+  it("keeps the demo numbers for a visitor with no race at all", () => {
+    // No distance, no goal, live off — the designed demo card stands.
+    const view = buildPlanView(undefined, NOW, RACE, RACE_NAME);
+    expect(view.race.goalTime).toBe("3:45");
+    expect(view.race.racePace).toBe("5:20");
+    expect(view.race.aiEstimate).toBe("3:41");
+    expect(view.race.distanceKm).toBeNull();
+    expect(view.race.goalTimeSeconds).toBeNull();
   });
 });
 
