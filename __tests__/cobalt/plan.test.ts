@@ -673,10 +673,21 @@ describe("buildPlanView — dynamic week (issue #211)", () => {
   });
 
   it("(b) treats an unplanned hard run yesterday as a hard day — lighter today", () => {
-    const withoutHard = buildPlanView(HISTORY, WEDNESDAY, RACE, RACE_NAME, true);
-    // A fast, unplanned run on Tuesday (a planned rest day).
+    // Viewing the plan Wednesday morning, a full day past Tuesday's run: the
+    // 24 h easy buffer is met (issue #240 rests only a *too-recent* run), so the
+    // day stays a prescription — softened to a recovery jog by Tuesday's effort.
+    const wednesdayMorning = addDays(ADAPT_MONDAY, 2);
+    wednesdayMorning.setHours(9, 0, 0, 0);
+    const withoutHard = buildPlanView(HISTORY, wednesdayMorning, RACE, RACE_NAME, true);
+    // A fast, unplanned run on Tuesday (a planned rest day), 25.5 h before now.
     const hardTuesday = run(1, 10, 230, 178);
-    const withHard = buildPlanView([...HISTORY, hardTuesday], WEDNESDAY, RACE, RACE_NAME, true);
+    const withHard = buildPlanView(
+      [...HISTORY, hardTuesday],
+      wednesdayMorning,
+      RACE,
+      RACE_NAME,
+      true
+    );
 
     // Wednesday is an ordinary easy day when nothing hard preceded it…
     expect(withoutHard.days[2].name).toBe("Rolig tur");
@@ -713,6 +724,150 @@ describe("buildPlanView — dynamic week (issue #211)", () => {
     expect(view.dataDriven).toBe(true);
     expect(view.days[2].kind).toBe("missed"); // Wednesday's tempo, unrun
     expect(view.days.some((day) => day.name === "Tempo")).toBe(true); // rescued
+  });
+});
+
+describe("buildPlanView — recovery buffer (issue #240)", () => {
+  // The plan page must apply the same recovery buffer as the coach card
+  // (lib/coach/recommender.ts): a hard session needs 48 h since the last actual
+  // run, an easy/long one 24 h. Otherwise the coach says REST while the plan
+  // still prescribes a run today — the two surfaces contradicting each other.
+  // Adapt is the simplest block for it: easy run days Mon/Wed/Fri/Sun, no
+  // tempo/long to muddy the read (mirrors the #211 block above).
+  const ADAPT_MONDAY = (() => {
+    const mid = midOf("adapt");
+    return addDays(mid, -((mid.getDay() + 6) % 7));
+  })();
+
+  /** A run `daysFromMonday` into the adapt week, at `hour`:`minute`. */
+  function run(
+    daysFromMonday: number,
+    km: number,
+    paceSecPerKm: number,
+    hr: number,
+    hour = 7,
+    minute = 30
+  ): HomeActivityLike {
+    const startDate = addDays(ADAPT_MONDAY, daysFromMonday);
+    startDate.setHours(hour, minute, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysFromMonday}-${km}-${hour}${minute}`,
+      name: `Tur ${daysFromMonday}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: hr,
+      averageCadence: 88,
+      totalElevationGain: 15,
+    };
+  }
+
+  // Prior-week runs that anchor a prediction — a hard 10 km plus a steady base,
+  // none inside the current training week.
+  const HISTORY: HomeActivityLike[] = [
+    run(-6, 10, 270, 168),
+    run(-8, 16, 330, 150),
+    run(-10, 8, 345, 138),
+    run(-13, 9, 340, 142),
+    run(-15, 14, 335, 148),
+    run(-20, 10, 335, 144),
+  ];
+
+  it("rests today when the most recent run is inside the recovery window (< 24 h)", () => {
+    // A hard 10 km Tuesday evening (20:30); the runner opens the plan Wednesday
+    // 08:00 — ~11.5 h later, well inside the 24 h easy buffer.
+    const tuesdayEvening = run(1, 10, 250, 176, 20, 30);
+    const wednesdayMorning = addDays(ADAPT_MONDAY, 2);
+    wednesdayMorning.setHours(8, 0, 0, 0);
+
+    const view = buildPlanView(
+      [...HISTORY, tuesdayEvening],
+      wednesdayMorning,
+      RACE,
+      RACE_NAME,
+      true
+    );
+    expect(view.dataDriven).toBe(true);
+    const today = view.days[2]; // Wednesday
+    expect(today.dow).toContain("I DAG");
+    expect(today.kind).toBe("rest"); // a rest tile, not a prescribed run
+    expect(today.name).toBe("Hviledag");
+    expect(today.distance).toBeUndefined();
+    expect(today.meta).toBeUndefined();
+  });
+
+  it("prescribes a normal week when the last run is ≥ 48 h ago", () => {
+    // No runs this week; the most recent is 8 days back — no buffer to respect.
+    const wednesday = addDays(ADAPT_MONDAY, 2);
+    wednesday.setHours(9, 0, 0, 0);
+
+    const view = buildPlanView(HISTORY, wednesday, RACE, RACE_NAME, true);
+    expect(view.dataDriven).toBe(true);
+    const today = view.days[2]; // Wednesday
+    expect(today.kind).toBe("today"); // a prescribed run, not a rest
+    expect(today.name).toBe("Rolig tur");
+    expect(today.distance).toBeDefined();
+  });
+
+  it("applies the 24 h easy buffer exactly — 23 h rests, 24 h runs", () => {
+    const wednesday = addDays(ADAPT_MONDAY, 2);
+    wednesday.setHours(8, 0, 0, 0);
+
+    // Tuesday 08:00 → exactly 24 h before now: not < 24, so the day is prescribed.
+    const exactly24h = buildPlanView(
+      [...HISTORY, run(1, 8, 340, 140, 8, 0)],
+      wednesday,
+      RACE,
+      RACE_NAME,
+      true
+    );
+    expect(exactly24h.days[2].kind).toBe("today");
+    expect(exactly24h.days[2].name).toBe("Rolig tur");
+
+    // Tuesday 09:00 → 23 h before now: inside the buffer, so the day rests.
+    const at23h = buildPlanView(
+      [...HISTORY, run(1, 8, 340, 140, 9, 0)],
+      wednesday,
+      RACE,
+      RACE_NAME,
+      true
+    );
+    expect(at23h.days[2].kind).toBe("rest");
+    expect(at23h.days[2].name).toBe("Hviledag");
+  });
+
+  it("holds a hard session to the 48 h buffer even once the 24 h easy one is met", () => {
+    // Peak Wednesday is a tempo day. A run 25.5 h ago clears the easy buffer but
+    // not the hard one, so the tempo is withheld — the coach's exact distinction.
+    const peakMid = midOf("peak");
+    const peakMonday = addDays(peakMid, -((peakMid.getDay() + 6) % 7));
+    const wednesday = addDays(peakMonday, 2);
+    wednesday.setHours(9, 0, 0, 0);
+
+    // Peak Wednesday really is the tempo day for this race.
+    expect(getWeekPlan(getCurrentPhase(wednesday, RACE), peakMonday, RACE, RACE_NAME)[2].type).toBe(
+      "tempo"
+    );
+
+    const peakHistory: HomeActivityLike[] = HISTORY.map((activity, i) => {
+      const startDate = addDays(peakMonday, -6 - i * 3);
+      startDate.setHours(7, 30, 0, 0);
+      return { ...activity, id: `peak-${i}`, startDate };
+    });
+    // Tuesday 07:30 → 25.5 h before Wednesday 09:00.
+    const tuesdayStart = addDays(peakMonday, 1);
+    tuesdayStart.setHours(7, 30, 0, 0);
+    const tuesday: HomeActivityLike = { ...HISTORY[0], id: "peak-tue", startDate: tuesdayStart };
+
+    const view = buildPlanView([...peakHistory, tuesday], wednesday, RACE, RACE_NAME, true);
+    expect(view.dataDriven).toBe(true);
+    expect(view.days[1].kind).toBe("done"); // Tuesday's logged run
+    expect(view.days[2].kind).toBe("rest"); // Wednesday's tempo, held back
+    expect(view.days[2].name).toBe("Hviledag");
   });
 });
 
