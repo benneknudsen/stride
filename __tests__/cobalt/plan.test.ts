@@ -571,8 +571,20 @@ describe("buildPlanView — race distance + goal (issue #238)", () => {
   });
 
   it("anchors the week's pace grid on goal pace when a goal is set", () => {
-    const withGoal = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10, 2400);
-    const withoutGoal = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10);
+    // Runs that carry easy heart-rate data, so the predictor observes an easy pace
+    // and the goal legitimately anchors the whole grid, floored against it (#231).
+    // (When no run carries HR the easy side stays on the prediction instead — see
+    // the issue #242 block below.)
+    const hrRuns: HomeActivityLike[] = [
+      liveRun(6, 10, 265, 175), // hard anchor at race effort
+      liveRun(9, 12, 338, 135), // easy base runs
+      liveRun(13, 9, 340, 132),
+      liveRun(17, 10, 336, 134),
+      liveRun(24, 8, 342, 130),
+      liveRun(31, 15, 337, 138),
+    ];
+    const withGoal = buildPlanView(hrRuns, NOW, RACE, RACE_NAME, true, null, 10, 2400);
+    const withoutGoal = buildPlanView(hrRuns, NOW, RACE, RACE_NAME, true, null, 10);
     // Ambitious goal pace pulls the prescribed targets faster than the pure
     // prediction would — the two weeks can't read identically.
     const metas = (view: ReturnType<typeof buildPlanView>) =>
@@ -595,6 +607,124 @@ describe("buildPlanView — race distance + goal (issue #238)", () => {
     expect(view.race.aiEstimate).toBe("3:41");
     expect(view.race.distanceKm).toBeNull();
     expect(view.race.goalTimeSeconds).toBeNull();
+  });
+});
+
+describe("buildPlanView — goal pace stays grounded without easy data (issue #242)", () => {
+  // The common live case: Strava runs that carry no heart rate, so the predictor
+  // has no observed easy pace to floor the grid against (#231's floor is null). On
+  // a peak-phase Monday the whole week is still ahead — the Wednesday tempo, the
+  // Sunday long and the easy days are all prescribed, none logged yet — so every
+  // zone target is probed.
+  const PEAK_MID = midOf("peak");
+  const NOW = addDays(PEAK_MID, -((PEAK_MID.getDay() + 6) % 7));
+
+  function noHrRun(daysAgo: number, km: number, paceSecPerKm: number): HomeActivityLike {
+    const startDate = addDays(NOW, -daysAgo);
+    startDate.setHours(7, 30, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysAgo}`,
+      name: `Tur ${daysAgo}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: null,
+      averageCadence: 88,
+      totalElevationGain: 15,
+    };
+  }
+
+  // A hard 10 km anchors the prediction (~45:00), plus a steady base — all logged
+  // more than a week ago, so none land in this week as already-completed runs.
+  const RUNS: HomeActivityLike[] = [
+    noHrRun(8, 10, 270),
+    noHrRun(11, 12, 330),
+    noHrRun(15, 9, 335),
+    noHrRun(19, 10, 330),
+    noHrRun(26, 8, 340),
+    noHrRun(33, 15, 335),
+  ];
+
+  // 40:00 over 10 km → 4:00 /km, more aspirational than the ~45:00 the model predicts.
+  const GOAL_10K = 2400;
+
+  const PREDICTION = predictRace(RUNS, NOW, 10).prediction;
+  if (!PREDICTION) throw new Error("fixture must support a prediction");
+  const GROUNDED = zonePaces(PREDICTION);
+  const GOAL_GRID = zonePaces({ ...PREDICTION, paceSecPerKm: Math.round(GOAL_10K / 10) });
+
+  const withGoal = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10, GOAL_10K);
+  const withoutGoal = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10);
+
+  it("has no observed easy pace to floor against — and the goal is genuinely faster", () => {
+    // The #242 trigger: no run carries heart rate, so the #231 floor is unavailable.
+    expect(PREDICTION.observedEasyPaceSecPerKm).toBeNull();
+    // …and the goal really is more aspirational than the prediction (the case that bites).
+    expect(GOAL_GRID.easy).toBeLessThan(GROUNDED.easy);
+  });
+
+  it("keeps the easy side on the prediction instead of the aspirational goal", () => {
+    // Every prescribed easy/recovery/long day trains at the grounded prediction
+    // pace — identical to the no-goal plan, never dragged up to goal pace.
+    const easyNames = new Set(["Rolig tur", "Rolig jog", "Rolig + strides", "Lang tur"]);
+    let checked = 0;
+    withGoal.days.forEach((day, index) => {
+      if ((day.kind === "today" || day.kind === "planned") && easyNames.has(day.name)) {
+        expect(day.meta).toBe(withoutGoal.days[index].meta);
+        checked++;
+      }
+    });
+    expect(checked).toBeGreaterThan(0);
+    // Concretely: the long run sits on the grounded pace, not the faster goal pace.
+    const long = withGoal.days.find((day) => day.name === "Lang tur");
+    expect(long?.meta).toBe(`MÅL ${formatPaceRange(GROUNDED.long)}`);
+    expect(long?.meta).not.toBe(`MÅL ${formatPaceRange(GOAL_GRID.long)}`);
+  });
+
+  it("still trains the quality session and race target toward the goal", () => {
+    // The tempo target follows the goal — that's the point of setting one — so it
+    // moves relative to the pure prediction while the easy side does not.
+    const tempo = withGoal.days.find((day) => day.name === "Tempo");
+    expect(tempo?.meta).toBe(`MÅL ${formatPaceRange(GOAL_GRID.tempo)}`);
+    expect(tempo?.meta).not.toBe(`MÅL ${formatPaceRange(GROUNDED.tempo)}`);
+    // The race card keeps goal pace too — the race-card path is untouched (#238).
+    expect(withGoal.race.racePace).toBe(formatPaceClock(Math.round(GOAL_10K / 10)));
+  });
+
+  it("leaves the grid on the pure prediction when no goal is set", () => {
+    const long = withoutGoal.days.find((day) => day.name === "Lang tur");
+    const tempo = withoutGoal.days.find((day) => day.name === "Tempo");
+    expect(long?.meta).toBe(`MÅL ${formatPaceRange(GROUNDED.long)}`);
+    expect(tempo?.meta).toBe(`MÅL ${formatPaceRange(GROUNDED.tempo)}`);
+    expect(withoutGoal.race.goalTimeSeconds).toBeNull();
+  });
+
+  it("still floors the grid on observed easy pace when heart rate is present (#231 intact)", () => {
+    // Same shape, but now the runs carry HR and most were run easy — so the
+    // predictor DOES observe an easy pace and the #231/#238 path is unchanged: the
+    // goal anchors the grid, floored against the runner's real easy pace.
+    const hrRuns: HomeActivityLike[] = [
+      { ...noHrRun(8, 10, 265), averageHeartrate: 175 }, // hard anchor at race effort
+      { ...noHrRun(11, 12, 340), averageHeartrate: 135 }, // easy base runs
+      { ...noHrRun(15, 9, 345), averageHeartrate: 132 },
+      { ...noHrRun(19, 10, 340), averageHeartrate: 134 },
+      { ...noHrRun(26, 8, 350), averageHeartrate: 130 },
+      { ...noHrRun(33, 15, 338), averageHeartrate: 138 },
+    ];
+    const pred = predictRace(hrRuns, NOW, 10).prediction;
+    if (!pred) throw new Error("fixture must support a prediction");
+    expect(pred.observedEasyPaceSecPerKm).not.toBeNull();
+    const expected = zonePaces({ ...pred, paceSecPerKm: Math.round(GOAL_10K / 10) });
+
+    const view = buildPlanView(hrRuns, NOW, RACE, RACE_NAME, true, null, 10, GOAL_10K);
+    const tempo = view.days.find((day) => day.name === "Tempo");
+    const long = view.days.find((day) => day.name === "Lang tur");
+    expect(tempo?.meta).toBe(`MÅL ${formatPaceRange(expected.tempo)}`);
+    expect(long?.meta).toBe(`MÅL ${formatPaceRange(expected.long)}`);
   });
 });
 

@@ -805,6 +805,29 @@ interface DerivedWeek {
 type DerivedWeekResult = { week: DerivedWeek; lock: null } | { week: null; lock: RaceLock };
 
 /**
+ * Merge a goal-anchored zone grid onto a prediction-anchored one for the runner
+ * who set a goal but has no observed easy pace to floor against (issue #242). The
+ * easy side (recovery/easy/long) stays on the grounded prediction grid so easy
+ * days can't be dragged up to an aspirational goal; the quality zones take goal
+ * pace when it's the more aspirational of the two, but never fall slower than the
+ * grounded ladder — so the ordering recovery > easy > long > tempo > interval
+ * still holds by construction. When the goal is conservative (slower than the
+ * prediction) there is nothing to protect against and the grounded ladder stands.
+ */
+function mergeGoalGrid(
+  grounded: Record<PaceZone, number>,
+  goal: Record<PaceZone, number>
+): Record<PaceZone, number> {
+  return {
+    recovery: grounded.recovery,
+    easy: grounded.easy,
+    long: grounded.long,
+    tempo: Math.min(grounded.tempo, goal.tempo),
+    interval: Math.min(grounded.interval, goal.interval),
+  };
+}
+
+/**
  * This week from the runner's own data, or a lock when we can't predict a race
  * for them — in which case the caller keeps the demo template rather than
  * prescribing paces we'd have had to invent, and the race card says what the
@@ -864,7 +887,17 @@ function buildDerivedWeek(
       ? { ...prediction, paceSecPerKm: Math.round(goalPaceSecPerKm) }
       : prediction;
 
-  const paces = zonePaces(pacePrediction);
+  // The weekly zone grid. With a goal (issue #238) the quality zones train toward
+  // goal pace, but the easy side must stay grounded in the runner's real fitness.
+  // #231 grounds it against the runner's observed easy pace; when no run carries
+  // heart rate that floor is missing (issue #242), so an aspirational goal would
+  // otherwise drag every easy day — recovery included — up to goal pace. In that
+  // one case anchor the easy side (recovery/easy/long) on the true prediction and
+  // keep goal only for the quality zones (tempo/interval) and the race target.
+  const paces =
+    goalPaceSecPerKm !== null && prediction.observedEasyPaceSecPerKm === null
+      ? mergeGoalGrid(zonePaces(prediction), zonePaces(pacePrediction))
+      : zonePaces(pacePrediction);
   const weekStart = startOfTrainingWeek(now);
   const phase = getCurrentPhase(now, raceDate);
   const sessions = getWeekPlan(phase, weekStart, raceDate, raceName);
