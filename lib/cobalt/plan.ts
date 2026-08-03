@@ -329,6 +329,24 @@ const HARD_TYPES = new Set(["tempo", "long", "race"]);
  */
 const LOW_CONFIDENCE_PACE_SPREAD = 25;
 
+/**
+ * Fallback training paces (seconds per km) for the template path — demo,
+ * visitors, and any live runner we can't predict a race for (issue #117). That
+ * path has no race predictor and so no runner paces, which is exactly why
+ * "Kommende uger" used to fall back to frozen rows (issue #237). These stand-in
+ * paces let the same phase-engine forecast run there too, so the upcoming weeks
+ * still read phase-correctly without inventing per-user targets. Derived from
+ * the demo athlete's own recent efforts (`lib/demo/data.ts`) and hand-aligned to
+ * the pace grid — deterministic, so server render and client hydration agree.
+ */
+const FALLBACK_PACES: Record<PaceZone, number> = {
+  recovery: 365,
+  easy: 345,
+  long: 330,
+  tempo: 285,
+  interval: 270,
+};
+
 /** Targets are prescribed on a half-km grid — "7,5 km", never "7,4 km". */
 function roundHalfKm(km: number): number {
   return Math.round(km * 2) / 2;
@@ -657,7 +675,15 @@ function prescribedDay(
   };
 }
 
-/** The next three weeks of the build, straight off the phase engine. */
+/**
+ * The next three weeks of the build, straight off the phase engine — shared by
+ * the data-driven path (runner paces + load `scale`) and the template path
+ * (fallback demo paces, `scale` = 1). Both derive `focus` and `km` from the
+ * phase each week actually falls in, so the widget can't go static again: the
+ * phase shows through in the label, `km` is the real forecasted volume, and each
+ * row carries its week-within-the-phase so two consecutive weeks of the same
+ * block never read identically (issue #237).
+ */
 function derivedUpcomingWeeks(
   weekStart: Date,
   weekOfPlan: number,
@@ -676,6 +702,12 @@ function derivedUpcomingWeeks(
     const weekScale = Math.min(1, scale * MAX_WEEKLY_INCREASE_RATIO ** offset);
     const km = Math.round(prescribedWeekKm(sessions) * weekScale);
 
+    // Which week of its phase this is — so a run of same-phase weeks (e.g. three
+    // burn weeks) reads as a progression ("uge 1/2/3 i blokken") instead of the
+    // same sentence three times, and the count resetting to 1 marks a new phase.
+    const phaseStart = buildPhases(raceDate)[phase].startDate;
+    const weekInPhase = Math.max(1, Math.floor(daysBetween(phaseStart, start) / 7) + 1);
+
     const longRun = sessions.find((session) => session.type === "long");
     const hasQuality = sessions.some((session) => session.type === "tempo");
     const longLabel = longRun
@@ -686,7 +718,7 @@ function derivedUpcomingWeeks(
         ? "Nedtrapning · rolig uge, kroppen samler op"
         : `${PHASE_LABELS[phase]} · ${
             hasQuality ? `tempo @ ${formatPaceClock(paces.tempo)} /km` : "rolig base i Zone 2"
-          }${longLabel}`;
+          }${longLabel} · uge ${weekInPhase} i blokken`;
 
     return {
       id: `u${offset}`,
@@ -949,29 +981,21 @@ export function buildPlanView(
     0
   );
 
-  const templateUpcomingWeeks: UpcomingWeek[] = [
-    {
-      id: "u1",
-      week: weekOfPlan + 1,
-      focus: "Build · intervaller 8×1000 m + lang tur 26 km",
-      km: 52,
-      muted: false,
-    },
-    {
-      id: "u2",
-      week: weekOfPlan + 2,
-      focus: "Build · marathon-pace 12 km + lang tur 28 km",
-      km: 56,
-      muted: false,
-    },
-    {
-      id: "u3",
-      week: weekOfPlan + 3,
-      focus: "Nedtrapning · rolig uge, kroppen samler op",
-      km: 38,
-      muted: true,
-    },
-  ];
+  // The template path (demo, visitors, and any live runner we couldn't predict a
+  // race for — issue #117) has no runner data to derive paces or load from, so it
+  // runs the same phase-engine forecast with fallback demo paces and no load
+  // scaling. This keeps "Kommende uger" phase-correct in every state — a taper
+  // reads as a taper, a base week as a base week — instead of the old frozen
+  // 52/56/38 rows that promised marathon-pace work regardless of race or phase
+  // (issue #237).
+  const templateUpcomingWeeks = derivedUpcomingWeeks(
+    startOfTrainingWeek(now),
+    weekOfPlan,
+    raceDate,
+    raceName,
+    FALLBACK_PACES,
+    1
+  );
 
   // The race card. Live: the predictor's finish time is the AI estimate, and the
   // goal is the round number just above it — the same relationship the design

@@ -617,3 +617,140 @@ describe("buildPlanView — dynamic week (issue #211)", () => {
     expect(view.days.some((day) => day.name === "Tempo")).toBe(true); // rescued
   });
 });
+
+describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
+  // The label each phase carries in the upcoming-week focus copy — "Nedtrapning"
+  // for the taper, the phase name otherwise (mirrors plan.ts's PHASE_LABELS).
+  const UI_PHASE: Record<PhaseKey, string> = {
+    adapt: "Adapt",
+    burn: "Burn",
+    sharpen: "Sharpen",
+    peak: "Peak",
+    taper: "Nedtrapning",
+  };
+
+  /** The Monday of the training week `now` falls in — mirrors the view-model. */
+  function trainingWeekMonday(now: Date): Date {
+    return addDays(now, -((now.getDay() + 6) % 7));
+  }
+
+  it("derives the template path's rows from the phase engine, not a frozen 52/56/38", () => {
+    // Visitor/demo traffic: live off, so buildPlanView takes the template branch.
+    const now = midOf("sharpen");
+    const view = buildPlanView(undefined, now, RACE, RACE_NAME);
+    expect(view.dataDriven).toBe(false);
+    expect(view.upcomingWeeks).toHaveLength(3);
+
+    const monday = trainingWeekMonday(now);
+    view.upcomingWeeks.forEach((week, i) => {
+      const start = addDays(monday, (i + 1) * 7);
+      const phase = getCurrentPhase(start, RACE);
+      const sessions = getWeekPlan(phase, start, RACE, RACE_NAME);
+      const km = Math.round(sessions.reduce((sum, s) => sum + (s.distanceKm ?? 0), 0));
+      // Each row is the next plan week, at that week's real forecasted volume.
+      expect(week.week).toBe(view.weekOfPlan + i + 1);
+      expect(week.km).toBe(km);
+      // The phase shows through in the copy, and only a taper reads muted.
+      expect(week.focus).toContain(UI_PHASE[phase]);
+      expect(week.muted).toBe(phase === "taper");
+    });
+
+    // None of the old frozen copy survives.
+    const allFocus = view.upcomingWeeks.map((w) => w.focus).join(" ");
+    expect(allFocus).not.toContain("8×1000 m");
+    expect(allFocus).not.toContain("marathon-pace");
+  });
+
+  it("differentiates consecutive weeks that fall in the same phase", () => {
+    // Early in burn (a 4-week block) so all three upcoming weeks stay in burn —
+    // the case that used to render three identical rows.
+    const now = addDays(RACE, -75);
+    const monday = trainingWeekMonday(now);
+    const phases = [1, 2, 3].map((o) => getCurrentPhase(addDays(monday, o * 7), RACE));
+    expect(new Set(phases).size).toBe(1); // one phase across the whole window
+    expect(phases[0]).toBe("burn");
+
+    const view = buildPlanView(undefined, now, RACE, RACE_NAME);
+    const focuses = view.upcomingWeeks.map((w) => w.focus);
+    // No two rows read identically, even within a single phase.
+    expect(new Set(focuses).size).toBe(focuses.length);
+  });
+
+  it("lets a phase change show through across the window", () => {
+    // A window straddling the burn→sharpen boundary (offset+1 burn, offset+3
+    // sharpen for any Monday this near the boundary).
+    const now = addDays(RACE, -62);
+    const monday = trainingWeekMonday(now);
+    const phases = [1, 2, 3].map((o) => getCurrentPhase(addDays(monday, o * 7), RACE));
+    expect(new Set(phases).size).toBeGreaterThan(1); // the window spans phases
+
+    const view = buildPlanView(undefined, now, RACE, RACE_NAME);
+    // Where the phase differs, the copy differs; and all three rows stay distinct.
+    for (let i = 1; i < 3; i++) {
+      if (phases[i] !== phases[i - 1]) {
+        expect(view.upcomingWeeks[i].focus).not.toBe(view.upcomingWeeks[i - 1].focus);
+      }
+    }
+    expect(new Set(view.upcomingWeeks.map((w) => w.focus)).size).toBe(3);
+  });
+
+  it("reads any taper week muted with the nedtrapning copy", () => {
+    // A Saturday race, so the race week's Monday lands in the taper (a Sunday
+    // race's would read peak). Scan the run-in so the taper branch is exercised.
+    const RACE_SAT = new Date(2027, 9, 9);
+    let sawTaper = false;
+    for (let off = 10; off <= 14; off++) {
+      const now = addDays(RACE_SAT, -off);
+      const view = buildPlanView(undefined, now, RACE_SAT, "CPH Half");
+      const monday = trainingWeekMonday(now);
+      view.upcomingWeeks.forEach((week, i) => {
+        const phase = getCurrentPhase(addDays(monday, (i + 1) * 7), RACE_SAT);
+        expect(week.muted).toBe(phase === "taper");
+        if (phase === "taper") {
+          sawTaper = true;
+          expect(week.focus).toContain("Nedtrapning");
+        }
+      });
+    }
+    expect(sawTaper).toBe(true);
+  });
+
+  it("keeps the derived (live) path's rows phase-aware and distinct", () => {
+    // A runner with a real prediction, sitting mid-burn so the outlook builds.
+    const now = midOf("burn");
+    function liveRun(daysAgo: number, km: number, paceSecPerKm: number, hr: number) {
+      const startDate = addDays(now, -daysAgo);
+      startDate.setHours(7, 30, 0, 0);
+      const distance = km * 1000;
+      const movingTime = Math.round(km * paceSecPerKm);
+      return {
+        id: `run-${daysAgo}`,
+        name: `Tur ${daysAgo}`,
+        type: "Run",
+        startDate,
+        distance,
+        movingTime,
+        averageSpeed: distance / movingTime,
+        averageHeartrate: hr,
+        averageCadence: 88,
+        totalElevationGain: 15,
+      } as HomeActivityLike;
+    }
+    const runs: HomeActivityLike[] = [
+      liveRun(6, 10, 270, 168),
+      liveRun(9, 12, 330, 148),
+      liveRun(13, 9, 335, 145),
+      liveRun(17, 10, 330, 146),
+      liveRun(24, 8, 340, 142),
+      liveRun(31, 15, 335, 150),
+    ];
+    const view = buildPlanView(runs, now, RACE, RACE_NAME, true);
+    expect(view.dataDriven).toBe(true);
+    expect(view.upcomingWeeks).toHaveLength(3);
+    for (const week of view.upcomingWeeks) {
+      expect(week.km).toBeGreaterThan(0);
+    }
+    // The derived rows are as distinct as the template's — no static repeat.
+    expect(new Set(view.upcomingWeeks.map((w) => w.focus)).size).toBe(3);
+  });
+});
