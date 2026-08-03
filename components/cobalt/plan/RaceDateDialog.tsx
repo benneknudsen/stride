@@ -84,6 +84,54 @@ function formatPaceSeconds(secondsPerKm: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/** Generic goal-pace suggestions (seconds/km) — round training paces, distance-agnostic. */
+const PACE_PRESET_SECONDS = [270, 300, 330, 360] as const; // 4:30 / 5:00 / 5:30 / 6:00
+
+/** Distance-aware goal-time suggestions (finish seconds) for the fixed distances. */
+const TIME_PRESET_SECONDS: Record<Exclude<DistancePresetId, "custom">, readonly number[]> = {
+  "10": [2700, 3000, 3300, 3600], // 45:00 / 50:00 / 55:00 / 1:00:00
+  half: [5400, 6300, 7200, 8100], // 1:30:00 / 1:45:00 / 2:00:00 / 2:15:00
+  marathon: [12600, 13500, 14400, 16200], // 3:30:00 / 3:45:00 / 4:00:00 / 4:30:00
+};
+
+/**
+ * The goal suggestions to offer for the current mode and distance, as canonical
+ * clock strings the input accepts. Pace presets are generic; time presets are
+ * curated per fixed distance and, for a custom distance, derived as
+ * (round pace × km) so every distance still gets sensible tappable finish times.
+ */
+function goalPresets(mode: GoalMode, distancePreset: DistancePresetId, customKm: string): string[] {
+  if (mode === "pace") return PACE_PRESET_SECONDS.map(formatPaceSeconds);
+  if (mode === "time") {
+    if (distancePreset !== "custom") return TIME_PRESET_SECONDS[distancePreset].map(formatClock);
+    const km = resolveDistanceKm("custom", customKm);
+    if (km === null || km <= 0) return [];
+    return PACE_PRESET_SECONDS.map((pace) => formatClock(Math.round(pace * km)));
+  }
+  return [];
+}
+
+/**
+ * Format free goal entry so an iOS numeric keypad (no colon key, issue #239)
+ * still produces a valid clock: digits-only input gets colons inserted from the
+ * right ("14500" → "1:45:00", "500" → "5:00"). Once the user types a colon
+ * themselves (desktop), their own segmentation is respected — we only strip
+ * stray characters — so manual "h:mm:ss" entry keeps working.
+ */
+function formatGoalDraft(raw: string, mode: GoalMode): string {
+  if (raw.includes(":")) return raw.replace(/[^\d:]/g, "");
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if (mode === "pace") {
+    const d = digits.slice(-4);
+    return d.length <= 2 ? d : `${d.slice(0, -2)}:${d.slice(-2)}`;
+  }
+  const d = digits.slice(-6);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, -2)}:${d.slice(-2)}`;
+  return `${d.slice(0, -4)}:${d.slice(-4, -2)}:${d.slice(-2)}`;
+}
+
 // Race picker (issue #99, #238) — a client dialog over the plan page. The date
 // field is a native <input type="date"> (day-granular, no timezone), the name is
 // free text, the distance is a segmented control (preset or custom km), and the
@@ -176,6 +224,11 @@ export function RaceDateDialog({
     if (goalMode === "time") return `≈ ${formatPaceSeconds(parsed / distanceKm)} /km`;
     return `≈ ${formatClock(parsed * distanceKm)}`;
   }, [goalMode, goalValue, distancePreset, customKm]);
+
+  // Distance-aware goal suggestions — the primary path on mobile, where the iOS
+  // numeric keypad has no colon (issue #239). Recomputed as the mode/distance
+  // change; tapping one fills the goal field and the derived line follows.
+  const presets = goalMode === "none" ? [] : goalPresets(goalMode, distancePreset, customKm);
 
   if (!open) return null;
 
@@ -348,22 +401,47 @@ export function RaceDateDialog({
               })}
             </div>
             {goalMode !== "none" ? (
-              <label className="mt-2 flex flex-col gap-1.5">
-                <span className="cg-label-sm text-ink">
+              <div className="mt-2 flex flex-col gap-1.5">
+                <span id="goal-field-hint" className="cg-label-sm text-ink">
                   {goalMode === "time" ? "Sluttid (t:mm:ss)" : "Pace (m:ss /km)"}
                 </span>
+                {presets.length > 0 ? (
+                  <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
+                    <legend className="sr-only">Forslag til mål</legend>
+                    {presets.map((preset) => {
+                      const active = goalValue === preset;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setGoalValue(preset)}
+                          className={`cg-interactive rounded-pill border px-[12px] py-[6px] font-cg-mono text-[12px] transition-colors ${
+                            active
+                              ? "border-cobalt bg-cobalt text-silver"
+                              : "border-cobalt/30 text-cobalt hover:bg-cobalt/8"
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      );
+                    })}
+                  </fieldset>
+                ) : null}
                 <input
                   type="text"
                   inputMode="numeric"
+                  aria-label={goalMode === "time" ? "Sluttid" : "Målpace"}
+                  aria-describedby="goal-field-hint"
                   value={goalValue}
-                  onChange={(event) => setGoalValue(event.target.value)}
+                  onChange={(event) => setGoalValue(formatGoalDraft(event.target.value, goalMode))}
                   placeholder={goalMode === "time" ? "1:45:00" : "5:00"}
                   className="cg-interactive w-[160px] rounded-pill border border-cobalt/30 bg-white/60 px-4 py-2 font-cg-mono text-[13px] text-cobalt outline-none placeholder:text-ink/50 focus:border-cobalt"
                 />
                 {goalDerived ? (
                   <span className="cg-label-sm font-cg-mono text-cobalt">{goalDerived}</span>
                 ) : null}
-              </label>
+              </div>
             ) : null}
           </fieldset>
 
