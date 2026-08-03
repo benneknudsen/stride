@@ -79,15 +79,22 @@ export const getUserById = cache(async (id: string) => {
 });
 
 /**
- * The user's target race (issue #99): a day-granular date plus an optional
- * display name. Both fields are null until the user picks a race — callers
- * fall back to the engine's DEFAULT_RACE_DATE (demo plan) in that case.
- * Returns null when the user row itself is missing or the read fails.
+ * The user's target race (issue #99, #238): a day-granular date, an optional
+ * display name, and — since #238 — an optional race distance (km) and goal
+ * finish time (seconds). Every field is null until the user picks it — callers
+ * fall back to the engine's DEFAULT_RACE_DATE (demo plan) and the half-marathon
+ * distance in that case. Returns null when the user row itself is missing or the
+ * read fails.
  */
 export const getRacePlan = cache(async (userId: string) => {
   try {
     const [row] = await db
-      .select({ raceDate: users.raceDate, raceName: users.raceName })
+      .select({
+        raceDate: users.raceDate,
+        raceName: users.raceName,
+        raceDistanceKm: users.raceDistanceKm,
+        goalTimeSeconds: users.goalTimeSeconds,
+      })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -102,20 +109,35 @@ export const getRacePlan = cache(async (userId: string) => {
 /**
  * Set (or clear) the user's target race. Write path — intentionally uncached.
  * `raceDate` is a local-midnight calendar day (see lib/db/calendar-date.ts).
+ * `raceDistanceKm` and `goalTimeSeconds` (issue #238) are nullable so the user
+ * can drop a distance or a goal.
  */
 export async function updateRacePlan(
   userId: string,
-  input: { raceDate: Date | null; raceName: string | null }
+  input: {
+    raceDate: Date | null;
+    raceName: string | null;
+    raceDistanceKm: number | null;
+    goalTimeSeconds: number | null;
+  }
 ) {
   const [user] = await db
     .update(users)
     .set({
       raceDate: toDbDate(input.raceDate),
       raceName: input.raceName,
+      raceDistanceKm: input.raceDistanceKm,
+      goalTimeSeconds: input.goalTimeSeconds,
       updatedAt: new Date(),
     })
     .where(eq(users.id, userId))
-    .returning({ id: users.id, raceDate: users.raceDate, raceName: users.raceName });
+    .returning({
+      id: users.id,
+      raceDate: users.raceDate,
+      raceName: users.raceName,
+      raceDistanceKm: users.raceDistanceKm,
+      goalTimeSeconds: users.goalTimeSeconds,
+    });
   if (!user) return null;
   return { ...user, raceDate: fromDbDate(user.raceDate) };
 }

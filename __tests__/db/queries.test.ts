@@ -542,6 +542,19 @@ describe("getRacePlan", () => {
     });
   });
 
+  it("returns the stored race distance and goal time (issue #238)", async () => {
+    const stored = new Date(Date.UTC(2026, 8, 20));
+    mock.setResult([
+      { raceDate: stored, raceName: "CPH 10K", raceDistanceKm: 10, goalTimeSeconds: 2700 },
+    ]);
+    expect(await getRacePlan("u1")).toEqual({
+      raceDate: fromDbDate(stored),
+      raceName: "CPH 10K",
+      raceDistanceKm: 10,
+      goalTimeSeconds: 2700,
+    });
+  });
+
   it("returns null when the user row is missing", async () => {
     mock.setResult([]);
     expect(await getRacePlan("nope")).toBeNull();
@@ -561,7 +574,12 @@ describe("updateRacePlan", () => {
   it("serialises the calendar day with toDbDate and returns the normalised row", async () => {
     const day = new Date(2026, 8, 20); // local midnight
     mock.setResult([{ id: "u1", raceDate: new Date(Date.UTC(2026, 8, 20)), raceName: "Berlin" }]);
-    const out = await updateRacePlan("u1", { raceDate: day, raceName: "Berlin" });
+    const out = await updateRacePlan("u1", {
+      raceDate: day,
+      raceName: "Berlin",
+      raceDistanceKm: null,
+      goalTimeSeconds: null,
+    });
     expect(mock.db.update).toHaveBeenCalledTimes(1);
     // The value written to the `date` column is the UTC-midnight form.
     expect(mock.calls.set?.[0]?.[0]).toMatchObject({
@@ -575,23 +593,83 @@ describe("updateRacePlan", () => {
     });
   });
 
-  it("clears the race (null date and name)", async () => {
-    mock.setResult([{ id: "u1", raceDate: null, raceName: null }]);
-    const out = await updateRacePlan("u1", { raceDate: null, raceName: null });
-    expect(mock.calls.set?.[0]?.[0]).toMatchObject({ raceDate: null, raceName: null });
-    expect(out).toEqual({ id: "u1", raceDate: null, raceName: null });
+  it("persists the race distance and goal time (issue #238)", async () => {
+    const day = new Date(2026, 8, 20);
+    mock.setResult([
+      {
+        id: "u1",
+        raceDate: new Date(Date.UTC(2026, 8, 20)),
+        raceName: "CPH 10K",
+        raceDistanceKm: 10,
+        goalTimeSeconds: 2700,
+      },
+    ]);
+    const out = await updateRacePlan("u1", {
+      raceDate: day,
+      raceName: "CPH 10K",
+      raceDistanceKm: 10,
+      goalTimeSeconds: 2700,
+    });
+    expect(mock.calls.set?.[0]?.[0]).toMatchObject({
+      raceDistanceKm: 10,
+      goalTimeSeconds: 2700,
+    });
+    expect(out).toEqual({
+      id: "u1",
+      raceDate: fromDbDate(new Date(Date.UTC(2026, 8, 20))),
+      raceName: "CPH 10K",
+      raceDistanceKm: 10,
+      goalTimeSeconds: 2700,
+    });
+  });
+
+  it("clears the race (null date, name, distance and goal)", async () => {
+    mock.setResult([
+      { id: "u1", raceDate: null, raceName: null, raceDistanceKm: null, goalTimeSeconds: null },
+    ]);
+    const out = await updateRacePlan("u1", {
+      raceDate: null,
+      raceName: null,
+      raceDistanceKm: null,
+      goalTimeSeconds: null,
+    });
+    expect(mock.calls.set?.[0]?.[0]).toMatchObject({
+      raceDate: null,
+      raceName: null,
+      raceDistanceKm: null,
+      goalTimeSeconds: null,
+    });
+    expect(out).toEqual({
+      id: "u1",
+      raceDate: null,
+      raceName: null,
+      raceDistanceKm: null,
+      goalTimeSeconds: null,
+    });
   });
 
   it("returns null when no row matches the user id", async () => {
     mock.setResult([]);
-    expect(await updateRacePlan("nope", { raceDate: null, raceName: null })).toBeNull();
+    expect(
+      await updateRacePlan("nope", {
+        raceDate: null,
+        raceName: null,
+        raceDistanceKm: null,
+        goalTimeSeconds: null,
+      })
+    ).toBeNull();
   });
 
   it("propagates database errors (no swallowing on writes)", async () => {
     mock.setError(DB_ERROR);
-    await expect(updateRacePlan("u1", { raceDate: null, raceName: null })).rejects.toThrow(
-      "connection refused"
-    );
+    await expect(
+      updateRacePlan("u1", {
+        raceDate: null,
+        raceName: null,
+        raceDistanceKm: null,
+        goalTimeSeconds: null,
+      })
+    ).rejects.toThrow("connection refused");
   });
 });
 

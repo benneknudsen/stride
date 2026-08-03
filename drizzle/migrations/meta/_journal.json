@@ -57,6 +57,13 @@
       "when": 1785311080997,
       "tag": "0007_brown_nightmare",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785755497612,
+      "tag": "0008_opposite_moira_mactaggert",
+      "breakpoints": true
     }
   ]
 }
