@@ -25,11 +25,13 @@ import {
   buildPhases,
   DEFAULT_RACE_DATE,
   DEFAULT_RACE_NAME,
+  EASY_MIN_RECOVERY_HOURS,
   type EasySubtype,
   getCurrentPhase,
   getPhaseRules,
   getWeekPlan,
   MAX_WEEKLY_INCREASE_RATIO,
+  MIN_RECOVERY_HOURS,
   type PhaseKey,
   type PlannedSession,
 } from "@/lib/coach/engine";
@@ -220,6 +222,29 @@ const PHASE_LABELS: Record<PhaseKey, string> = {
 const PHASE_SEQUENCE: PhaseKey[] = ["adapt", "burn", "sharpen", "peak", "taper"];
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+
+/**
+ * Hours elapsed since `from`, clamped to ≥ 0 (a server clock a hair ahead of a
+ * run's timestamp must never read as a negative gap) — the same measure the
+ * coach card uses (`lib/coach/recommender.ts`) for its recovery buffer.
+ */
+function hoursSince(from: Date, now: Date): number {
+  return Math.max(0, (now.getTime() - from.getTime()) / HOUR_MS);
+}
+
+/**
+ * The start of the most recent actual run, or null if there are none — the clock
+ * the recovery buffer (issue #240) measures today's session against.
+ */
+function mostRecentRunStart(runs: HomeActivityLike[]): Date | null {
+  let latest: Date | null = null;
+  for (const run of runs) {
+    const start = ensureDate(run.startDate);
+    if (latest === null || start.getTime() > latest.getTime()) latest = start;
+  }
+  return latest;
+}
 
 /** One prescribed session, before `now` decides whether it's done or ahead. */
 interface DayTemplate {
@@ -443,6 +468,26 @@ function missedDay(index: number): DayPlan {
     kind: "missed",
     name: "Ikke gennemført",
     zoneLabel: "Sprunget over",
+    zoneTone: "muted",
+    metaTone: "muted",
+  };
+}
+
+/**
+ * Today withheld because the recovery buffer since the last actual run isn't met
+ * yet (issue #240) — the plan's mirror of the coach's rest card
+ * (`lib/coach/recommender.ts`). It reads as a rest tile (kind "rest") and names
+ * the shortfall the way the recommender does, so the two surfaces can't
+ * contradict each other: a run too recently → rest on both, never "go" here and
+ * "stop" there. Only ever applies to today, so the label always carries "· I DAG".
+ */
+function recoveryRestDay(index: number, hoursSinceRun: number, bufferHours: number): DayPlan {
+  return {
+    id: DOW_IDS[index],
+    dow: `${DOW_LABELS[index]} · I DAG`,
+    kind: "rest",
+    name: "Hviledag",
+    zoneLabel: `Restitution — kun ${Math.round(hoursSinceRun)} t siden sidste tur (under ${bufferHours} t)`,
     zoneTone: "muted",
     metaTone: "muted",
   };
@@ -854,12 +899,37 @@ function buildDerivedWeek(
     missed,
   } = adjustRemainingDays(sessions, runsByDay, todayIndex, scale, maxEasyKm, qualityDone);
 
+  // Recovery buffer for TODAY (issue #240) — the same gate the coach card
+  // enforces (`lib/coach/recommender.ts`): a hard session needs
+  // {@link MIN_RECOVERY_HOURS} (48 h) since the most recent actual run, an
+  // easy/long one {@link EASY_MIN_RECOVERY_HOURS} (24 h), keyed on today's
+  // prescribed session exactly as the recommender keys it on the upcoming one.
+  // When the last run is still inside that window, today rests instead of
+  // prescribing a run — so the plan can't say "go" while the coach says "stop".
+  // Only today is gated; past days report what happened, future days keep their
+  // prescription, and a run already logged today (the completedDay branch above)
+  // wins over the buffer.
+  const todaySession = adjusted[todayIndex];
+  const todayBufferHours =
+    todaySession.type === "tempo" ? MIN_RECOVERY_HOURS : EASY_MIN_RECOVERY_HOURS;
+  const lastRunStart = mostRecentRunStart(runs);
+  const hoursSinceLastRun =
+    lastRunStart !== null ? hoursSince(lastRunStart, now) : Number.POSITIVE_INFINITY;
+  const todayIsRun =
+    todaySession.type === "easy" || todaySession.type === "tempo" || todaySession.type === "long";
+  const todayNeedsRecovery = todayIsRun && hoursSinceLastRun < todayBufferHours;
+  // A rest day carries no prescribed volume — drop today's km from the week total.
+  if (todayNeedsRecovery) dayKm[todayIndex] = 0;
+
   const days = adjusted.map((_, index) => {
     if (runsByDay[index].length > 0) {
       return completedDay(index, runsByDay[index], index === todayIndex);
     }
     if (missed[index]) {
       return missedDay(index);
+    }
+    if (index === todayIndex && todayNeedsRecovery) {
+      return recoveryRestDay(index, hoursSinceLastRun, todayBufferHours);
     }
     return prescribedDay(
       index,
