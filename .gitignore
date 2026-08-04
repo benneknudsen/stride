@@ -60,5 +60,6 @@ next-env.d.ts
 # Claude Code review summary (not versioned)
 CODE_REVIEW_SUMMARY.md
 
-# artifacts
-0
+# AI agent instructions (local-only)
+AGENTS.md
+CLAUDE.md
