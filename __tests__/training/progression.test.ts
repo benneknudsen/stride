@@ -5,6 +5,8 @@ import {
   computeSnapshot,
   getCurrentProgression,
   getProgression,
+  TAU_ACUTE,
+  TAU_CHRONIC,
 } from "../../lib/training/progression";
 import type { HrZone } from "../../types/domain";
 
@@ -102,16 +104,22 @@ describe("computeSnapshot — insufficient data (<4 weeks)", () => {
     expect(computeSnapshot(twoWeeks, AS_OF).hasFullWindow).toBe(false);
   });
 
-  it("returns null for every trend metric instead of guessing", () => {
+  it("returns null for every window-gated trend metric instead of guessing", () => {
     const snapshot = computeSnapshot(twoWeeks, AS_OF);
     expect(snapshot.paceEfficiency).toBeNull();
     expect(snapshot.hrStability).toBeNull();
     expect(snapshot.zone2Percent).toBeNull();
     expect(snapshot.volumeKm).toBeNull();
     expect(snapshot.readyToIncrease).toBeNull();
-    expect(snapshot.trainingLoad.chronic).toBeNull();
-    expect(snapshot.trainingLoad.ratio).toBeNull();
-    expect(snapshot.trainingLoad.risk).toBeNull();
+  });
+
+  it("still exposes EWMA load — it is not gated on the 4-week window (#246)", () => {
+    // Unlike the trend metrics above, acute/chronic build from the first
+    // activity, so with two weeks of runs they are all present and non-null.
+    const snapshot = computeSnapshot(twoWeeks, AS_OF);
+    expect(snapshot.trainingLoad.chronic).not.toBeNull();
+    expect(snapshot.trainingLoad.ratio).not.toBeNull();
+    expect(snapshot.trainingLoad.risk).not.toBeNull();
   });
 
   it("still reports acute load from the available 7 days", () => {
@@ -205,18 +213,20 @@ describe("computeSnapshot — HR drift stability", () => {
 });
 
 describe("computeSnapshot — training load", () => {
-  it("reports a ~1.0 ratio for a perfectly steady schedule", () => {
-    // One run per week: acute (7d avg) ≈ chronic (28d avg).
-    const weekly = [1, 8, 15, 22, 29].map((d) => run({ daysAgo: d }));
-    const { ratio } = computeSnapshot(weekly, AS_OF).trainingLoad;
+  it("converges toward a ~1.0 ratio under a long steady schedule", () => {
+    // In EWMA steady state ATL and CTL settle at the same daily mean, so the
+    // ratio approaches 1.0. (A short history starts from a 0 base, where the
+    // fast acute series naturally leads the slow chronic one — see #246.)
+    const steady = Array.from({ length: 120 }, (_, i) => run({ daysAgo: i, minutes: 30 }));
+    const { ratio } = computeSnapshot(steady, AS_OF).trainingLoad;
     expect(ratio).not.toBeNull();
-    expect(ratio ?? 0).toBeGreaterThan(0.7);
-    expect(ratio ?? 0).toBeLessThan(1.3);
+    expect(ratio ?? 0).toBeGreaterThan(0.9);
+    expect(ratio ?? 0).toBeLessThan(1.15);
   });
 
-  it("classifies a steady schedule as optimal", () => {
-    const weekly = [1, 8, 15, 22, 29].map((d) => run({ daysAgo: d }));
-    expect(computeSnapshot(weekly, AS_OF).trainingLoad.risk).toBe("optimal");
+  it("classifies a long steady schedule as optimal", () => {
+    const steady = Array.from({ length: 120 }, (_, i) => run({ daysAgo: i, minutes: 30 }));
+    expect(computeSnapshot(steady, AS_OF).trainingLoad.risk).toBe("optimal");
   });
 
   it("flags a sudden volume spike as high risk", () => {
@@ -244,18 +254,103 @@ describe("computeSnapshot — training load", () => {
       run({ daysAgo: 28, minutes: 60 }),
     ];
     const { ratio, risk } = computeSnapshot(stopped, AS_OF).trainingLoad;
-    expect(ratio).toBe(0);
+    // The acute series has decayed well below the slower chronic base.
+    expect(ratio ?? 1).toBeLessThan(0.8);
     expect(risk).toBe("detraining");
   });
 
-  it("computes acute load as average daily minutes over 7 days", () => {
-    // 70 min of running in the last 7 days → 10 min/day.
-    const activities = [
-      run({ daysAgo: 1, minutes: 40 }),
-      run({ daysAgo: 5, minutes: 30 }),
-      run({ daysAgo: 28, minutes: 60 }),
-    ];
-    expect(computeSnapshot(activities, AS_OF).trainingLoad.acute).toBeCloseTo(10, 5);
+  it("computes acute load via the EWMA recurrence (load ÷ TAU on the run's day)", () => {
+    // A single 60-min run on the snapshot day: ATL = 60 * (1/TAU_ACUTE) with
+    // nothing before it, and CTL = 60 * (1/TAU_CHRONIC).
+    const { acute, chronic } = computeSnapshot(
+      [run({ daysAgo: 0, minutes: 60 })],
+      AS_OF
+    ).trainingLoad;
+    expect(acute).toBeCloseTo(60 / TAU_ACUTE, 5);
+    expect(chronic ?? 0).toBeCloseTo(60 / TAU_CHRONIC, 5);
+  });
+});
+
+describe("computeSnapshot — EWMA training load (#246)", () => {
+  // ── build-up: load exists from the first activity, no 4-week gate ──────────
+  it("builds acute & chronic from the very first activity", () => {
+    const snapshot = computeSnapshot([run({ daysAgo: 3 })], AS_OF);
+    expect(snapshot.trainingLoad.acute).toBeGreaterThan(0);
+    expect(snapshot.trainingLoad.chronic).not.toBeNull();
+    expect(snapshot.trainingLoad.chronic ?? 0).toBeGreaterThan(0);
+  });
+
+  it("grows the chronic base as consistent training accumulates", () => {
+    const oneWeek = Array.from({ length: 7 }, (_, i) => run({ daysAgo: i, minutes: 30 }));
+    const sixWeeks = Array.from({ length: 42 }, (_, i) => run({ daysAgo: i, minutes: 30 }));
+    const shortBase = computeSnapshot(oneWeek, AS_OF).trainingLoad.chronic ?? 0;
+    const longBase = computeSnapshot(sixWeeks, AS_OF).trainingLoad.chronic ?? 0;
+    expect(longBase).toBeGreaterThan(shortBase);
+  });
+
+  // ── faster acute response: a fresh run moves ATL harder than CTL ───────────
+  it("reacts to a fresh run more strongly on acute than on chronic", () => {
+    const { acute, chronic } = computeSnapshot(
+      [run({ daysAgo: 0, minutes: 60 })],
+      AS_OF
+    ).trainingLoad;
+    // Same 60 min lands as 60/TAU_ACUTE on ATL vs 60/TAU_CHRONIC on CTL.
+    expect(acute).toBeGreaterThan(chronic ?? 0);
+    expect(acute / (chronic ?? 1)).toBeCloseTo(TAU_CHRONIC / TAU_ACUTE, 5);
+  });
+
+  // ── rest-day decay: ATL sheds a larger fraction than CTL over a gap ────────
+  it("decays acute faster than chronic across a rest gap", () => {
+    const fresh = computeSnapshot([run({ daysAgo: 0, minutes: 60 })], AS_OF).trainingLoad;
+    const week = computeSnapshot([run({ daysAgo: 7, minutes: 60 })], AS_OF).trainingLoad;
+    expect(week.acute).toBeLessThan(fresh.acute);
+    const acuteRetained = week.acute / fresh.acute;
+    const chronicRetained = (week.chronic ?? 0) / (fresh.chronic ?? 1);
+    expect(acuteRetained).toBeLessThan(chronicRetained);
+  });
+
+  it("falls into detraining after a long rest with no recent runs", () => {
+    const rested = Array.from({ length: 20 }, (_, i) => run({ daysAgo: 30 + i, minutes: 30 }));
+    const { ratio, risk } = computeSnapshot(rested, AS_OF).trainingLoad;
+    expect(ratio ?? 1).toBeLessThan(0.8);
+    expect(risk).toBe("detraining");
+  });
+
+  // ── daily changes without new activities: zero-load days decay the series ──
+  it("changes day-to-day with no new activity as zero-load days decay it", () => {
+    const activities = [run({ daysAgo: 5, minutes: 60 })];
+    const today = computeSnapshot(activities, AS_OF).trainingLoad;
+    const tomorrow = computeSnapshot(activities, new Date(AS_OF.getTime() + DAY_MS)).trainingLoad;
+    expect(tomorrow.acute).toBeLessThan(today.acute);
+    expect(tomorrow.chronic ?? 0).toBeLessThan(today.chronic ?? 0);
+  });
+
+  // ── ratio consistency: ratio is exactly ATL/CTL, null only with no base ────
+  it("keeps ratio exactly equal to acute ÷ chronic", () => {
+    const activities = Array.from({ length: 30 }, (_, i) => run({ daysAgo: i * 2, minutes: 40 }));
+    const { acute, chronic, ratio } = computeSnapshot(activities, AS_OF).trainingLoad;
+    expect(chronic).not.toBeNull();
+    expect(ratio).toBeCloseTo(acute / (chronic as number), 10);
+  });
+
+  it("returns a null ratio only when there is no activity at all", () => {
+    const empty = computeSnapshot([], AS_OF).trainingLoad;
+    expect(empty.acute).toBe(0);
+    expect(empty.chronic).toBeNull();
+    expect(empty.ratio).toBeNull();
+    expect(empty.risk).toBeNull();
+  });
+
+  // ── regression: the load rewrite leaves window-gated metrics untouched ─────
+  it("leaves the window-gated trend metrics unchanged", () => {
+    const snapshot = computeSnapshot(steadyBase(), AS_OF);
+    expect(snapshot.hasFullWindow).toBe(true);
+    expect(snapshot.volumeKm).toBeCloseTo(90, 5);
+    expect(snapshot.paceEfficiency).toBeCloseTo((10000 / 3600 / 145) * 1000, 2);
+    // readyToIncrease stays gated on the full window even though raw load exists.
+    const partial = computeSnapshot([run({ daysAgo: 1 }), run({ daysAgo: 5 })], AS_OF);
+    expect(partial.readyToIncrease).toBeNull();
+    expect(partial.trainingLoad.acute).toBeGreaterThan(0);
   });
 });
 
@@ -285,8 +380,8 @@ describe("computeSnapshot — volume & readiness", () => {
   });
 
   it("is ready to increase on a steady, balanced load", () => {
-    const weekly = [1, 8, 15, 22, 29].map((d) => run({ daysAgo: d }));
-    expect(computeSnapshot(weekly, AS_OF).readyToIncrease).toBe(true);
+    const steady = Array.from({ length: 120 }, (_, i) => run({ daysAgo: i, minutes: 30 }));
+    expect(computeSnapshot(steady, AS_OF).readyToIncrease).toBe(true);
   });
 
   it("is not ready to increase mid-spike", () => {

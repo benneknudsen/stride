@@ -32,10 +32,15 @@ function run(daysAgo: number, km: number, paceMinPerKm: number, hr?: number): An
   };
 }
 
-/** Evenly spread runs across the trailing 4 weeks — a steady, optimal load. */
-const STEADY: AnalysisActivity[] = [1, 3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 26, 29].map((d) =>
-  run(d, 8, 5.2, 150)
-);
+/**
+ * A long, steady base — three 8 km runs a week for 18 weeks. EWMA load (#246)
+ * builds from the first activity with a 42-day chronic tau, so a mere 4 weeks of
+ * runs leaves the chronic series still warming up from 0 and the acute:chronic
+ * ratio biased into "high"; a settled base is what actually reads "optimal".
+ */
+const STEADY: AnalysisActivity[] = Array.from({ length: 18 }, (_, week) =>
+  [1, 3, 5].map((day) => run(day + week * 7, 8, 5.2, 150))
+).flat();
 
 /** One old anchor run, then a sudden heavy week — acute:chronic spikes high. */
 const SPIKED: AnalysisActivity[] = [
@@ -81,11 +86,15 @@ describe("coachInsight schema", () => {
 });
 
 describe("buildAnalysisInput progression", () => {
-  it("reports no progression metrics with under 4 weeks of history", () => {
+  it("gates the window metrics under 4 weeks but still exposes EWMA load (#246)", () => {
     const input = buildAnalysisInput([run(1, 8, 5.0, 150), run(3, 10, 5.2, 152)], "overall", NOW);
     expect(input.progression.hasFullWindow).toBe(false);
-    expect(input.progression.loadRatio).toBeNull();
-    expect(input.progression.loadRisk).toBeNull();
+    // Window-gated trend metrics stay null without a full 4-week base…
+    expect(input.progression.volumeKm).toBeNull();
+    expect(input.progression.readyToIncrease).toBeNull();
+    // …but load (acute:chronic) now builds from the first activity, not gated.
+    expect(input.progression.loadRatio).not.toBeNull();
+    expect(input.progression.loadRisk).not.toBeNull();
   });
 
   it("computes load ratio and risk from a full 4-week window", () => {

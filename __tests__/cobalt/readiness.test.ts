@@ -188,13 +188,17 @@ describe("readiness from a real training history (issue #243)", () => {
     };
   }
 
-  // A shared 4-week aerobic base — three 8 km easy runs a week (8 km @ 5:00/km ≈
-  // 40 min), all older than a week so they land in the chronic window but not the
-  // acute one. The 34-days-ago run guarantees a full chronic window. Each
-  // scenario stacks its own most-recent week on top.
-  const FOUNDATION: ProgressionActivityInput[] = [
-    9, 11, 13, 16, 18, 20, 23, 25, 27, 30, 32, 34,
-  ].map((daysAgo) => run(daysAgo, 8, 300));
+  // A shared, fully warmed aerobic base — 18 weeks of three 8 km easy runs a
+  // week (8 km @ 5:00/km ≈ 40 min), all older than a week so the most-recent
+  // scenario week stacks cleanly on top. EWMA load (#246) builds from the first
+  // activity with a 42-day chronic tau, so the base has to run long enough for
+  // the chronic series (CTL) to reach its steady state — a short 4-week base is
+  // still warming up from a 0 start, which biases every acute:chronic ratio high
+  // (the cold-start the engine's own tests call out). This settled base is what
+  // makes the ratios below physiologically meaningful rather than warm-up noise.
+  const FOUNDATION: ProgressionActivityInput[] = Array.from({ length: 18 }, (_, week) =>
+    [9, 11, 13].map((day) => run(day + week * 7, 8, 300))
+  ).flat();
 
   // One hard 10 km yesterday, on top of a normal 3-run week.
   const withTenK: ProgressionActivityInput[] = [
@@ -207,10 +211,14 @@ describe("readiness from a real training history (issue #243)", () => {
     ...FOUNDATION,
     ...[2, 4, 6].map((d) => run(d, 7, 300)),
   ];
-  // A doubled week — six runs where the base has three.
+  // A genuine, sustained overload — not one hard session but ten straight days
+  // of 13 km, far above the three-runs-a-week base. Under the smoother EWMA
+  // acute a single doubled week barely lifts the ratio (it stays "ready"); it
+  // takes a real multi-day surge to push acute well past the chronic base and
+  // out of the ready band.
   const overload: ProgressionActivityInput[] = [
     ...FOUNDATION,
-    ...[1, 2, 3, 4, 5, 6].map((d) => run(d, 8, 300)),
+    ...Array.from({ length: 10 }, (_, i) => run(i + 1, 13, 270)),
   ];
 
   function ratioFor(activities: ProgressionActivityInput[]): number {
@@ -221,11 +229,11 @@ describe("readiness from a real training history (issue #243)", () => {
 
   it("reads one 10K on a 4-week base as ratio > 1 and still 'ready' (#241 mapping)", () => {
     const ratio = ratioFor(withTenK);
-    // The 10K pushed the acute (7-day) load above the chronic (28-day) base.
+    // The 10K nudged the fast acute EWMA a little above the settled chronic base.
     expect(ratio).toBeGreaterThan(1);
     const readiness = readinessFromRatio(ratio);
     // The asymmetric #241 mapping keeps a single quality session high in the ready
-    // band — the old "82% after one 10K" complaint now reads ~90, well over 85.
+    // band — the old "82% after one 10K" complaint now reads in the mid-90s.
     expect(readiness.pct).toBeGreaterThanOrEqual(85);
     expect(readiness.pct).toBeLessThanOrEqual(95);
     expect(readiness.band).toBe("ready");
@@ -244,10 +252,10 @@ describe("readiness from a real training history (issue #243)", () => {
     expect(readinessFromRatio(restedRatio).band).toBe("ready");
   });
 
-  it("flags a doubled week as clearly less ready than the single 10K", () => {
+  it("flags a sustained overload as clearly less ready than the single 10K", () => {
     const overloadRatio = ratioFor(overload);
     const tenKRatio = ratioFor(withTenK);
-    // A real spike, not one hard run — the ratio climbs well past the 10K case.
+    // A multi-day surge, not one hard run — the ratio climbs well past the 10K case.
     expect(overloadRatio).toBeGreaterThan(tenKRatio);
     const overloadReadiness = readinessFromRatio(overloadRatio);
     expect(overloadReadiness.pct).toBeLessThan(readinessFromRatio(tenKRatio).pct);

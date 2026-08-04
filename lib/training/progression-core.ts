@@ -21,10 +21,29 @@ import type { HrZone } from "@/types/domain";
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Rolling analysis window: 4 weeks. */
 export const WINDOW_DAYS = 28;
-/** Acute training-load window: 7 days. */
-const ACUTE_DAYS = 7;
 /** A "long run" for HR-drift purposes: 12 km or more. */
 const LONG_RUN_METERS = 12_000;
+
+// ── EWMA training load (issue #246) ─────────────────────────────────────────
+// Acute (ATL) and chronic (CTL) load are exponentially-weighted moving averages
+// of each day's running load, updated once per calendar day:
+//
+//   ATL(d) = ATL(d-1) * (1 - 1/TAU_ACUTE)   + load(d) * (1/TAU_ACUTE)
+//   CTL(d) = CTL(d-1) * (1 - 1/TAU_CHRONIC) + load(d) * (1/TAU_CHRONIC)
+//
+// Both series start at 0 and build forward from the first activity, so load is
+// available from day one instead of being gated on 4 weeks of history. The
+// smaller acute tau makes ATL react faster to recent work; the larger chronic
+// tau makes CTL a slow-moving fitness baseline. Every calendar day between the
+// first activity and the snapshot is processed — including zero-activity days,
+// which decay both series toward 0. `dailyLoad` is a day's total *running
+// moving minutes* (the only reliable signal today; no intensity weighting).
+//
+// Tune the responsiveness here — these are the standard 7/42-day constants.
+/** EWMA smoothing constant for acute load (fast response). */
+export const TAU_ACUTE = 7;
+/** EWMA smoothing constant for chronic load (slow baseline). */
+export const TAU_CHRONIC = 42;
 
 /** Minimal activity shape the engine reads — a subset of an activities row. */
 export interface ProgressionActivityInput {
@@ -52,11 +71,18 @@ export interface ProgressionActivityInput {
 export type LoadRisk = "detraining" | "optimal" | "elevated" | "high";
 
 export interface TrainingLoad {
-  /** Average daily running minutes over the last 7 days. */
+  /**
+   * Acute training load (ATL): EWMA of daily running minutes with a 7-day tau.
+   * Reacts fast to recent work. 0 before the first activity.
+   */
   acute: number;
-  /** Average daily running minutes over the last 28 days; null if <4 weeks of data. */
+  /**
+   * Chronic training load (CTL): EWMA of daily running minutes with a 42-day
+   * tau — the slow fitness baseline. Null only before the first activity, when
+   * no base exists yet (it is no longer gated on a full 4-week window).
+   */
   chronic: number | null;
-  /** Acute ÷ chronic. Null when chronic is unknown or zero. */
+  /** Acute ÷ chronic (ATL/CTL). Null only when chronic (CTL) is zero. */
   ratio: number | null;
   /** Risk band for the ratio. Null when the ratio is unknown. */
   risk: LoadRisk | null;
@@ -143,12 +169,49 @@ function hrStability(windowRuns: ProgressionActivityInput[]): number | null {
   return Math.max(0, Math.round(100 * (1 - (5 * mad) / mid)));
 }
 
-/** Average daily running minutes over the trailing `days`. */
-function dailyLoad(runs: ProgressionActivityInput[], asOf: Date, days: number): number {
-  const totalSeconds = runs
-    .filter((run) => inWindow(run, asOf, days))
-    .reduce((sum, run) => sum + run.movingTime, 0);
-  return totalSeconds / 60 / days;
+/** Floor a timestamp to its UTC calendar-day index (whole days since epoch). */
+function dayIndex(time: number): number {
+  return Math.floor(time / DAY_MS);
+}
+
+interface EwmaLoad {
+  /** Acute load (ATL), average running minutes/day, fast tau. */
+  acute: number;
+  /** Chronic load (CTL), average running minutes/day, slow tau. */
+  chronic: number;
+}
+
+/**
+ * Acute (ATL) and chronic (CTL) EWMA load at `asOf`, in running minutes/day.
+ *
+ * Buckets every run into its UTC calendar day, then walks day-by-day from the
+ * first activity through `asOf`, applying the EWMA recurrence once per day.
+ * Zero-activity days still advance the recurrence, so both series decay across
+ * gaps. Before the first activity there is no base: returns {0, 0}.
+ *
+ * `runs` are assumed already filtered to runs dated at/before `asOf`.
+ */
+function ewmaLoad(runs: ProgressionActivityInput[], asOf: Date): EwmaLoad {
+  const asOfDay = dayIndex(asOf.getTime());
+  const minutesByDay = new Map<number, number>();
+  let firstDay: number | null = null;
+
+  for (const run of runs) {
+    const day = dayIndex(ensureDate(run.startDate).getTime());
+    if (day > asOfDay) continue; // defensive — runs are pre-filtered to <= asOf
+    minutesByDay.set(day, (minutesByDay.get(day) ?? 0) + run.movingTime / 60);
+    firstDay = firstDay === null ? day : Math.min(firstDay, day);
+  }
+  if (firstDay === null) return { acute: 0, chronic: 0 };
+
+  let acute = 0;
+  let chronic = 0;
+  for (let day = firstDay; day <= asOfDay; day++) {
+    const load = minutesByDay.get(day) ?? 0;
+    acute = acute * (1 - 1 / TAU_ACUTE) + load / TAU_ACUTE;
+    chronic = chronic * (1 - 1 / TAU_CHRONIC) + load / TAU_CHRONIC;
+  }
+  return { acute, chronic };
 }
 
 /** Compute every progression metric at a single point in time. */
@@ -167,9 +230,12 @@ export function computeSnapshot(
   }, null);
   const hasFullWindow = earliest !== null && asOf.getTime() - earliest >= WINDOW_DAYS * DAY_MS;
 
-  const acute = dailyLoad(runs, asOf, ACUTE_DAYS);
-  const chronic = hasFullWindow ? dailyLoad(runs, asOf, WINDOW_DAYS) : null;
-  const ratio = chronic !== null && chronic > 0 ? acute / chronic : null;
+  // EWMA load (issue #246) builds from the first activity, independent of the
+  // 4-week window that still gates the trend metrics below. `chronic` (CTL) is
+  // null only before any activity exists, and the ratio is null exactly then.
+  const { acute, chronic: ctl } = ewmaLoad(runs, asOf);
+  const chronic = ctl > 0 ? ctl : null;
+  const ratio = chronic !== null ? acute / chronic : null;
   const risk = ratio !== null ? classifyRisk(ratio) : null;
 
   const zoneBreakdown = hasFullWindow ? aggregateZones(windowRuns) : null;
@@ -186,7 +252,10 @@ export function computeSnapshot(
     trainingLoad: { acute, chronic, ratio, risk },
     zone2Percent,
     volumeKm: hasFullWindow ? windowRuns.reduce((sum, run) => sum + run.distance, 0) / 1000 : null,
-    readyToIncrease: risk !== null ? risk === "optimal" : null,
+    // Gated on the full window (like the other trend metrics): the "can I add
+    // volume?" call stays null until there's a 4-week base, even though the raw
+    // EWMA risk is now available sooner.
+    readyToIncrease: hasFullWindow && risk !== null ? risk === "optimal" : null,
   };
 }
 
