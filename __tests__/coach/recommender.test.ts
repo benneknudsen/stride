@@ -117,6 +117,52 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
     });
   });
 
+  describe("step 3b — readiness band language (#245)", () => {
+    /** Snapshot on `date` with the given acute:chronic ratio. */
+    function atRatio(ratio: number, date: Date): ProgressionSnapshot {
+      return snapshot({ date, trainingLoad: { acute: 30, chronic: 30, ratio, risk: "optimal" } });
+    }
+
+    it("stays positive and never says 'risiko' at ratio 1.29 (gauge reads 88% ready)", () => {
+      const rec = recommend({ progression: atRatio(1.29, BURN_WEDNESDAY) });
+      expect(rec.type).not.toBe("rest");
+      const text = rec.reason.join(" ");
+      expect(text).toMatch(/readiness/i);
+      expect(text).toMatch(/klar/i);
+      expect(text).not.toMatch(/risiko/i);
+    });
+
+    it("reads a rested athlete (ratio < 0.8) as ready, not a rest warning", () => {
+      const rec = recommend({ progression: atRatio(0.7, BURN_WEDNESDAY) });
+      expect(rec.type).not.toBe("rest");
+      const text = rec.reason.join(" ");
+      expect(text).toMatch(/klar/i);
+      expect(text).not.toMatch(/risiko/i);
+    });
+
+    it("downgrades a tempo day to easy in the easy band (ratio 1.5)", () => {
+      const rec = recommend({ progression: atRatio(1.5, SHARPEN_WEDNESDAY) }, SHARPEN_WEDNESDAY);
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toMatch(/rolig tur/i);
+    });
+
+    it("recommends rest in the rest band (ratio 2.0), not a run", () => {
+      const rec = recommend({ progression: atRatio(2.0, BURN_WEDNESDAY) });
+      expect(rec.type).toBe("rest");
+      expect(rec.distanceKm).toBe(0);
+      expect(rec.reason.join(" ")).toMatch(/restitution/i);
+    });
+
+    it("keeps the recovery buffer independent of readiness — fresh but too soon still rests", () => {
+      const rec = recommend({
+        progression: atRatio(1.0, BURN_WEDNESDAY),
+        lastRun: new Date(BURN_WEDNESDAY.getTime() - 12 * HOUR_MS),
+      });
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/24/);
+    });
+  });
+
   describe("step 3 — football recovery", () => {
     it("downgrades a tempo day to easy the day after a match", () => {
       const rec = recommend(

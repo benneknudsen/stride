@@ -26,7 +26,12 @@ export interface Readiness {
   note: string;
 }
 
-const BAND_NOTES: Record<ReadinessBand, string> = {
+/**
+ * The plain-language Danish note for each band. Exported (issue #245) so the
+ * coach — feed, recommender and system prompt — speaks the same words the Hjem
+ * gauge shows for the same ratio, and the two surfaces can never contradict.
+ */
+export const BAND_NOTES: Record<ReadinessBand, string> = {
   ready: "Klar til hårdt pas",
   easy: "Let træning anbefalet",
   rest: "Prioritér hvile i dag",
@@ -76,4 +81,14 @@ export function readinessFromRatio(ratio: number | null): Readiness {
   const pct = Math.min(FULL_PCT, Math.max(FLOOR_PCT, Math.round(raw)));
   const band: ReadinessBand = pct >= 80 ? "ready" : pct >= 68 ? "easy" : "rest";
   return { pct, band, note: BAND_NOTES[band] };
+}
+
+/**
+ * The readiness band for a ratio, under the name the coach modules import
+ * (issue #245). A thin alias of {@link readinessFromRatio} so the coach reads
+ * readiness through the exact same asymmetric mapping the gauge does — one
+ * source of truth for "how ready is the athlete", no divergent risk thresholds.
+ */
+export function getReadinessBand(ratio: number | null): Readiness {
+  return readinessFromRatio(ratio);
 }
