@@ -7,7 +7,7 @@ import { PlanHeader } from "@/components/cobalt/plan/PlanHeader";
 import { RaceDateDialog } from "@/components/cobalt/plan/RaceDateDialog";
 import { RaceDayCard } from "@/components/cobalt/plan/RaceDayCard";
 import { UpcomingWeeks } from "@/components/cobalt/plan/UpcomingWeeks";
-import { WeekCalendar } from "@/components/cobalt/plan/WeekCalendar";
+import { WeekSuggestions } from "@/components/cobalt/plan/WeekSuggestions";
 import { useStartupReveal } from "@/hooks/useStartupReveal";
 import type { PlanView } from "@/lib/cobalt/plan";
 
@@ -82,11 +82,11 @@ export function PlanPageClient({
           />
         </div>
 
-        <WeekCalendar
+        <WeekSuggestions
           weekOfPlan={view.weekOfPlan}
-          plannedKm={view.weekPlannedKm}
-          doneKm={view.weekDoneKm}
-          days={view.days}
+          phaseLabel={view.phaseLabel}
+          weekKm={view.weekKm}
+          suggestions={view.suggestions}
         />
 
         <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-[7fr_5fr]">

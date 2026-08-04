@@ -29,6 +29,7 @@ import {
   type WorkoutContext,
 } from "@/lib/coach/engine";
 import { recommendWorkout } from "@/lib/coach/recommender";
+import { getPlanSuggestions } from "@/lib/cobalt/plan";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { formatPace } from "@/lib/metrics";
 import { GOALS } from "@/lib/training/goals";
@@ -183,6 +184,32 @@ export function buildCoachTools(
           now
         );
       },
+    }),
+
+    getRunSuggestions: tool({
+      description:
+        "Hent ugens tre løbeforslag (let pas, kvalitetspas, langtur) for brugerens aktuelle fase — distance og pace-mål for hvert. Planen foreskriver ikke længere en fast ugedag (issue #244), så BRUG dette til at anbefale hvilket af de tre pas brugeren skal løbe i dag ud fra restitution og seneste tur. Forslagenes pace kommer fra brugerens egne aktiviteter.",
+      // A nominal, ignored parameter: some providers reject function
+      // declarations with an empty parameter object (issue #200).
+      inputSchema: z.object({
+        reason: z
+          .string()
+          .nullish()
+          .describe("Valgfri kort begrundelse — påvirker ikke beregningen"),
+      }),
+      execute: async () =>
+        getPlanSuggestions(
+          activities.map((a) => ({
+            type: a.type,
+            distance: a.distance,
+            movingTime: a.movingTime,
+            startDate: ensureDate(a.startDate),
+            averageHeartrate: a.averageHeartrate ?? null,
+          })),
+          now,
+          raceDate,
+          raceName
+        ),
     }),
 
     getProgression: tool({

@@ -96,6 +96,26 @@ describe("coach tools — provider robustness (#200)", () => {
     expect(result).toBeTruthy();
   });
 
+  it("getRunSuggestions declares a parameter and returns the three suggestions (#244)", async () => {
+    const t = tools().getRunSuggestions;
+    // Empty parameter objects break function-calling on some providers, so the
+    // schema must expose at least one property and tolerate an explicit null.
+    const parsed = parse(t, { reason: null });
+    expect(parsed.success).toBe(true);
+    const result = (await t.execute?.(parsed.data as never, {} as never)) as {
+      suggestions: Array<{ type: string; distanceKm: number; paceRange: { min: string } }>;
+      phaseLabel: string;
+      weekKm: number;
+    };
+    // The coach reads the three day-agnostic run suggestions and recommends which
+    // to do today — so the suggestion data must be present in the tool output.
+    expect(result.suggestions.map((s) => s.type)).toEqual(["easy", "tempo", "long"]);
+    expect(result.suggestions[0].distanceKm).toBeGreaterThan(0);
+    expect(result.suggestions[0].paceRange.min).toMatch(/^\d+:\d{2}$/);
+    expect(typeof result.phaseLabel).toBe("string");
+    expect(result.weekKm).toBeGreaterThan(0);
+  });
+
   it("getRecentActivities accepts a null limit and returns card-shaped rows (#221)", async () => {
     const t = tools().getRecentActivities;
     const parsed = parse(t, { limit: null });
