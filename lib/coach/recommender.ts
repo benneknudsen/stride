@@ -9,6 +9,9 @@
 //   2. Recovery buffer (48 h before tempo, 24 h before easy/long, 72 h with
 //      injury history) — broken → rest day.
 //   3. Football yesterday → no hard session (tempo downgrades to easy).
+//   3b. Readiness band (#245) — the same asymmetric readiness the Hjem gauge
+//      shows: rest when the body needs restitution, downgrade to easy when
+//      readiness is only moderate. Freshness, distinct from the recovery buffer.
 //   4. Distance from the phase band (adapt 6–8, burn 8–10, …).
 //   5. Improved pace efficiency + optimal load → unlock the band's upper end.
 //   6. Intensity: Zone 2 by default; tempo only where the phase allows it.
@@ -29,6 +32,7 @@ import {
   validateWorkout,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
+import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import type { Goal } from "@/lib/training/goals";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
@@ -181,6 +185,32 @@ export function recommendWorkout(
     reason.push(
       "Fodboldkamp i går — benene er forbelastede, så tempoturen bliver en rolig Zone 2-tur."
     );
+  }
+
+  // 3b. Readiness band (#245): read freshness through the exact same
+  // readinessFromRatio the Hjem gauge uses, so the coach's language can never
+  // contradict the gauge for the same acute:chronic ratio. This is a fitness
+  // read, separate from the recovery buffer above (time since the last run) —
+  // both inform the card, but they answer different questions.
+  //   • rest  (<68%) → the body needs restitution: no run today.
+  //   • easy (68–79%) → downgrade a hard/long session to a rolig tur.
+  //   • ready (≥80%) → keep the planned session and say so positively.
+  const readiness = readinessFromRatio(input.progression.trainingLoad.ratio);
+  if (readiness.band === "rest") {
+    reason.push(
+      `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Din krop har brug for restitution i dag.`
+    );
+    return restCard(reason, weekStrip);
+  }
+  if (readiness.band === "easy") {
+    if (type !== "easy") {
+      type = "easy";
+    }
+    reason.push(
+      `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Overvej en rolig tur i dag frem for et hårdt pas.`
+    );
+  } else {
+    reason.push(`Din readiness er på ${readiness.pct}% — du er klar til dagens pas.`);
   }
 
   // 4 + 5. Distance from the phase band; progression unlocks the upper end.
