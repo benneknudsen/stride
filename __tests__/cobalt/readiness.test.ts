@@ -5,7 +5,7 @@ import { buildHomeView, type HomeActivityLike, zoneForHeartRate } from "@/lib/co
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
 import { demoActivities } from "@/lib/demo/data";
-import { computeSnapshot } from "@/lib/training/progression-core";
+import { computeSnapshot, type ProgressionActivityInput } from "@/lib/training/progression-core";
 import { zoneForHeartRate as trainingZone } from "@/lib/training/zones";
 
 /**
@@ -161,6 +161,98 @@ describe("Hjem and Coach show the same readiness (issue #127)", () => {
       NOW
     );
     expect(strained.readinessPct).toBe(calm.readinessPct);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Single recent 10K — the real path, end to end (issue #243)
+// ---------------------------------------------------------------------------
+
+describe("readiness from a real training history (issue #243)", () => {
+  // Everything here goes through the real engine — computeSnapshot →
+  // trainingLoad.ratio → readinessFromRatio — with no hand-picked ratio anywhere,
+  // so it exercises the whole "a runner does one 10K on a base" path the
+  // isolated readinessFromRatio tests above never touch.
+
+  function run(daysAgo: number, km: number, paceSecPerKm: number): ProgressionActivityInput {
+    const startDate = new Date(NOW);
+    startDate.setDate(startDate.getDate() - daysAgo);
+    startDate.setHours(7, 30, 0, 0);
+    return {
+      type: "Run",
+      distance: km * 1000,
+      movingTime: Math.round(km * paceSecPerKm),
+      averageHeartrate: 140,
+      hrZones: null,
+      startDate,
+    };
+  }
+
+  // A shared 4-week aerobic base — three 8 km easy runs a week (8 km @ 5:00/km ≈
+  // 40 min), all older than a week so they land in the chronic window but not the
+  // acute one. The 34-days-ago run guarantees a full chronic window. Each
+  // scenario stacks its own most-recent week on top.
+  const FOUNDATION: ProgressionActivityInput[] = [
+    9, 11, 13, 16, 18, 20, 23, 25, 27, 30, 32, 34,
+  ].map((daysAgo) => run(daysAgo, 8, 300));
+
+  // One hard 10 km yesterday, on top of a normal 3-run week.
+  const withTenK: ProgressionActivityInput[] = [
+    ...FOUNDATION,
+    ...[2, 4, 6].map((d) => run(d, 8, 300)),
+    run(1, 10, 270), // the 10K @ 4:30/km
+  ];
+  // A light recovery week instead — three shorter easy runs, nothing hard.
+  const rested: ProgressionActivityInput[] = [
+    ...FOUNDATION,
+    ...[2, 4, 6].map((d) => run(d, 7, 300)),
+  ];
+  // A doubled week — six runs where the base has three.
+  const overload: ProgressionActivityInput[] = [
+    ...FOUNDATION,
+    ...[1, 2, 3, 4, 5, 6].map((d) => run(d, 8, 300)),
+  ];
+
+  function ratioFor(activities: ProgressionActivityInput[]): number {
+    const ratio = computeSnapshot(activities, NOW).trainingLoad.ratio;
+    if (ratio === null) throw new Error("fixture must have a full chronic window");
+    return ratio;
+  }
+
+  it("reads one 10K on a 4-week base as ratio > 1 and still 'ready' (#241 mapping)", () => {
+    const ratio = ratioFor(withTenK);
+    // The 10K pushed the acute (7-day) load above the chronic (28-day) base.
+    expect(ratio).toBeGreaterThan(1);
+    const readiness = readinessFromRatio(ratio);
+    // The asymmetric #241 mapping keeps a single quality session high in the ready
+    // band — the old "82% after one 10K" complaint now reads ~90, well over 85.
+    expect(readiness.pct).toBeGreaterThanOrEqual(85);
+    expect(readiness.pct).toBeLessThanOrEqual(95);
+    expect(readiness.band).toBe("ready");
+  });
+
+  it("never penalises freshness — a rested week reads at least as ready as the 10K", () => {
+    const restedRatio = ratioFor(rested);
+    const tenKRatio = ratioFor(withTenK);
+    // A genuine taper: acute load below the chronic base.
+    expect(restedRatio).toBeLessThan(1);
+    // The whole point of the #241 asymmetry — being fresh is never scored below a
+    // mild overload.
+    expect(readinessFromRatio(restedRatio).pct).toBeGreaterThanOrEqual(
+      readinessFromRatio(tenKRatio).pct
+    );
+    expect(readinessFromRatio(restedRatio).band).toBe("ready");
+  });
+
+  it("flags a doubled week as clearly less ready than the single 10K", () => {
+    const overloadRatio = ratioFor(overload);
+    const tenKRatio = ratioFor(withTenK);
+    // A real spike, not one hard run — the ratio climbs well past the 10K case.
+    expect(overloadRatio).toBeGreaterThan(tenKRatio);
+    const overloadReadiness = readinessFromRatio(overloadRatio);
+    expect(overloadReadiness.pct).toBeLessThan(readinessFromRatio(tenKRatio).pct);
+    // Out of the ready band entirely — an "easy"/"rest" read.
+    expect(overloadReadiness.band).not.toBe("ready");
   });
 });
 

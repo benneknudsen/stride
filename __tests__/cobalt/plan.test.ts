@@ -930,6 +930,41 @@ describe("buildPlanView — recovery buffer (issue #240)", () => {
     expect(today.meta).toBeUndefined();
   });
 
+  it("drops today's prescribed km from the week when the buffer forces a rest", () => {
+    // End-to-end through buildPlanView: the same easy run, once 23 h before now
+    // (inside the 24 h buffer → today rests) and once exactly 24 h before (buffer
+    // met → today is prescribed). Nothing else differs, so the only change to the
+    // week's volume is today's dropped km — the #240 weekPlannedKm behaviour.
+    const wednesday = addDays(ADAPT_MONDAY, 2);
+    wednesday.setHours(8, 0, 0, 0);
+
+    const restView = buildPlanView(
+      [...HISTORY, run(1, 8, 340, 140, 9, 0)], // Tuesday 09:00 → 23 h
+      wednesday,
+      RACE,
+      RACE_NAME,
+      true
+    );
+    const runView = buildPlanView(
+      [...HISTORY, run(1, 8, 340, 140, 8, 0)], // Tuesday 08:00 → 24 h
+      wednesday,
+      RACE,
+      RACE_NAME,
+      true
+    );
+
+    // Today rests in one and runs in the other — the buffer is the only difference.
+    expect(restView.days[2].kind).toBe("rest");
+    expect(restView.days[2].distance).toBeUndefined();
+    expect(runView.days[2].kind).toBe("today");
+    expect(runView.days[2].distance).toBeDefined();
+
+    // The rest day carries no prescribed volume, so the week asks for less — by
+    // exactly today's dropped run — while the rest of the week still stands.
+    expect(restView.weekPlannedKm).toBeLessThan(runView.weekPlannedKm);
+    expect(restView.weekPlannedKm).toBeGreaterThan(0);
+  });
+
   it("prescribes a normal week when the last run is ≥ 48 h ago", () => {
     // No runs this week; the most recent is 8 days back — no buffer to respect.
     const wednesday = addDays(ADAPT_MONDAY, 2);
