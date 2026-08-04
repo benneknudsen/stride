@@ -3,16 +3,21 @@
 // plan (which training week we're in, days to race, progress, the race date) come
 // from the shared home view so the countdown stays in sync across pages.
 //
-// The week's *prescription* is data-driven for a runner with their own race
-// (issue #115): the sessions come from the phase engine (`getCurrentPhase` +
-// `getWeekPlan`), their volume is capped against what the runner's load ratio
-// says they can absorb (`computeSnapshot` + last week's actual km), and every
-// pace target is derived from the race predictor (`predictRace`) rather than
-// written down. Days the runner has already run report what they actually ran.
-// Demo and visitor traffic keeps the designed WEEK_TEMPLATE — fixed
-// marathon-plan content where only *which* day is today derives from `now`
-// (issue #96) — and so does any live user we can't predict a race for, since a
-// plan with invented paces would be worse than the demo one.
+// The plan no longer prescribes a Mon–Sun schedule (issue #244). Instead it
+// surfaces three phase-aware *run suggestions* — an easy run, a quality run and a
+// long run — with the distance each carries in the current phase and the pace
+// target for it. They are day-agnostic: the plan says what kinds of runs the week
+// asks for, and the coach (`lib/coach/recommender.ts`) reads them to recommend
+// which one to do today against the runner's readiness and recovery buffer.
+//
+// The suggestions are still data-driven for a runner with their own race (issue
+// #115): the distances come from the phase engine (`getPhaseRules`), their total
+// volume from `getWeekPlan` capped against what the runner's load ratio says they
+// can absorb (`computeSnapshot` + last week's actual km), and every pace target is
+// derived from the race predictor (`predictRace` → `zonePaces`) rather than
+// written down. Demo and visitor traffic — and any live user we can't predict a
+// race for — keep the same phase-engine distances with fallback demo paces, since
+// a plan with invented paces would be worse than the demo one.
 //
 // buildPlanView() defaults to the demo fixtures (the unauthenticated fallback);
 // the server page passes getDashboardActivities rows for signed-in users
@@ -25,31 +30,27 @@ import {
   buildPhases,
   DEFAULT_RACE_DATE,
   DEFAULT_RACE_NAME,
-  EASY_MIN_RECOVERY_HOURS,
-  type EasySubtype,
   getCurrentPhase,
   getPhaseRules,
   getWeekPlan,
   MAX_WEEKLY_INCREASE_RATIO,
-  MIN_RECOVERY_HOURS,
   type PhaseKey,
   type PlannedSession,
 } from "@/lib/coach/engine";
 import { formatDanish } from "@/lib/cobalt/format";
-import { buildHomeView, type HomeActivityLike, zoneForHeartRate } from "@/lib/cobalt/hjem";
+import { buildHomeView, type HomeActivityLike } from "@/lib/cobalt/hjem";
 // The goal display reuses race-estimate's clock format (h:mm above the hour,
 // m:ss below), so a 10K goal reads "50:00" rather than "0:50" (issue #238).
 import { formatRaceTime as formatGoalClock } from "@/lib/cobalt/race-estimate";
-import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { getWeeklyVolume } from "@/lib/metrics";
 import {
   formatPaceClock,
-  formatPaceRange,
   formatRaceTime,
   goalTimeFor,
   HALF_MARATHON_KM,
   type PaceZone,
+  type PredictionActivity,
   type PredictionLockReason,
   predictRace,
   type RacePrediction,
@@ -87,8 +88,26 @@ const DA_MONTHS_LONG = [
   "december",
 ];
 
-/** Colour tone for a zone/meta line — cobalt = rolig/moderat, red = hårdt. */
-export type PlanTone = "cobalt" | "red" | "muted";
+/** The three run types the plan suggests each week (issue #244). */
+export type SuggestionType = "easy" | "tempo" | "long";
+
+/**
+ * One of the week's three run suggestions (issue #244). Day-agnostic: it names a
+ * kind of run, its phase distance and its pace target, but never *which* day —
+ * the coach decides that. `min`/`max` are the pace range's fast/slow ends,
+ * already formatted ("8:10"/"8:30").
+ */
+export interface RunSuggestion {
+  type: SuggestionType;
+  /** Danish label, mono uppercase in the UI ("Let pas" / "Kvalitetspas" / "Langtur"). */
+  label: string;
+  /** Distance in km, from the phase rules (`getPhaseRules`). */
+  distanceKm: number;
+  /** Target pace range, min (fast) → max (slow), formatted "m:ss". */
+  paceRange: { min: string; max: string };
+  /** Plain-language description ("Rolig restitution" / "Tempo · hårdt" / "Lang tur · moderat"). */
+  description: string;
+}
 
 export interface PhaseMarker {
   /** Label, mono uppercase (e.g. "Base", "Build · nu", "Race 20. sep"). */
@@ -107,22 +126,6 @@ export interface PhaseSegment {
   flex: number;
   /** "done" = solid cobalt, "active" = half-filled gradient, "upcoming" = muted. */
   fill: "done" | "active" | "upcoming";
-}
-
-export interface DayPlan {
-  id: string;
-  /** Weekday label, mono uppercase (e.g. "MAN", "ONS · I DAG"). */
-  dow: string;
-  kind: "done" | "today" | "ai" | "rest" | "planned" | "missed";
-  name: string;
-  /** Distance/volume prefix, e.g. "5,0 km" (omitted on rest/AI days). */
-  distance?: string;
-  /** Plain-language zone / description (never "Z3"). */
-  zoneLabel: string;
-  zoneTone: PlanTone;
-  /** Bottom meta line, mono (e.g. "6:06 /km", "MÅL 5:30–5:50"). */
-  meta?: string;
-  metaTone: PlanTone;
 }
 
 export interface UpcomingWeek {
@@ -169,7 +172,7 @@ export interface PlanView {
   /** True once the race day is behind `now` — drives the "vælg din næste race" CTA. */
   racePassed: boolean;
   /**
-   * True when this week's sessions, volume and pace targets were derived from
+   * True when this week's suggestions, volume and pace targets were derived from
    * the runner's own data (issue #115); false when they're the demo template.
    */
   dataDriven: boolean;
@@ -177,9 +180,12 @@ export interface PlanView {
   phaseSegments: PhaseSegment[];
   /** Short race date for the timeline end ("20. sep"). */
   raceShortDate: string;
-  weekPlannedKm: number;
-  weekDoneKm: number;
-  days: DayPlan[];
+  /** The current training phase's label ("Burn"), for the "· Burn-fase" header (issue #244). */
+  phaseLabel: string;
+  /** The three phase-aware run suggestions (easy / quality / long) — issue #244. */
+  suggestions: RunSuggestion[];
+  /** Total suggested weekly volume in km (the "18 km foreslået" overview). */
+  weekKm: number;
   upcomingWeeks: UpcomingWeek[];
   race: {
     name: string;
@@ -222,161 +228,30 @@ const PHASE_LABELS: Record<PhaseKey, string> = {
 const PHASE_SEQUENCE: PhaseKey[] = ["adapt", "burn", "sharpen", "peak", "taper"];
 
 const DAY_MS = 86_400_000;
-const HOUR_MS = 3_600_000;
-
-/**
- * Hours elapsed since `from`, clamped to ≥ 0 (a server clock a hair ahead of a
- * run's timestamp must never read as a negative gap) — the same measure the
- * coach card uses (`lib/coach/recommender.ts`) for its recovery buffer.
- */
-function hoursSince(from: Date, now: Date): number {
-  return Math.max(0, (now.getTime() - from.getTime()) / HOUR_MS);
-}
-
-/**
- * The start of the most recent actual run, or null if there are none — the clock
- * the recovery buffer (issue #240) measures today's session against.
- */
-function mostRecentRunStart(runs: HomeActivityLike[]): Date | null {
-  let latest: Date | null = null;
-  for (const run of runs) {
-    const start = ensureDate(run.startDate);
-    if (latest === null || start.getTime() > latest.getTime()) latest = start;
-  }
-  return latest;
-}
-
-/** One prescribed session, before `now` decides whether it's done or ahead. */
-interface DayTemplate {
-  id: string;
-  /** Weekday label, mono uppercase ("MAN") — "· I DAG" is appended on the day. */
-  dow: string;
-  /** What the day is when it isn't behind us. */
-  plannedKind: Exclude<DayPlan["kind"], "done" | "today">;
-  name: string;
-  /** Prescribed distance in km (omitted on rest/AI days). */
-  km?: number;
-  zoneLabel: string;
-  zoneTone: PlanTone;
-  /** Meta line once the session is behind us — the pace it was run at. */
-  doneMeta?: string;
-  /** Meta line while it's still ahead — the target. */
-  plannedMeta?: string;
-  metaTone: PlanTone;
-}
-
-/** The week's prescription, Monday-first (see `mondayIndex`). */
-const WEEK_TEMPLATE: DayTemplate[] = [
-  {
-    id: "man",
-    dow: "MAN",
-    plannedKind: "planned",
-    name: "Rolig jog",
-    km: 5,
-    zoneLabel: "Rolig snak-fart",
-    zoneTone: "muted",
-    doneMeta: "6:06 /km",
-    plannedMeta: "MÅL 6:00–6:20",
-    metaTone: "cobalt",
-  },
-  {
-    id: "tir",
-    dow: "TIR",
-    plannedKind: "planned",
-    name: "Tempo",
-    km: 10,
-    zoneLabel: "Hårdt tempo",
-    zoneTone: "red",
-    doneMeta: "4:27 /km",
-    plannedMeta: "MÅL 4:20–4:35",
-    metaTone: "red",
-  },
-  {
-    id: "ons",
-    dow: "ONS",
-    plannedKind: "planned",
-    name: "Rolig tur",
-    km: 8,
-    zoneLabel: "Rolig snak-fart",
-    zoneTone: "muted",
-    doneMeta: "5:41 /km",
-    plannedMeta: "MÅL 5:30–5:50",
-    metaTone: "cobalt",
-  },
-  {
-    id: "tor",
-    dow: "TOR",
-    plannedKind: "ai",
-    name: "Progressiv 10 km",
-    zoneLabel: "AI-anbefalet kvalitetspas",
-    zoneTone: "muted",
-    doneMeta: "5:20 → 4:25",
-    plannedMeta: "5:20 → 4:25",
-    metaTone: "cobalt",
-  },
-  {
-    id: "fre",
-    dow: "FRE",
-    plannedKind: "rest",
-    name: "Hviledag",
-    zoneLabel: "Restitution + mobilitet",
-    zoneTone: "muted",
-    metaTone: "muted",
-  },
-  {
-    id: "lor",
-    dow: "LØR",
-    plannedKind: "planned",
-    name: "Rolig + strides",
-    km: 6,
-    zoneLabel: "Rolig + 6×20 sek.",
-    zoneTone: "muted",
-    doneMeta: "5:38 /km",
-    plannedMeta: "MÅL 5:30–5:50",
-    metaTone: "cobalt",
-  },
-  {
-    id: "son",
-    dow: "SØN",
-    plannedKind: "planned",
-    name: "Lang tur",
-    km: 24,
-    zoneLabel: "Moderat tempo",
-    zoneTone: "muted",
-    doneMeta: "5:34 /km",
-    plannedMeta: "UGENS NØGLEPAS",
-    metaTone: "red",
-  },
-];
 
 /** JS weekday (0 = Sunday) → index into a Monday-first training week. */
 function mondayIndex(jsDay: number): number {
   return (jsDay + 6) % 7;
 }
 
-/** Weekday labels and ids for a derived week, Monday-first (the template's own). */
-const DOW_LABELS = WEEK_TEMPLATE.map((day) => day.dow);
-const DOW_IDS = WEEK_TEMPLATE.map((day) => day.id);
-
-/** Session types that leave the legs needing an easy day after them. */
-const HARD_TYPES = new Set(["tempo", "long", "race"]);
-
 /**
  * Half-width of a pace-target range when the prediction is low-confidence (issue
- * #231) — wider than {@link formatPaceRange}'s default so the plan shows honest
- * uncertainty rather than fake precision on a target it rests one run on.
+ * #231) — wider than the default so the plan shows honest uncertainty rather than
+ * fake precision on a target it rests one run on.
  */
 const LOW_CONFIDENCE_PACE_SPREAD = 25;
+
+/** Default half-width of a pace-target range, in seconds ("MÅL 8:10–8:30"). */
+const PACE_RANGE_SPREAD = 10;
 
 /**
  * Fallback training paces (seconds per km) for the template path — demo,
  * visitors, and any live runner we can't predict a race for (issue #117). That
- * path has no race predictor and so no runner paces, which is exactly why
- * "Kommende uger" used to fall back to frozen rows (issue #237). These stand-in
- * paces let the same phase-engine forecast run there too, so the upcoming weeks
- * still read phase-correctly without inventing per-user targets. Derived from
- * the demo athlete's own recent efforts (`lib/demo/data.ts`) and hand-aligned to
- * the pace grid — deterministic, so server render and client hydration agree.
+ * path has no race predictor and so no runner paces. These stand-in paces let the
+ * same phase-engine forecast run there too, so the suggestions and upcoming weeks
+ * still read phase-correctly without inventing per-user targets. Derived from the
+ * demo athlete's own recent efforts (`lib/demo/data.ts`) and hand-aligned to the
+ * pace grid — deterministic, so server render and client hydration agree.
  */
 const FALLBACK_PACES: Record<PaceZone, number> = {
   recovery: 365,
@@ -430,308 +305,54 @@ function prescribedWeekKm(sessions: PlannedSession[]): number {
   return sessions.reduce((sum, session) => sum + (session.distanceKm ?? 0), 0);
 }
 
-/** A day the runner has already run: everything on the card is what they actually did. */
-function completedDay(index: number, runs: HomeActivityLike[], today: boolean): DayPlan {
-  const distance = runs.reduce((sum, run) => sum + run.distance, 0);
-  const movingTime = runs.reduce((sum, run) => sum + run.movingTime, 0);
-  const km = distance / 1000;
-
-  // HR averaged over time-in-motion, so a 90-minute long run outweighs a
-  // 20-minute jog on a double day. Runs without HR simply don't vote.
-  const withHr = runs.filter((run) => (run.averageHeartrate ?? 0) > 0);
-  const hrSeconds = withHr.reduce((sum, run) => sum + run.movingTime, 0);
-  const hr =
-    hrSeconds > 0
-      ? withHr.reduce((sum, run) => sum + (run.averageHeartrate ?? 0) * run.movingTime, 0) /
-        hrSeconds
-      : 0;
-  const zone = hr > 0 ? zoneForHeartRate(hr) : null;
-
+/** A pace (seconds/km) as a fast→slow range around its centre, formatted "m:ss". */
+function paceRangeOf(secondsPerKm: number, spread: number): { min: string; max: string } {
   return {
-    id: DOW_IDS[index],
-    dow: today ? `${DOW_LABELS[index]} · I DAG` : DOW_LABELS[index],
-    kind: "done",
-    name: runs.length === 1 ? runs[0].name : `${runs.length} ture`,
-    distance: `${formatDanish(km)} km`,
-    zoneLabel: zone?.label ?? "Gennemført",
-    zoneTone: zone?.tone ?? "muted",
-    ...(km > 0 && movingTime > 0 ? { meta: `${formatPaceClock(movingTime / km)} /km` } : {}),
-    metaTone: zone && zone.level >= 4 ? "red" : "cobalt",
-  };
-}
-
-/** A past day the plan called a run for, but no run was logged — dropped, not pending. */
-function missedDay(index: number): DayPlan {
-  return {
-    id: DOW_IDS[index],
-    dow: DOW_LABELS[index],
-    kind: "missed",
-    name: "Ikke gennemført",
-    zoneLabel: "Sprunget over",
-    zoneTone: "muted",
-    metaTone: "muted",
+    min: formatPaceClock(secondsPerKm - spread),
+    max: formatPaceClock(secondsPerKm + spread),
   };
 }
 
 /**
- * Today withheld because the recovery buffer since the last actual run isn't met
- * yet (issue #240) — the plan's mirror of the coach's rest card
- * (`lib/coach/recommender.ts`). It reads as a rest tile (kind "rest") and names
- * the shortfall the way the recommender does, so the two surfaces can't
- * contradict each other: a run too recently → rest on both, never "go" here and
- * "stop" there. Only ever applies to today, so the label always carries "· I DAG".
+ * The week's three run suggestions for a phase (issue #244). Distances come from
+ * the phase rules — the same numbers `getWeekPlan` assigns to weekdays, but pulled
+ * out per run *type* instead of per day: the easy run sits at the phase's mid
+ * distance, the quality run at its session ceiling (`maxDistanceKm`), the long run
+ * at its long-run ceiling (`longRunMaxKm`). Paces come from the zone grid
+ * (`zonePaces`), so recovery/easy → easy target, tempo → quality target, long →
+ * long target. `spread` widens the range under low confidence (issue #231).
  */
-function recoveryRestDay(index: number, hoursSinceRun: number, bufferHours: number): DayPlan {
-  return {
-    id: DOW_IDS[index],
-    dow: `${DOW_LABELS[index]} · I DAG`,
-    kind: "rest",
-    name: "Hviledag",
-    zoneLabel: `Restitution — kun ${Math.round(hoursSinceRun)} t siden sidste tur (under ${bufferHours} t)`,
-    zoneTone: "muted",
-    metaTone: "muted",
-  };
-}
-
-/**
- * Whether a day's logged runs amount to a hard effort — tempo pace or faster
- * over the day's total distance. Used so a hard *actual* run leaves the legs
- * needing an easy day after it even when the plan never scheduled one (#211).
- */
-function wasHardActual(runs: HomeActivityLike[], paces: Record<PaceZone, number>): boolean {
-  const distanceKm = runs.reduce((sum, run) => sum + run.distance, 0) / 1000;
-  if (distanceKm <= 0) return false;
-  const seconds = runs.reduce((sum, run) => sum + run.movingTime, 0);
-  return seconds / distanceKm <= paces.tempo;
-}
-
-/** How much of a missed easy day's volume is folded into the remaining easy days. */
-const MISSED_RECOVERY_FRACTION = 0.6;
-
-/** The adjusted week: the skeleton reshaped around what actually happened (#211). */
-interface WeekAdjustment {
-  /** Sessions, with a missed quality session rescued onto a remaining run day. */
-  sessions: PlannedSession[];
-  /** Final prescribed distance per day (km) — missed days are 0. */
-  dayKm: number[];
-  /** Which days are missed: a past run day with nothing logged. */
-  missed: boolean[];
-}
-
-/**
- * Reshape the phase skeleton around what the runner actually did (#211 #4):
- *   - a past run day with no logged run is *missed* and carries no volume;
- *   - a missed tempo is rescued onto the earliest remaining easy day so the
- *     week keeps its quality session (unless one is still ahead or already run);
- *   - a share of the missed *easy* volume is redistributed across the remaining
- *     easy days, capped at the phase's session ceiling so the week never asks
- *     for more than the runner can absorb.
- */
-function adjustRemainingDays(
-  sessions: PlannedSession[],
-  runsByDay: HomeActivityLike[][],
-  todayIndex: number,
-  scale: number,
-  maxEasyKm: number,
-  qualityDone: boolean
-): WeekAdjustment {
-  const missed = sessions.map(
-    (session, index) =>
-      runsByDay[index].length === 0 && index < todayIndex && session.type !== "rest"
-  );
-  const adjusted = sessions.map((session) => ({ ...session }));
-
-  const missedTempo = sessions.find((session, index) => missed[index] && session.type === "tempo");
-  const tempoStillAhead = sessions.some(
-    (session, index) =>
-      index >= todayIndex && session.type === "tempo" && runsByDay[index].length === 0
-  );
-  if (missedTempo && !tempoStillAhead && !qualityDone) {
-    const target = adjusted.findIndex(
-      (session, index) =>
-        index >= todayIndex && session.type === "easy" && runsByDay[index].length === 0
-    );
-    if (target >= 0) {
-      adjusted[target] = {
-        ...adjusted[target],
-        type: "tempo",
-        zone: 4,
-        easySubtype: undefined,
-        distanceKm: missedTempo.distanceKm,
-        description: "Tempo",
-      };
-    }
-  }
-
-  const dayKm = adjusted.map((session, index) =>
-    missed[index] ? 0 : roundHalfKm((session.distanceKm ?? 0) * scale)
-  );
-
-  const missedEasyKm = sessions.reduce(
-    (sum, session, index) =>
-      missed[index] && session.type === "easy" ? sum + (session.distanceKm ?? 0) * scale : sum,
-    0
-  );
-  const remainingEasy = adjusted
-    .map((session, index) => ({ session, index }))
-    .filter(
-      ({ session, index }) =>
-        index >= todayIndex && session.type === "easy" && runsByDay[index].length === 0
-    )
-    .map(({ index }) => index);
-  if (missedEasyKm > 0 && remainingEasy.length > 0) {
-    const bump = (missedEasyKm * MISSED_RECOVERY_FRACTION) / remainingEasy.length;
-    for (const index of remainingEasy) {
-      dayKm[index] = roundHalfKm(Math.min(maxEasyKm, dayKm[index] + bump));
-    }
-  }
-
-  return { sessions: adjusted, dayKm, missed };
-}
-
-/** The easy-day shape once neighbours (planned or actual) have had their say. */
-function neighbourSubtype(previous: PlannedSession, next: PlannedSession): EasySubtype {
-  if (next.type === "long") return "easy-strides";
-  if (HARD_TYPES.has(previous.type)) return "recovery";
-  return "easy";
-}
-
-/**
- * A day still ahead of the runner: the phase engine says what the session is,
- * the predictor says how fast. `sessions` is the whole week so a day can see its
- * neighbours — the easy day after a hard one (planned *or* actually run) is a
- * recovery jog, and the easy day before the long run carries the strides.
- * `actualHard[i]` marks a day whose logged run was a hard effort; `dayKm` holds
- * each day's adjusted distance.
- */
-function prescribedDay(
-  index: number,
-  sessions: PlannedSession[],
-  actualHard: boolean[],
-  dayKm: number[],
+export function buildRunSuggestions(
+  phase: PhaseKey,
   paces: Record<PaceZone, number>,
-  prediction: RacePrediction,
-  today: boolean,
-  raceName: string
-): DayPlan {
-  const session = sessions[index];
-  const dow = today ? `${DOW_LABELS[index]} · I DAG` : DOW_LABELS[index];
-  const id = DOW_IDS[index];
-
-  // A low-confidence prediction (one run, or one far shorter than the race) can't
-  // honestly claim a tight target — widen the range instead of faking precision
-  // (issue #231). undefined keeps formatPaceRange's default half-width.
-  const spread = prediction.confidence === "low" ? LOW_CONFIDENCE_PACE_SPREAD : undefined;
-
-  if (session.type === "rest") {
-    return {
-      id,
-      dow,
-      kind: "rest",
-      name: "Hviledag",
-      zoneLabel: "Restitution + mobilitet",
-      zoneTone: "muted",
-      metaTone: "muted",
-    };
-  }
-
-  const km = dayKm[index];
-  const distance = km > 0 ? { distance: `${formatDanish(km)} km` } : {};
-  // The week repeats, so Monday's "yesterday" is the previous Sunday.
-  const previousIndex = (index + 6) % 7;
-  const previous = sessions[previousIndex];
-  const next = sessions[(index + 1) % 7];
-
-  if (session.type === "race") {
-    return {
-      id,
-      dow,
-      kind: today ? "today" : "planned",
-      name: `Race — ${raceName}`,
-      ...distance,
-      zoneLabel: "Race-pace",
-      zoneTone: "red",
-      meta: `MÅL ${formatPaceClock(prediction.paceSecPerKm)} /km`,
-      metaTone: "red",
-    };
-  }
-
-  if (session.type === "tempo") {
-    // The week's quality session — the design's cobalt "AI-anbefalet" card.
-    return {
-      id,
-      dow,
-      kind: today ? "today" : "ai",
-      name: "Tempo",
-      ...distance,
-      zoneLabel: "Kvalitetspas · hårdt tempo",
-      zoneTone: "red",
-      meta: `MÅL ${formatPaceRange(paces.tempo, spread)}`,
-      metaTone: "red",
-    };
-  }
-
-  if (session.type === "long") {
-    return {
-      id,
-      dow,
-      kind: today ? "today" : "planned",
-      name: "Lang tur",
-      ...distance,
-      zoneLabel: "Moderat tempo",
-      zoneTone: "muted",
-      meta: `MÅL ${formatPaceRange(paces.long, spread)}`,
-      metaTone: "red",
-    };
-  }
-
-  // A hard effort yesterday — one the plan scheduled OR one the runner just ran —
-  // earns a recovery jog today. Otherwise the day keeps the subtype the phase
-  // engine gave it (falling back to its neighbours when none was set, e.g. taper).
-  const prevHard = HARD_TYPES.has(previous.type) || actualHard[previousIndex];
-  const subtype: EasySubtype = prevHard
-    ? "recovery"
-    : (session.easySubtype ?? neighbourSubtype(previous, next));
-
-  if (subtype === "recovery") {
-    return {
-      id,
-      dow,
-      kind: today ? "today" : "planned",
-      name: "Rolig jog",
-      ...distance,
-      zoneLabel: "Rolig restitution",
-      zoneTone: "muted",
-      meta: `MÅL ${formatPaceRange(paces.recovery, spread)}`,
-      metaTone: "cobalt",
-    };
-  }
-
-  if (subtype === "easy-strides") {
-    return {
-      id,
-      dow,
-      kind: today ? "today" : "planned",
-      name: "Rolig + strides",
-      ...distance,
-      zoneLabel: `Rolig + 6×20 sek. @ ${formatPaceClock(paces.interval)}`,
-      zoneTone: "muted",
-      meta: `MÅL ${formatPaceRange(paces.easy, spread)}`,
-      metaTone: "cobalt",
-    };
-  }
-
-  return {
-    id,
-    dow,
-    kind: today ? "today" : "planned",
-    name: "Rolig tur",
-    ...distance,
-    zoneLabel: subtype === "medium" ? "Rolig snak-fart · længere" : "Rolig snak-fart",
-    zoneTone: "muted",
-    meta: `MÅL ${formatPaceRange(paces.easy, spread)}`,
-    metaTone: "cobalt",
-  };
+  raceDate: Date = DEFAULT_RACE_DATE,
+  spread: number = PACE_RANGE_SPREAD
+): RunSuggestion[] {
+  const rules = getPhaseRules(phase, raceDate);
+  const easyKm = roundHalfKm((rules.minDistanceKm + rules.maxDistanceKm) / 2);
+  return [
+    {
+      type: "easy",
+      label: "Let pas",
+      distanceKm: easyKm,
+      paceRange: paceRangeOf(paces.easy, spread),
+      description: "Rolig restitution",
+    },
+    {
+      type: "tempo",
+      label: "Kvalitetspas",
+      distanceKm: rules.maxDistanceKm,
+      paceRange: paceRangeOf(paces.tempo, spread),
+      description: "Tempo · hårdt",
+    },
+    {
+      type: "long",
+      label: "Langtur",
+      distanceKm: rules.longRunMaxKm,
+      paceRange: paceRangeOf(paces.long, spread),
+      description: "Lang tur · moderat",
+    },
+  ];
 }
 
 /**
@@ -790,19 +411,18 @@ function derivedUpcomingWeeks(
 }
 
 /** Everything the data-driven path replaces in the view. */
-interface DerivedWeek {
-  days: DayPlan[];
-  weekPlannedKm: number;
-  weekDoneKm: number;
+interface DerivedPlan {
+  suggestions: RunSuggestion[];
+  weekKm: number;
   upcomingWeeks: UpcomingWeek[];
   prediction: RacePrediction;
 }
 
 /**
- * A derived week, or the lock that explains why there isn't one — exactly one of
- * the two, so the caller can't render a locked card and a derived week at once.
+ * A derived plan, or the lock that explains why there isn't one — exactly one of
+ * the two, so the caller can't render a locked card and a derived plan at once.
  */
-type DerivedWeekResult = { week: DerivedWeek; lock: null } | { week: null; lock: RaceLock };
+type DerivedPlanResult = { plan: DerivedPlan; lock: null } | { plan: null; lock: RaceLock };
 
 /**
  * Merge a goal-anchored zone grid onto a prediction-anchored one for the runner
@@ -828,16 +448,53 @@ function mergeGoalGrid(
 }
 
 /**
- * This week from the runner's own data, or a lock when we can't predict a race
- * for them — in which case the caller keeps the demo template rather than
- * prescribing paces we'd have had to invent, and the race card says what the
- * runner can do about it (issue #117).
+ * The runner's zone pace grid and the range spread to draw it with, for a
+ * prediction (issue #231/#238/#242). Shared by the plan view and the coach's
+ * suggestion tool so both prescribe identical targets.
+ *
+ * When the runner has set a goal (issue #238) the quality zones train toward goal
+ * pace — goal time ÷ race distance — while the estimate itself still comes from
+ * the pure prediction. The easy side must stay grounded in real fitness: #231
+ * floors it on the runner's observed easy pace, but when no run carries heart
+ * rate that floor is missing (issue #242) and an aspirational goal would otherwise
+ * drag every easy day up. In that one case the easy side (recovery/easy/long)
+ * anchors on the true prediction and goal touches only tempo/interval.
+ *
+ * `spread` widens the range under low confidence so the plan shows honest
+ * uncertainty rather than fake precision on a target resting on one run.
+ */
+function derivePaces(
+  prediction: RacePrediction,
+  raceDistanceKm: number | null | undefined,
+  goalTimeSeconds: number | null | undefined
+): { paces: Record<PaceZone, number>; spread: number } {
+  const goalPaceSecPerKm =
+    goalTimeSeconds != null && goalTimeSeconds > 0
+      ? goalTimeSeconds / (raceDistanceKm ?? HALF_MARATHON_KM)
+      : null;
+  const pacePrediction: RacePrediction =
+    goalPaceSecPerKm !== null
+      ? { ...prediction, paceSecPerKm: Math.round(goalPaceSecPerKm) }
+      : prediction;
+  const paces =
+    goalPaceSecPerKm !== null && prediction.observedEasyPaceSecPerKm === null
+      ? mergeGoalGrid(zonePaces(prediction), zonePaces(pacePrediction))
+      : zonePaces(pacePrediction);
+  const spread = prediction.confidence === "low" ? LOW_CONFIDENCE_PACE_SPREAD : PACE_RANGE_SPREAD;
+  return { paces, spread };
+}
+
+/**
+ * This week's suggestions from the runner's own data, or a lock when we can't
+ * predict a race for them — in which case the caller keeps the demo template
+ * rather than prescribing paces we'd have had to invent, and the race card says
+ * what the runner can do about it (issue #117).
  *
  * `hrMaxOverride` is the runner's true max heart rate (issue #116) — see
  * `getUserHrMax`. Passed straight to the predictor, which measures every
  * effort's heart rate against it.
  */
-function buildDerivedWeek(
+function buildDerivedPlan(
   activities: HomeActivityLike[],
   now: Date,
   raceDate: Date,
@@ -854,7 +511,7 @@ function buildDerivedWeek(
    * pace grid anchors on goal pace instead of the pure prediction.
    */
   goalTimeSeconds?: number | null
-): DerivedWeekResult {
+): DerivedPlanResult {
   const runs = activities.filter((activity) => /run/i.test(activity.type));
   const result = predictRace(runs, now, raceDistanceKm ?? undefined, hrMaxOverride);
   const prediction = result.prediction;
@@ -863,7 +520,7 @@ function buildDerivedWeek(
     const reason = result.reason ?? "no-runs";
     const message = result.message ?? "";
     return {
-      week: null,
+      plan: null,
       lock: {
         reason,
         message,
@@ -872,121 +529,69 @@ function buildDerivedWeek(
     };
   }
 
-  // When the runner has set a goal (issue #238), the week trains toward goal
-  // pace: the pace grid anchors on goal pace instead of the pure prediction, so
-  // the tempo/long/race targets reflect what they're aiming for. The estimate
-  // itself (the race card's AI-estimat) still comes from the true prediction —
-  // only the prescribed targets move. Goal pace = goal time ÷ race distance,
-  // against the same distance the predictor used.
-  const goalPaceSecPerKm =
-    goalTimeSeconds != null && goalTimeSeconds > 0
-      ? goalTimeSeconds / (raceDistanceKm ?? HALF_MARATHON_KM)
-      : null;
-  const pacePrediction: RacePrediction =
-    goalPaceSecPerKm !== null
-      ? { ...prediction, paceSecPerKm: Math.round(goalPaceSecPerKm) }
-      : prediction;
+  const { paces, spread } = derivePaces(prediction, raceDistanceKm, goalTimeSeconds);
 
-  // The weekly zone grid. With a goal (issue #238) the quality zones train toward
-  // goal pace, but the easy side must stay grounded in the runner's real fitness.
-  // #231 grounds it against the runner's observed easy pace; when no run carries
-  // heart rate that floor is missing (issue #242), so an aspirational goal would
-  // otherwise drag every easy day — recovery included — up to goal pace. In that
-  // one case anchor the easy side (recovery/easy/long) on the true prediction and
-  // keep goal only for the quality zones (tempo/interval) and the race target.
-  const paces =
-    goalPaceSecPerKm !== null && prediction.observedEasyPaceSecPerKm === null
-      ? mergeGoalGrid(zonePaces(prediction), zonePaces(pacePrediction))
-      : zonePaces(pacePrediction);
   const weekStart = startOfTrainingWeek(now);
   const phase = getCurrentPhase(now, raceDate);
   const sessions = getWeekPlan(phase, weekStart, raceDate, raceName);
   const scale = volumeScale(runs, now, prescribedWeekKm(sessions));
-  const todayIndex = mondayIndex(now.getDay());
-
-  // Runs already logged this training week, bucketed onto their weekday. A day
-  // with a run is reported, not prescribed — even if the plan called for rest.
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 7);
-  const runsByDay: HomeActivityLike[][] = Array.from({ length: 7 }, () => []);
-  for (const run of runs) {
-    const start = ensureDate(run.startDate);
-    if (start >= weekStart && start < weekEnd) {
-      runsByDay[mondayIndex(start.getDay())].push(run);
-    }
-  }
-
-  // Which days carried a hard *actual* run, and whether the week's quality box is
-  // already ticked (a hard run logged up to today) — so a missed tempo isn't
-  // needlessly rescued onto a later day.
-  const actualHard = runsByDay.map((dayRuns) => wasHardActual(dayRuns, paces));
-  const qualityDone = actualHard.some((hard, index) => hard && index <= todayIndex);
-
-  // Reshape the skeleton around what actually happened (#211): missed days drop
-  // out, a missed tempo is rescued, and the remaining easy days absorb a share of
-  // the lost volume, all under the phase's session ceiling.
-  const maxEasyKm = getPhaseRules(phase, raceDate).maxDistanceKm;
-  const {
-    sessions: adjusted,
-    dayKm,
-    missed,
-  } = adjustRemainingDays(sessions, runsByDay, todayIndex, scale, maxEasyKm, qualityDone);
-
-  // Recovery buffer for TODAY (issue #240) — the same gate the coach card
-  // enforces (`lib/coach/recommender.ts`): a hard session needs
-  // {@link MIN_RECOVERY_HOURS} (48 h) since the most recent actual run, an
-  // easy/long one {@link EASY_MIN_RECOVERY_HOURS} (24 h), keyed on today's
-  // prescribed session exactly as the recommender keys it on the upcoming one.
-  // When the last run is still inside that window, today rests instead of
-  // prescribing a run — so the plan can't say "go" while the coach says "stop".
-  // Only today is gated; past days report what happened, future days keep their
-  // prescription, and a run already logged today (the completedDay branch above)
-  // wins over the buffer.
-  const todaySession = adjusted[todayIndex];
-  const todayBufferHours =
-    todaySession.type === "tempo" ? MIN_RECOVERY_HOURS : EASY_MIN_RECOVERY_HOURS;
-  const lastRunStart = mostRecentRunStart(runs);
-  const hoursSinceLastRun =
-    lastRunStart !== null ? hoursSince(lastRunStart, now) : Number.POSITIVE_INFINITY;
-  const todayIsRun =
-    todaySession.type === "easy" || todaySession.type === "tempo" || todaySession.type === "long";
-  const todayNeedsRecovery = todayIsRun && hoursSinceLastRun < todayBufferHours;
-  // A rest day carries no prescribed volume — drop today's km from the week total.
-  if (todayNeedsRecovery) dayKm[todayIndex] = 0;
-
-  const days = adjusted.map((_, index) => {
-    if (runsByDay[index].length > 0) {
-      return completedDay(index, runsByDay[index], index === todayIndex);
-    }
-    if (missed[index]) {
-      return missedDay(index);
-    }
-    if (index === todayIndex && todayNeedsRecovery) {
-      return recoveryRestDay(index, hoursSinceLastRun, todayBufferHours);
-    }
-    return prescribedDay(
-      index,
-      adjusted,
-      actualHard,
-      dayKm,
-      paces,
-      pacePrediction,
-      index === todayIndex,
-      raceName
-    );
-  });
 
   return {
-    week: {
-      days,
-      // What the *adjusted* plan asks of the week — missed days dropped, remaining
-      // days reshaped — not the untouched skeleton (#211 #6).
-      weekPlannedKm: Math.round(dayKm.reduce((sum, km) => sum + km, 0)),
-      weekDoneKm: getWeeklyVolume(runs, 0, now) / 1000,
+    plan: {
+      suggestions: buildRunSuggestions(phase, paces, raceDate, spread),
+      weekKm: Math.round(prescribedWeekKm(sessions) * scale),
       upcomingWeeks: derivedUpcomingWeeks(weekStart, weekOfPlan, raceDate, raceName, paces, scale),
       prediction,
     },
     lock: null,
+  };
+}
+
+/**
+ * The three run suggestions the coach reads to recommend today's run (issue
+ * #244) — the same easy/quality/long suggestions the plan page shows, resolved
+ * for the coach's tool layer straight from the runner's activities. Paces derive
+ * from the race predictor when there's enough to predict from, and fall back to
+ * the demo grid otherwise (`dataDriven` says which). The coach pairs these with
+ * its own recovery buffer to say *which* one to do — the plan never prescribes a
+ * day.
+ */
+export interface PlanSuggestions {
+  phase: PhaseKey;
+  /** The phase's label ("Burn"), for prose. */
+  phaseLabel: string;
+  /** Total suggested weekly volume in km, from the phase rules. */
+  weekKm: number;
+  suggestions: RunSuggestion[];
+  /** True when paces came from the runner's own prediction; false = fallback grid. */
+  dataDriven: boolean;
+}
+
+export function getPlanSuggestions(
+  activities: PredictionActivity[],
+  now: Date,
+  raceDate: Date = DEFAULT_RACE_DATE,
+  raceName: string = DEFAULT_RACE_NAME,
+  raceDistanceKm?: number | null,
+  hrMax?: number | null,
+  goalTimeSeconds?: number | null
+): PlanSuggestions {
+  const phase = getCurrentPhase(now, raceDate);
+  const sessions = getWeekPlan(phase, startOfTrainingWeek(now), raceDate, raceName);
+  const weekKm = Math.round(prescribedWeekKm(sessions));
+
+  const runs = activities.filter((activity) => /run/i.test(activity.type));
+  const prediction = predictRace(runs, now, raceDistanceKm ?? undefined, hrMax).prediction;
+  const { paces, spread } = prediction
+    ? derivePaces(prediction, raceDistanceKm, goalTimeSeconds)
+    : { paces: FALLBACK_PACES, spread: PACE_RANGE_SPREAD };
+
+  return {
+    phase,
+    phaseLabel: PHASE_LABELS[phase],
+    weekKm,
+    suggestions: buildRunSuggestions(phase, paces, raceDate, spread),
+    dataDriven: prediction !== null,
   };
 }
 
@@ -1012,9 +617,9 @@ export function buildPlanView(
   raceDate: Date = DEFAULT_RACE_DATE,
   raceName: string = DEFAULT_RACE_NAME,
   /**
-   * Derive the week from `activities` instead of the demo template (issue #115).
-   * The page sets this for a signed-in runner who has chosen their own race;
-   * demo and visitor traffic leaves it false.
+   * Derive the suggestions from `activities` instead of the demo template (issue
+   * #115). The page sets this for a signed-in runner who has chosen their own
+   * race; demo and visitor traffic leaves it false.
    */
   live = false,
   /**
@@ -1084,15 +689,19 @@ export function buildPlanView(
     fill: phaseState(key),
   }));
 
-  // The data-driven week (issue #115) — sessions from the phase engine, volume
-  // from the load ratio, paces from the race predictor. Null when the runner has
-  // no race of their own, no synced runs, or nothing recent enough to predict
-  // from; the demo template below is the fallback in all three cases. For a live
-  // runner the last two also produce a lock (issue #117): the demo template's
-  // *sessions* are a reasonable stand-in, but its race numbers are not the
+  // The current training phase — drives the "· Burn-fase" header label and, on
+  // the template path, the distances the suggestions carry.
+  const phase = getCurrentPhase(now, raceDate);
+
+  // The data-driven suggestions (issue #115) — distances from the phase engine,
+  // volume from the load ratio, paces from the race predictor. Null when the
+  // runner has no race of their own, no synced runs, or nothing recent enough to
+  // predict from; the demo template below is the fallback in all three cases. For
+  // a live runner the last two also produce a lock (issue #117): the template's
+  // *distances* are a reasonable stand-in, but its race numbers are not the
   // runner's, so the card shows what would unlock theirs instead.
   const derivedResult = live
-    ? buildDerivedWeek(
+    ? buildDerivedPlan(
         activities,
         now,
         raceDate,
@@ -1103,56 +712,20 @@ export function buildPlanView(
         goalTimeSeconds
       )
     : null;
-  const derived = derivedResult?.week ?? null;
+  const derived = derivedResult?.plan ?? null;
   const lock = derivedResult?.lock ?? null;
-
-  // The template week's sessions are fixed plan content, but *which* day is
-  // today is not (issue #96): a template day resolves to done/today/planned by
-  // comparing its weekday to `now`. A session in the past reports the pace it
-  // was run at; the same session ahead of us reports its target — so no day can
-  // claim a result it hasn't produced yet.
-  const todayIndex = mondayIndex(now.getDay());
-
-  const templateDays: DayPlan[] = WEEK_TEMPLATE.map((day, index) => {
-    const past = index < todayIndex;
-    const today = index === todayIndex;
-    // A rest day stays a rest day, whether it's behind us or ahead — there is
-    // nothing to complete and nothing to prescribe.
-    const kind: DayPlan["kind"] =
-      day.plannedKind === "rest" ? "rest" : past ? "done" : today ? "today" : day.plannedKind;
-    const meta = past ? day.doneMeta : day.plannedMeta;
-
-    return {
-      id: day.id,
-      dow: today ? `${day.dow} · I DAG` : day.dow,
-      kind,
-      name: day.name,
-      ...(day.km !== undefined ? { distance: `${formatDanish(day.km)} km` } : {}),
-      zoneLabel: day.zoneLabel,
-      zoneTone: day.zoneTone,
-      ...(meta !== undefined ? { meta } : {}),
-      metaTone: day.metaTone,
-    };
-  });
-
-  // Template volume follows the same template, so the header can't promise 48 km
-  // against a week that prescribes something else, nor report kilometres as run
-  // on a day that hasn't happened.
-  const templatePlannedKm = WEEK_TEMPLATE.reduce((sum, day) => sum + (day.km ?? 0), 0);
-  const templateDoneKm = WEEK_TEMPLATE.slice(0, todayIndex).reduce(
-    (sum, day) => sum + (day.km ?? 0),
-    0
-  );
 
   // The template path (demo, visitors, and any live runner we couldn't predict a
   // race for — issue #117) has no runner data to derive paces or load from, so it
   // runs the same phase-engine forecast with fallback demo paces and no load
-  // scaling. This keeps "Kommende uger" phase-correct in every state — a taper
-  // reads as a taper, a base week as a base week — instead of the old frozen
-  // 52/56/38 rows that promised marathon-pace work regardless of race or phase
-  // (issue #237).
+  // scaling. This keeps the suggestions and "Kommende uger" phase-correct in every
+  // state — a taper reads as a taper, a base week as a base week.
+  const weekStart = startOfTrainingWeek(now);
+  const templateSessions = getWeekPlan(phase, weekStart, raceDate, raceName);
+  const templateSuggestions = buildRunSuggestions(phase, FALLBACK_PACES, raceDate);
+  const templateWeekKm = Math.round(prescribedWeekKm(templateSessions));
   const templateUpcomingWeeks = derivedUpcomingWeeks(
-    startOfTrainingWeek(now),
+    weekStart,
     weekOfPlan,
     raceDate,
     raceName,
@@ -1202,9 +775,9 @@ export function buildPlanView(
     phaseMarkers,
     phaseSegments,
     raceShortDate,
-    weekPlannedKm: derived?.weekPlannedKm ?? templatePlannedKm,
-    weekDoneKm: derived?.weekDoneKm ?? templateDoneKm,
-    days: derived?.days ?? templateDays,
+    phaseLabel: PHASE_LABELS[phase],
+    suggestions: derived?.suggestions ?? templateSuggestions,
+    weekKm: derived?.weekKm ?? templateWeekKm,
     upcomingWeeks: derived?.upcomingWeeks ?? templateUpcomingWeeks,
     race: {
       name: raceName,
