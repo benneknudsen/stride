@@ -18,28 +18,57 @@ import { zoneForHeartRate as trainingZone } from "@/lib/training/zones";
 const NOW = new Date(2026, 6, 15, 9, 0);
 
 describe("readinessFromRatio", () => {
-  it("peaks at 95 when the acute load sits exactly on the chronic base", () => {
-    expect(readinessFromRatio(1)).toEqual({ pct: 95, band: "ready", note: "Klar til hårdt pas" });
+  it("holds full marks across the plateau — rested base through mild overload (#241)", () => {
+    // Full marks span PLATEAU_LO (0.8) … PLATEAU_HI (1.15): a rested athlete and
+    // one a single quality session above the base both read fully ready.
+    for (const ratio of [0.8, 1.0, 1.1, 1.15]) {
+      expect(readinessFromRatio(ratio)).toEqual({
+        pct: 95,
+        band: "ready",
+        note: "Klar til hårdt pas",
+      });
+    }
   });
 
-  it("falls symmetrically as the ratio leaves 1 in either direction", () => {
-    expect(readinessFromRatio(1.2).pct).toBe(readinessFromRatio(0.8).pct);
-    expect(readinessFromRatio(1.2).pct).toBeLessThan(readinessFromRatio(1.1).pct);
+  it("rewards freshness — being rested scores higher than the mirror overload (#241)", () => {
+    // The old mapping was symmetric, so 0.8 and 1.2 scored identically. Now the
+    // rested side is only gently penalised while the overload side is steep.
+    expect(readinessFromRatio(0.8).pct).not.toBe(readinessFromRatio(1.2).pct);
+    expect(readinessFromRatio(0.8).pct).toBeGreaterThan(readinessFromRatio(1.2).pct);
+    // A genuinely rested athlete still reads high and "ready".
+    expect(readinessFromRatio(0.8).pct).toBeGreaterThanOrEqual(90);
+    expect(readinessFromRatio(0.8).band).toBe("ready");
+  });
+
+  it("no longer punishes one quality run — ratio 1.29 stays high and ready (#241)", () => {
+    // The reported "82% after one 10K" case: acute a bit above base.
+    const r = readinessFromRatio(1.29);
+    expect(r.pct).toBeGreaterThanOrEqual(88);
+    expect(r.band).toBe("ready");
+  });
+
+  it("still flags a genuine overload as the ratio climbs past the plateau (#241)", () => {
+    expect(readinessFromRatio(1.5).pct).toBeLessThan(readinessFromRatio(1.29).pct);
+    // 1.5 → clearly off full marks, out of the "ready" band.
+    expect(readinessFromRatio(1.5).band).not.toBe("ready");
   });
 
   it("clamps to the 55–95 band", () => {
-    expect(readinessFromRatio(3).pct).toBe(55);
-    expect(readinessFromRatio(0).pct).toBe(55);
+    expect(readinessFromRatio(3).pct).toBe(55); // deep overload → floor
+    expect(readinessFromRatio(2.0).pct).toBe(55); // slope pinned to the floor at 2.0
     expect(readinessFromRatio(1.001).pct).toBe(95);
+    // Even the most detrained athlete stays above the floor — freshness, not risk.
+    expect(readinessFromRatio(0).pct).toBeGreaterThan(55);
   });
 
   it.each([
     [1.0, "ready"],
-    [1.33, "ready"], // 95 − 14.85 → 80, the ready floor
-    [1.4, "easy"],
-    [1.6, "easy"], // 95 − 27 → 68, the easy floor
-    [1.65, "rest"],
-    [0.3, "rest"],
+    [1.15, "ready"], // top of the plateau
+    [1.29, "ready"], // the "82% case" now reads ready
+    [1.5, "easy"], // 95 − 0.35·47.06 → 79, just under the ready floor
+    [1.7, "easy"],
+    [2.0, "rest"], // clamped to the floor
+    [0.4, "ready"], // rested reads high, never "rest"
   ] as const)("puts ratio %f in the %s band", (ratio, band) => {
     expect(readinessFromRatio(ratio).band).toBe(band);
   });
