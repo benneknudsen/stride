@@ -5,9 +5,16 @@
 // pages can never disagree about the same athlete on the same day.
 //
 // The percentage is an *estimate* carried entirely by training load — nothing
-// here measures HRV or sleep — and the UI says so. Readiness peaks when the
-// acute load sits right on the chronic base (ratio ≈ 1) and falls off as the
-// athlete spikes above it or detrains below it.
+// here measures HRV or sleep — and the UI says so.
+//
+// The mapping is deliberately *asymmetric* (issue #241). The acute:chronic
+// ratio is an injury-risk proxy that peaks at ratio ≈ 1, but readiness is about
+// *freshness*, not risk: being rested/tapered (ratio < 1) is a good thing and
+// must not cost the way an overload (ratio > 1) does. So full marks span a flat
+// plateau from a rested base up through a mild overload, the rested side below
+// it declines only gently (fresh, maybe a touch undertrained — never a "rest"
+// warning), and the steep penalty applies only on the overload side above the
+// plateau, where injury risk actually climbs.
 
 export type ReadinessBand = "ready" | "easy" | "rest";
 
@@ -28,16 +35,45 @@ const BAND_NOTES: Record<ReadinessBand, string> = {
 /** The neutral readiness shown before a chronic base exists (<4 weeks of history). */
 const NO_RATIO_PCT = 72;
 
+// Readiness percentage bounds — an estimate, so never a flat 0 or 100.
+const FULL_PCT = 95;
+const FLOOR_PCT = 55;
+
+// The flat "full marks" plateau: rested down to PLATEAU_LO and mildly over the
+// chronic base up to PLATEAU_HI both read fully ready. A single quality session
+// nudges the acute load a little above the base (ratio ≈ 1.1–1.15) — that's
+// healthy, not a warning, so it stays at full marks.
+const PLATEAU_LO = 0.8;
+const PLATEAU_HI = 1.15;
+
+// Overload side (ratio > PLATEAU_HI): the steep, injury-risk penalty. Slope is
+// pinned so readiness reaches the floor at ratio 2.0 (acute load double the
+// base) and clamps there beyond it.
+const OVERLOAD_FLOOR_RATIO = 2.0;
+const OVERLOAD_SLOPE = (FULL_PCT - FLOOR_PCT) / (OVERLOAD_FLOOR_RATIO - PLATEAU_HI); // ≈ 47.06
+
+// Rested side (ratio < PLATEAU_LO): a much gentler decline. Deep detraining
+// reads a little lower (fresh but under-loaded) but, unlike an overload, never
+// low enough to trip the "rest" band — freshness is not penalised like risk.
+const REST_SLOPE = 25;
+
 /**
  * Readiness from the acute:chronic load ratio (`computeSnapshot`'s
  * `trainingLoad.ratio`). Null — no chronic base yet — reads as a neutral
  * "easy" rather than a claim in either direction.
  */
 export function readinessFromRatio(ratio: number | null): Readiness {
-  const pct =
-    ratio === null
-      ? NO_RATIO_PCT
-      : Math.min(95, Math.max(55, Math.round(95 - Math.abs(ratio - 1) * 45)));
+  let raw: number;
+  if (ratio === null) {
+    raw = NO_RATIO_PCT;
+  } else if (ratio > PLATEAU_HI) {
+    raw = FULL_PCT - (ratio - PLATEAU_HI) * OVERLOAD_SLOPE;
+  } else if (ratio < PLATEAU_LO) {
+    raw = FULL_PCT - (PLATEAU_LO - ratio) * REST_SLOPE;
+  } else {
+    raw = FULL_PCT;
+  }
+  const pct = Math.min(FULL_PCT, Math.max(FLOOR_PCT, Math.round(raw)));
   const band: ReadinessBand = pct >= 80 ? "ready" : pct >= 68 ? "easy" : "rest";
   return { pct, band, note: BAND_NOTES[band] };
 }
