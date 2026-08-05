@@ -273,20 +273,6 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       ).toBeGreaterThan(0);
     });
 
-    it("returns a full Mon–Sun week strip matching the phase plan", () => {
-      const rec = recommend();
-      expect(rec.weekStrip).toHaveLength(7);
-      expect(rec.weekStrip.map((d) => d.weekday)).toEqual([
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun",
-      ]);
-    });
-
     it("formats the pace range as m:ss strings", () => {
       const rec = recommend();
       expect(rec.paceRange.min).toMatch(/^\d:\d{2}$/);

@@ -300,7 +300,7 @@ describe("buildPlanView — data-driven suggestions (issue #115)", () => {
     expect(view.upcomingWeeks).toHaveLength(3);
     for (const week of view.upcomingWeeks) {
       expect(week.km).toBeGreaterThan(0);
-      expect(week.focus).not.toContain("8×1000 m");
+      expect(week.sessions.length).toBeGreaterThan(0);
     }
     expect(view.upcomingWeeks.map((w) => w.week)).toEqual([
       view.weekOfPlan + 1,
@@ -748,13 +748,26 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
       const km = Math.round(sessions.reduce((sum, s) => sum + (s.distanceKm ?? 0), 0));
       expect(week.week).toBe(view.weekOfPlan + i + 1);
       expect(week.km).toBe(km);
-      expect(week.focus).toContain(UI_PHASE[phase]);
+      expect(week.phaseLabel).toBe(UI_PHASE[phase]);
       expect(week.muted).toBe(phase === "taper");
+
+      // Every row says what the week actually asks for: the dates it covers,
+      // the runs it prescribes with distances and paces, and how the volume
+      // moves — the old single prose line said none of it.
+      expect(week.dateRange).toMatch(/\d+\.[–.]/);
+      expect(week.runCount).toBe(sessions.filter((session) => session.type !== "rest").length);
+      expect(week.sessions.length).toBeGreaterThan(0);
+      for (const session of week.sessions) {
+        expect(session.distance).toMatch(/^\d+(,\d)? km$/);
+        if (session.pace) expect(session.pace).toMatch(/^\d+:\d{2} \/km$/);
+      }
     });
 
-    const allFocus = view.upcomingWeeks.map((w) => w.focus).join(" ");
-    expect(allFocus).not.toContain("8×1000 m");
-    expect(allFocus).not.toContain("marathon-pace");
+    // Deltas chain: each row's delta is its km minus the previous row's.
+    view.upcomingWeeks.forEach((week, i) => {
+      if (i === 0) return;
+      expect(week.deltaKm).toBe(week.km - view.upcomingWeeks[i - 1].km);
+    });
   });
 
   it("differentiates consecutive weeks that fall in the same phase", () => {
@@ -765,8 +778,12 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
     expect(phases[0]).toBe("burn");
 
     const view = buildPlanView(undefined, now, RACE, RACE_NAME);
-    const focuses = view.upcomingWeeks.map((w) => w.focus);
-    expect(new Set(focuses).size).toBe(focuses.length);
+    // Same phase three weeks running — the rows still differ: distinct calendar
+    // dates and a week-in-block count that advances.
+    const dates = view.upcomingWeeks.map((w) => w.dateRange);
+    expect(new Set(dates).size).toBe(dates.length);
+    const progress = view.upcomingWeeks.map((w) => w.phaseProgress);
+    expect(new Set(progress).size).toBe(progress.length);
   });
 
   it("lets a phase change show through across the window", () => {
@@ -778,10 +795,10 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
     const view = buildPlanView(undefined, now, RACE, RACE_NAME);
     for (let i = 1; i < 3; i++) {
       if (phases[i] !== phases[i - 1]) {
-        expect(view.upcomingWeeks[i].focus).not.toBe(view.upcomingWeeks[i - 1].focus);
+        expect(view.upcomingWeeks[i].phaseLabel).not.toBe(view.upcomingWeeks[i - 1].phaseLabel);
       }
     }
-    expect(new Set(view.upcomingWeeks.map((w) => w.focus)).size).toBe(3);
+    expect(new Set(view.upcomingWeeks.map((w) => w.dateRange)).size).toBe(3);
   });
 
   it("reads any taper week muted with the nedtrapning copy", () => {
@@ -796,7 +813,7 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
         expect(week.muted).toBe(phase === "taper");
         if (phase === "taper") {
           sawTaper = true;
-          expect(week.focus).toContain("Nedtrapning");
+          expect(week.phaseLabel).toBe("Nedtrapning");
         }
       });
     }
@@ -836,7 +853,97 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
     expect(view.upcomingWeeks).toHaveLength(3);
     for (const week of view.upcomingWeeks) {
       expect(week.km).toBeGreaterThan(0);
+      expect(week.sessions.length).toBeGreaterThan(0);
     }
-    expect(new Set(view.upcomingWeeks.map((w) => w.focus)).size).toBe(3);
+    expect(new Set(view.upcomingWeeks.map((w) => w.dateRange)).size).toBe(3);
+  });
+});
+
+describe("race distance — what the plan is actually for", () => {
+  // The page used to name the race but never its distance, so "13 uger, ét mål
+  // under 1:55" never said 1:55 for *what*; the only place it appeared was
+  // inside the edit dialog.
+  const NOW = midOf("burn");
+
+  it("names the half marathon the predictor assumes when no distance is stored", () => {
+    const view = buildPlanView(undefined, NOW, RACE, RACE_NAME);
+    expect(view.race.distanceLabel).toBe("Halvmaraton");
+    expect(view.race.distanceInline).toBe("halvmaraton");
+    expect(view.race.distanceKmLabel).toBe("21,1 km");
+  });
+
+  it("names the runner's own distance when they picked one", () => {
+    const view = buildPlanView(undefined, NOW, RACE, RACE_NAME, false, null, 10);
+    expect(view.race.distanceLabel).toBe("10K");
+    // A label carrying a number keeps its casing mid-sentence.
+    expect(view.race.distanceInline).toBe("10K");
+    expect(view.race.distanceKmLabel).toBe("10 km");
+  });
+
+  it("reads a rounded half-marathon distance as the half", () => {
+    const view = buildPlanView(undefined, NOW, RACE, RACE_NAME, false, null, 21.1);
+    expect(view.race.distanceLabel).toBe("Halvmaraton");
+  });
+
+  it("falls back to the distance itself for anything off the standard ladder", () => {
+    const view = buildPlanView(undefined, NOW, RACE, RACE_NAME, false, null, 12.5);
+    expect(view.race.distanceLabel).toBe("12,5 km");
+    expect(view.race.distanceInline).toBe("12,5 km");
+  });
+});
+
+describe("upcoming weeks — concrete enough to plan a week around (issue #247)", () => {
+  it("names each run with its distance and pace target", () => {
+    // The peak block carries all three kinds: a long run, a tempo and easy days.
+    const view = buildPlanView(undefined, midOf("peak"), RACE, RACE_NAME);
+    const week = view.upcomingWeeks[0];
+
+    const ids = week.sessions.map((session) => session.id);
+    expect(ids).toContain("long");
+    expect(ids).toContain("tempo");
+    expect(ids).toContain("easy");
+
+    const long = week.sessions.find((session) => session.id === "long");
+    expect(long?.label).toBe("Langtur");
+    expect(long?.distance).toMatch(/^\d+(,\d)? km$/);
+    expect(long?.pace).toMatch(/^\d+:\d{2} \/km$/);
+
+    // The easy rows are grouped into one line that counts them.
+    const easy = week.sessions.find((session) => session.id === "easy");
+    expect(easy?.label).toMatch(/rolige? tur/);
+  });
+
+  it("measures the first week against the week the runner is in", () => {
+    const view = buildPlanView(undefined, midOf("burn"), RACE, RACE_NAME);
+    expect(view.upcomingWeeks[0].deltaKm).toBe(view.upcomingWeeks[0].km - view.weekKm);
+  });
+
+  it("dates every week and places it inside its block", () => {
+    const view = buildPlanView(undefined, midOf("sharpen"), RACE, RACE_NAME);
+    for (const week of view.upcomingWeeks) {
+      expect(week.dateRange).toMatch(/^\d+\..*\d+\. \w+$/);
+      expect(week.phaseProgress).toMatch(/^uge \d+ af \d+$/);
+      const [, at, of] = week.phaseProgress.match(/^uge (\d+) af (\d+)$/) ?? [];
+      expect(Number(at)).toBeLessThanOrEqual(Number(of));
+      expect(week.runCount).toBeGreaterThan(0);
+    }
+  });
+
+  it("puts the runner's own race distance on race day, not a hardcoded half", () => {
+    const view = buildPlanView(undefined, addDays(RACE, -15), RACE, RACE_NAME, false, null, 10);
+    const raceWeek = view.upcomingWeeks.find((week) => week.isRaceWeek);
+    const race = raceWeek?.sessions.find((session) => session.id === "race");
+    expect(race?.distance).toBe("10 km");
+  });
+
+  it("flags the race week and shows the race distance in it", () => {
+    // Two weeks out, race day falls inside the upcoming window.
+    const view = buildPlanView(undefined, addDays(RACE, -15), RACE, RACE_NAME);
+    const raceWeek = view.upcomingWeeks.find((week) => week.isRaceWeek);
+    expect(raceWeek).toBeDefined();
+    const race = raceWeek?.sessions.find((session) => session.id === "race");
+    expect(race?.label).toBe("Race");
+    expect(race?.distance).toMatch(/km$/);
+    expect(view.upcomingWeeks.filter((week) => week.isRaceWeek)).toHaveLength(1);
   });
 });

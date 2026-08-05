@@ -55,6 +55,19 @@ export function RaceDayCard({
         {race.dayLabel}
       </div>
 
+      {/* The distance the plan is built for — it used to live only inside the
+          edit dialog, so the card named a race without saying how long it is. */}
+      <div
+        className="mt-3 inline-flex items-center gap-2 rounded-pill border border-current/35 px-3 py-1 cg-label-sm text-onred tracking-[0.12em] opacity-90"
+        data-testid="race-distance"
+      >
+        {race.distanceLabel}
+        <span aria-hidden="true" className="opacity-60">
+          ·
+        </span>
+        {race.distanceKmLabel}
+      </div>
+
       {race.lock ? (
         <div
           className="mt-[18px] flex items-start gap-3 rounded-[14px] border border-current/25 bg-current/8 px-3.5 py-3"

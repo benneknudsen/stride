@@ -4,7 +4,7 @@ import { CoachFeed } from "@/components/cobalt/coach-dashboard/CoachFeed";
 import { LoadGauge } from "@/components/cobalt/coach-dashboard/LoadGauge";
 import { PaceEfficiencyChart } from "@/components/cobalt/coach-dashboard/PaceEfficiencyChart";
 import { VolumeTrendChart } from "@/components/cobalt/coach-dashboard/VolumeTrendChart";
-import { WeekStrip } from "@/components/cobalt/coach-dashboard/WeekStrip";
+import { WeekFocus } from "@/components/cobalt/coach-dashboard/WeekFocus";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
 import { GlassCard } from "@/components/cobalt/GlassCard";
@@ -15,14 +15,21 @@ import type { CoachActivityInput, CoachDashboardData } from "@/lib/coach/dashboa
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
-import { getChatHistory, getDashboardActivities, getRacePlan } from "@/lib/db/queries";
+import { getPlanSuggestions, type PlanSuggestions } from "@/lib/cobalt/plan";
+import { ensureDate } from "@/lib/db/calendar-date";
+import {
+  getChatHistory,
+  getDashboardActivities,
+  getRacePlan,
+  getUserHrMax,
+} from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
 
 // Coach (issues #34 + #75, consolidated in #86) — the single coach route the
 // NavBar and BottomTabBar point at; /coach permanently redirects here
 // (next.config.ts). A server component composing four sections, each behind its
 // own Suspense boundary so it streams in independently:
-//   1. Næste pas   — the recommender's card + week strip, recomputed per request
+//   1. Næste pas   — the recommender's card + the week's suggestions, per request
 //   2. AI-coach    — chat + form/readiness + 14-day training load (was /coach)
 //   3. Progression — pace/zone/volume/load charts, cached 1 h (getProgressionCharts)
 //   4. Coach-feed  — AI coach cards streamed client-side from /api/ai/analyze
@@ -70,15 +77,20 @@ function SectionLoader({ height }: { height: number }) {
 // computeCoachDashboard once and shares the result with the coach console, so
 // the workout card and the console can never disagree and the engine runs a
 // single time per request.
-async function NextWorkoutSection({ dashboard }: { dashboard: CoachDashboardData }) {
-  const { workout, weekStrip } = dashboard;
+async function NextWorkoutSection({
+  dashboard,
+  weekPlan,
+}: {
+  dashboard: CoachDashboardData;
+  weekPlan: PlanSuggestions;
+}) {
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 lg:col-span-7">
-        <WorkoutCard workout={workout} />
+        <WorkoutCard workout={dashboard.workout} />
       </div>
       <div className="col-span-12 lg:col-span-5">
-        <WeekStrip days={weekStrip} />
+        <WeekFocus plan={weekPlan} />
       </div>
     </div>
   );
@@ -158,13 +170,14 @@ export default async function CoachPage() {
   // Issue #202: replay the signed-in user's persisted chat history in the panel.
   // Best-effort inside getChatHistory (it returns [] on failure), so a history
   // read never breaks the page — the chat just opens on the fresh greeting.
-  const [rows, racePlan, history] = userId
+  const [rows, racePlan, history, hrMax] = userId
     ? await Promise.all([
         getDashboardActivities(userId),
         getRacePlan(userId),
         getChatHistory(userId),
+        getUserHrMax(userId),
       ])
-    : [[], null, []];
+    : [[], null, [], null];
 
   const live = rows.length > 0;
   const activities: CoachPageActivity[] = live ? rows : demoActivities;
@@ -183,6 +196,24 @@ export default async function CoachPage() {
   // (NextWorkoutSection) and the console's chat + cards both read this single
   // dashboard, so they stay consistent and the computation never doubles up.
   const dashboard = computeCoachDashboard(activities, raceDate, userId);
+  // The week's three run suggestions — the same view-model the plan page renders
+  // (issue #244), so the coach and the plan always name the same week. The plan
+  // page only derives from the runner's own data once they have a race of their
+  // own (`live`, issue #115) and shows the demo template otherwise; passing no
+  // activities in that state puts this card on the same template, so the two
+  // pages can't quote different paces for the same week. The predictor needs
+  // real Date instances; DB rows carry ISO strings.
+  const weekPlan = getPlanSuggestions(
+    raceDate
+      ? activities.map((activity) => ({ ...activity, startDate: ensureDate(activity.startDate) }))
+      : [],
+    new Date(),
+    raceDate,
+    racePlan?.raceName ?? (raceDate ? "Din race" : undefined),
+    racePlan?.raceDistanceKm ?? undefined,
+    hrMax,
+    racePlan?.goalTimeSeconds ?? undefined
+  );
   const coachView = user
     ? buildLiveCoachView(dashboard, activities, new Date(), userName, history)
     : buildCoachView();
@@ -200,7 +231,7 @@ export default async function CoachPage() {
       <section>
         <SectionHeading index="01" title="Næste pas" hint="Realtid" />
         <Suspense fallback={<SectionLoader height={280} />}>
-          <NextWorkoutSection dashboard={dashboard} />
+          <NextWorkoutSection dashboard={dashboard} weekPlan={weekPlan} />
         </Suspense>
       </section>
 

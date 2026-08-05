@@ -15,6 +15,9 @@ const RACE: PlanView["race"] = {
   dayLabel: "Søndag 20. september",
   dateValue: "2026-09-20",
   distanceKm: 21.0975,
+  distanceLabel: "Halvmaraton",
+  distanceInline: "halvmaraton",
+  distanceKmLabel: "21,1 km",
   goalTimeSeconds: null,
   goalTime: "1:40",
   racePace: "4:45",
@@ -39,6 +42,13 @@ describe("RaceDayCard — unlocked", () => {
     render(<RaceDayCard race={RACE} daysToRace={68} />);
     expect(screen.getByText("68 dage")).toBeDefined();
     expect(screen.getByTestId("race-day-card").textContent).toContain("Søndag 20. september");
+  });
+
+  it("names the distance the plan is built for — not only the race", () => {
+    render(<RaceDayCard race={RACE} daysToRace={68} />);
+    const distance = screen.getByTestId("race-distance").textContent ?? "";
+    expect(distance).toContain("Halvmaraton");
+    expect(distance).toContain("21,1 km");
   });
 
   it("shows the runner's own goal time and pace when a goal is set (issue #238)", () => {
