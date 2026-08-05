@@ -344,8 +344,8 @@ describe("POST /api/ai/chat", () => {
             heartRateCap: 172,
             shoe: "adios-pro-4",
             reason: ["Tempo-tolerance", "Restitution ok"],
-            // weekStrip is not rendered on the chat card and must be stripped.
-            weekStrip: [{ weekday: "mon", type: "tempo", description: "Tempo" }],
+            // A prose-only extra the card doesn't render — zod must strip it.
+            pace: "4:55 /km",
           },
         };
         yield { type: "text-delta", text: "Kør et tempopas." };
