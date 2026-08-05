@@ -97,7 +97,6 @@ function dashboard(ratio: number | null): CoachDashboardData {
       reason: ["Tempo bygger tærskel."],
       // biome-ignore lint/suspicious/noExplicitAny: partial view-model fixture
     } as any,
-    weekStrip: [],
     paceSeries: [],
     zoneSeries: [],
     volumeSeries: [],

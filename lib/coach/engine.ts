@@ -124,6 +124,13 @@ export const DEFAULT_RACE_DATE = new Date(2026, 8, 20); // 20 Sep 2026
 /** Display name for the demo/fallback race. */
 export const DEFAULT_RACE_NAME = "Silkeborg Halvmarathon";
 
+/**
+ * The demo/fallback race distance in km — the half marathon. Callers that know
+ * the runner's own distance (issue #238) pass it to {@link getWeekPlan} so race
+ * day in the taper week reads as the race they actually signed up for.
+ */
+export const DEFAULT_RACE_DISTANCE_KM = 21.1;
+
 /** Absolute Zone 2 heart-rate ceiling in bpm — a fixed number, NOT a %HRmax. */
 export const ZONE2_CEILING_BPM = 155;
 
@@ -403,18 +410,20 @@ function addDays(base: Date, days: number): Date {
  * Easy days sit at the phase's `minDistanceKm` in Zone 2; the tempo (sharpen/
  * peak) uses `maxDistanceKm`; the long run (peak) uses `longRunMaxKm`. Pass
  * `startDate` — treated as the week's Monday — to stamp a concrete date on each
- * day. `raceDate`/`raceName` anchor the taper's race week (issue #99); the
- * defaults keep demo callers on the original plan. The result never
+ * day. `raceDate`/`raceName`/`raceDistanceKm` anchor the taper's race week
+ * (issue #99) — race day carries the runner's own distance, not a hardcoded
+ * half; the defaults keep demo callers on the original plan. The result never
  * self-violates the constraint set for its phase.
  */
 export function getWeekPlan(
   phase: PhaseKey,
   startDate?: Date,
   raceDate: Date = DEFAULT_RACE_DATE,
-  raceName: string = DEFAULT_RACE_NAME
+  raceName: string = DEFAULT_RACE_NAME,
+  raceDistanceKm: number = DEFAULT_RACE_DISTANCE_KM
 ): PlannedSession[] {
   const rules = getPhaseRules(phase, raceDate);
-  if (phase === "taper") return taperWeekPlan(rules, startDate, raceDate, raceName);
+  if (phase === "taper") return taperWeekPlan(rules, startDate, raceDate, raceName, raceDistanceKm);
   const runDays = WEEK_RUN_DAYS[rules.sessionsPerWeek] ?? WEEK_RUN_DAYS[4];
   const tempoDay: Weekday | null = rules.hasTempoSession ? "wed" : null;
   const longDay: Weekday | null = rules.hasLongRun ? "sun" : null;
@@ -524,7 +533,8 @@ function taperWeekPlan(
   rules: PhaseRules,
   startDate: Date | undefined,
   raceDate: Date,
-  raceName: string
+  raceName: string,
+  raceDistanceKm: number
 ): PlannedSession[] {
   const raceIndex = startDate ? daysUntil(startDate, raceDate) : -1;
   const isRaceWeek = startDate != null && raceIndex >= 0 && raceIndex <= 6;
@@ -538,7 +548,7 @@ function taperWeekPlan(
           date,
           type: "race",
           zone: 5,
-          distanceKm: 21.1,
+          distanceKm: raceDistanceKm,
           description: `Race — ${raceName}`,
         };
       }
