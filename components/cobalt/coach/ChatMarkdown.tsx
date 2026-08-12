@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useMemo } from "react";
 import { type InlineSpan, type MarkdownBlock, parseChatMarkdown } from "@/lib/cobalt/chat-markdown";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +53,10 @@ function Lines({ lines }: { lines: InlineSpan[][] }) {
 }
 
 export function ChatMarkdown({ text }: { text: string }) {
-  const blocks: MarkdownBlock[] = parseChatMarkdown(text);
+  // Memoize on `text` so the same answer isn't re-parsed on every render — the
+  // streaming turn re-renders each token, but only when its text actually grows
+  // do we pay for a fresh parse.
+  const blocks: MarkdownBlock[] = useMemo(() => parseChatMarkdown(text), [text]);
   const key = keyer();
 
   return (

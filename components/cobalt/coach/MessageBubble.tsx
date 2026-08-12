@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { ActivityCard } from "@/components/cobalt/coach/ActivityCard";
 import { ChatMarkdown } from "@/components/cobalt/coach/ChatMarkdown";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
@@ -13,7 +14,12 @@ import { cn } from "@/lib/utils";
 // render below the text so an answer reads "prose, then the cards it refers to";
 // text and blocks can both appear in the same turn. A turn may be blocks-only
 // (no text bubble) when the model let the cards speak for themselves.
-export function MessageBubble({ message }: { message: ChatMessage }) {
+// Wrapped in React.memo so only the turn that is actively streaming re-renders
+// (and re-parses its markdown) as tokens arrive. streamReply patches state by
+// replacing only the streaming turn's object (see ChatPanel.render) while every
+// other turn keeps its previous reference, so their memoized bubbles bail out of
+// re-render on shallow prop equality.
+function MessageBubbleImpl({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   const hasText = message.text.trim().length > 0;
   const blocks = message.blocks ?? [];
@@ -64,3 +70,5 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
     </div>
   );
 }
+
+export const MessageBubble = memo(MessageBubbleImpl);
