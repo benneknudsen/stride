@@ -64,6 +64,18 @@ function verifySignature(rawBody: string, header: string | null): boolean {
   return timingSafeEqual(providedBuf, expectedBuf);
 }
 
+/**
+ * Constant-time string equality via timingSafeEqual. Buffers must be equal
+ * length for timingSafeEqual, so the length check short-circuits early — same
+ * pattern as the webhook signature comparison above.
+ */
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a, "utf8");
+  const bBuf = Buffer.from(b, "utf8");
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
 // Strava webhook subscription validation
 export function GET(req: NextRequest) {
   const verifyToken = getVerifyToken();
@@ -72,7 +84,12 @@ export function GET(req: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === verifyToken && challenge) {
+  if (
+    mode === "subscribe" &&
+    token !== null &&
+    timingSafeStringEqual(token, verifyToken) &&
+    challenge
+  ) {
     return NextResponse.json({ "hub.challenge": challenge });
   }
 

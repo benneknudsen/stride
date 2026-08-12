@@ -10,6 +10,7 @@
  * run rather than exposing an unauthenticated deletion endpoint.
  */
 
+import { timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { deleteAllExpiredChatMessages } from "@/lib/db/queries";
 import { captureError } from "@/lib/observability";
@@ -21,7 +22,12 @@ export async function GET(req: NextRequest) {
   if (!secret) {
     return Response.json({ error: "not_configured" }, { status: 500 });
   }
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  // Constant-time compare of the Bearer header against the shared secret.
+  // Buffers must be equal length for timingSafeEqual; the length check
+  // short-circuits early and avoids a length-dependent throw.
+  const providedAuth = Buffer.from(req.headers.get("authorization") ?? "", "utf8");
+  const expectedAuth = Buffer.from(`Bearer ${secret}`, "utf8");
+  if (providedAuth.length !== expectedAuth.length || !timingSafeEqual(providedAuth, expectedAuth)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
