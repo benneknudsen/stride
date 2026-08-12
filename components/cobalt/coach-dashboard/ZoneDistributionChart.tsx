@@ -1,85 +1,19 @@
 "use client";
 
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import dynamic from "next/dynamic";
 import type { ZoneWeek } from "@/lib/coach/dashboard";
-import { ZONE_RAMP, zoneBadgeText } from "@/lib/cobalt/zones";
-import type { ZoneNumber } from "@/lib/training/zones";
 
-// Zone distribution over time: one stacked bar per week, each showing the
-// rolling-4-week split of training time across HR zones 1–5. The palette and the
-// plain-language labels come from the shared ramp (lib/cobalt/zones.ts), so this
-// chart and the per-activity zone split never drift apart.
-//
-// White inter-segment strokes stand in for the 2px surface gap; the legend +
-// tooltip carry identity for the low-contrast light steps.
+// Client wrapper that code-splits Recharts out of the coach route's initial
+// bundle (issue #250). The chart sits in section 03 "Progression", below the
+// fold, so its ~150 KB of Recharts is only fetched once this component mounts.
+// ssr: false skips a server render that ResponsiveContainer can't meaningfully
+// paint anyway (it needs a measured client width). The loading placeholder holds
+// the chart's height to avoid layout shift.
+const ZoneDistributionChartImpl = dynamic(
+  () => import("./ZoneDistributionChartImpl").then((m) => m.ZoneDistributionChartImpl),
+  { ssr: false, loading: () => <div className="h-[180px]" /> }
+);
 
 export function ZoneDistributionChart({ data }: { data: ZoneWeek[] }) {
-  return (
-    <div>
-      <div className="h-[180px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
-            <XAxis
-              dataKey="week"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#5a5f74", fontSize: 11 }}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#5a5f74", fontSize: 11 }}
-              domain={[0, 100]}
-              tickFormatter={(v: number) => `${v}%`}
-            />
-            <Tooltip
-              cursor={{ fill: "color-mix(in srgb, var(--color-cobalt) 5%, transparent)" }}
-              contentStyle={{
-                backgroundColor: "#ffffff",
-                border: "1px solid #dfe1ea",
-                borderRadius: 12,
-                fontSize: 12,
-              }}
-              formatter={(value, name) => {
-                // ZONE_RAMP is ordered z1…z5, so the index is the zone number − 1.
-                const idx = ZONE_RAMP.findIndex((z) => z.key === name);
-                const step = ZONE_RAMP[idx];
-                return [
-                  `${value}%`,
-                  step
-                    ? zoneBadgeText({ level: (idx + 1) as ZoneNumber, label: step.label })
-                    : String(name),
-                ];
-              }}
-            />
-            {ZONE_RAMP.map((zone, i) => (
-              <Bar
-                key={zone.key}
-                dataKey={zone.key}
-                stackId="zones"
-                fill={zone.color}
-                stroke="#ffffff"
-                strokeWidth={1}
-                maxBarSize={24}
-                radius={i === ZONE_RAMP.length - 1 ? [4, 4, 0, 0] : undefined}
-              />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {ZONE_RAMP.map((zone, i) => (
-          <span key={zone.key} className="flex items-center gap-1.5 text-[11px] text-ink">
-            <span
-              aria-hidden="true"
-              className="inline-block size-2.5 rounded-[3px]"
-              style={{ background: zone.color }}
-            />
-            {zoneBadgeText({ level: (i + 1) as ZoneNumber, label: zone.label })}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+  return <ZoneDistributionChartImpl data={data} />;
 }

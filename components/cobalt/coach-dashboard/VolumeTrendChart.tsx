@@ -1,40 +1,19 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import dynamic from "next/dynamic";
 import type { VolumeWeek } from "@/lib/coach/dashboard";
 
-// Weekly running volume, km per week. Single cobalt series → no legend.
+// Client wrapper that code-splits Recharts out of the coach route's initial
+// bundle (issue #250). The chart sits in section 03 "Progression", below the
+// fold, so its ~150 KB of Recharts is only fetched once this component mounts.
+// ssr: false skips a server render that ResponsiveContainer can't meaningfully
+// paint anyway (it needs a measured client width). The loading placeholder holds
+// the chart's height to avoid layout shift.
+const VolumeTrendChartImpl = dynamic(
+  () => import("./VolumeTrendChartImpl").then((m) => m.VolumeTrendChartImpl),
+  { ssr: false, loading: () => <div className="h-[180px]" /> }
+);
+
 export function VolumeTrendChart({ data }: { data: VolumeWeek[] }) {
-  return (
-    <div className="h-[180px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
-          <CartesianGrid vertical={false} stroke="#dfe1ea" strokeWidth={1} />
-          <XAxis
-            dataKey="week"
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: "#5a5f74", fontSize: 11 }}
-          />
-          <YAxis
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: "#5a5f74", fontSize: 11 }}
-            tickFormatter={(v: number) => `${v}`}
-          />
-          <Tooltip
-            cursor={{ fill: "color-mix(in srgb, var(--color-cobalt) 5%, transparent)" }}
-            contentStyle={{
-              backgroundColor: "#ffffff",
-              border: "1px solid #dfe1ea",
-              borderRadius: 12,
-              fontSize: 12,
-            }}
-            formatter={(value) => [`${value} km`, "Volumen"]}
-          />
-          <Bar dataKey="km" fill="var(--color-cobalt)" radius={[4, 4, 0, 0]} maxBarSize={24} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  return <VolumeTrendChartImpl data={data} />;
 }
