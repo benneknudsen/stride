@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { captureError } from "@/lib/observability";
 import { rateLimit } from "@/lib/rate-limit";
 import { syncStravaActivities } from "@/lib/strava/sync";
 
@@ -32,7 +33,7 @@ export async function POST(_req: NextRequest) {
   } catch (err) {
     // Log the real cause server-side; never leak internal error details (stack
     // traces, upstream Strava messages, token issues) to the client — see #42.
-    console.error("[strava-sync] Historical sync failed", err);
+    captureError("strava-sync", err);
     return NextResponse.json(
       { ok: false, error: "Sync failed. Please try again later." },
       { status: 500 }
