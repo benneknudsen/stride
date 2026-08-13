@@ -140,7 +140,7 @@ const TRUNCATED_REPLY: ChatReply = {
  * validate the relevant tool's `execute` return before it is emitted as a block;
  * a shape that doesn't match is simply not rendered (the prose still streams).
  * zod strips unknown keys, so a tool's extra prose-only fields (e.g. a readable
- * `pace`) and the recommendation's unused `weekStrip` fall away here.
+ * `pace`) fall away here.
  */
 const chatActivitySchema = z.object({
   id: z.string(),

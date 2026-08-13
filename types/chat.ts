@@ -69,9 +69,9 @@ export interface ChatActivity {
  * are built server-side from validated tool output, so the model orchestrates
  * which tool runs but never authors the block's contents.
  *
- * The workout block carries {@link WorkoutCardView} (the recommendation without
- * its week strip, which the chat card does not render) so it feeds the existing
- * `coach-dashboard/WorkoutCard` unchanged.
+ * The workout block carries {@link WorkoutCardView} — the recommendation as the
+ * dashboard renders it — so it feeds the existing `coach-dashboard/WorkoutCard`
+ * unchanged.
  */
 export type ChatBlock =
   | { kind: "activity"; activity: ChatActivity }

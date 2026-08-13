@@ -9,6 +9,7 @@ vi.mock("@/lib/db/queries", () => ({
   getDashboardActivities: vi.fn().mockResolvedValue([]),
   getRacePlan: vi.fn().mockResolvedValue(null),
   getChatHistory: vi.fn().mockResolvedValue([]),
+  getUserHrMax: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/coach/dashboard-data", async (importOriginal) => {

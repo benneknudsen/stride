@@ -168,7 +168,6 @@ function dashboard(over: {
   } as any;
   return {
     workout,
-    weekStrip: [],
     paceSeries: [],
     zoneSeries: [],
     volumeSeries: [],

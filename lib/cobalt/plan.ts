@@ -128,13 +128,45 @@ export interface PhaseSegment {
   fill: "done" | "active" | "upcoming";
 }
 
+/**
+ * One concrete session inside an upcoming week (issue #247). The old rows
+ * carried a single prose `focus` string ("Sharpen · tempo @ 6:15 /km · uge 2 i
+ * blokken") that said almost nothing you could act on; these say what the week
+ * actually asks for — which runs, how far, at what pace.
+ */
+export interface UpcomingSession {
+  /** Stable key within the week ("long" / "tempo" / "easy" / "race"). */
+  id: string;
+  /** Danish label ("Langtur", "Tempo", "3 rolige ture", "Race"). */
+  label: string;
+  /** The distance it carries ("18 km", "26 km" across several easy runs). */
+  distance: string;
+  /** Pace target ("5:45 /km"), or null when there isn't one (race day). */
+  pace: string | null;
+  tone: "long" | "quality" | "easy" | "race";
+}
+
 export interface UpcomingWeek {
   id: string;
+  /** Week of the plan ("Uge 9"). */
   week: number;
-  focus: string;
+  /** The calendar week it lands in ("18.–24. aug") — so "uge 9" has a date. */
+  dateRange: string;
+  /** The training block it belongs to ("Sharpen", "Nedtrapning"). */
+  phaseLabel: string;
+  /** Where in that block it sits ("uge 2 af 3"). */
+  phaseProgress: string;
+  /** Number of run days the week prescribes. */
+  runCount: number;
+  /** The week's runs, longest/hardest first. */
+  sessions: UpcomingSession[];
   km: number;
+  /** Change in volume against the week before, in km (signed, 0 = flat). */
+  deltaKm: number;
   /** Down-week reads muted. */
   muted: boolean;
+  /** The week the race itself falls in. */
+  isRaceWeek: boolean;
 }
 
 /**
@@ -199,6 +231,17 @@ export interface PlanView {
      */
     distanceKm: number | null;
     /**
+     * The race distance in plain language ("Halvmaraton", "10K", "12,5 km") —
+     * always present, falling back to the half marathon the predictor assumes
+     * when the user hasn't picked a distance. The plan used to hide this behind
+     * the edit dialog; the header and the race card both say it now.
+     */
+    distanceLabel: string;
+    /** The same label as it reads mid-sentence ("halvmaraton", "10K"). */
+    distanceInline: string;
+    /** The distance as a number ("21,1 km"), for the race card's chip. */
+    distanceKmLabel: string;
+    /**
      * The user's goal finish time in seconds (issue #238), or null when no goal
      * is set — the dialog prefills the goal field from it.
      */
@@ -261,6 +304,40 @@ const FALLBACK_PACES: Record<PaceZone, number> = {
   interval: 270,
 };
 
+/** The standard race distances, in km, with the name runners use for them. */
+const RACE_DISTANCES: { km: number; label: string }[] = [
+  { km: 5, label: "5K" },
+  { km: 10, label: "10K" },
+  { km: HALF_MARATHON_KM, label: "Halvmaraton" },
+  { km: 42.195, label: "Maraton" },
+];
+
+/** How far off a preset a stored distance may sit and still read as that race. */
+const RACE_DISTANCE_TOLERANCE_KM = 0.2;
+
+/**
+ * The plain-language name of a race distance ("Halvmaraton", "10K") — or the
+ * distance itself ("12,5 km") for anything off the standard ladder. The plan
+ * shows this wherever it names the goal, so what you're training for is legible
+ * without opening the edit dialog.
+ */
+export function raceDistanceLabel(km: number): string {
+  const preset = RACE_DISTANCES.find(
+    (distance) => Math.abs(distance.km - km) <= RACE_DISTANCE_TOLERANCE_KM
+  );
+  if (preset) return preset.label;
+  return `${formatDanish(km, Number.isInteger(km) ? 0 : 1)} km`;
+}
+
+/**
+ * The same label mid-sentence ("Ét mål: halvmaraton under 1:55"). Labels that
+ * carry a number ("10K", "12,5 km") keep their casing — only the written-out
+ * names lowercase.
+ */
+function inlineDistanceLabel(label: string): string {
+  return /\d/.test(label) ? label : label.toLowerCase();
+}
+
 /** Targets are prescribed on a half-km grid — "7,5 km", never "7,4 km". */
 function roundHalfKm(km: number): number {
   return Math.round(km * 2) / 2;
@@ -284,13 +361,13 @@ function startOfTrainingWeek(now: Date): Date {
  * the load ratio (`computeSnapshot`) tightening that further when the acute:chronic
  * band says the runner is already carrying too much.
  */
-function volumeScale(runs: HomeActivityLike[], now: Date, prescribedKm: number): number {
+function volumeScale(runs: PredictionActivity[], now: Date, prescribedKm: number): number {
   if (prescribedKm <= 0) return 1;
   const lastWeekKm = getWeeklyVolume(runs, 1, now) / 1000;
   if (lastWeekKm <= 0) return 1;
 
   const risk = computeSnapshot(
-    runs.map((run) => ({ ...run, hrZones: null })),
+    runs.map((run) => ({ ...run, averageHeartrate: run.averageHeartrate ?? null, hrZones: null })),
     now
   ).trainingLoad.risk;
   const growthCap = risk === "high" ? 0.9 : risk === "elevated" ? 1 : MAX_WEEKLY_INCREASE_RATIO;
@@ -355,57 +432,149 @@ export function buildRunSuggestions(
   ];
 }
 
+/** "18.–24. aug", or "29. sep–5. okt" when the week straddles two months. */
+function formatWeekRange(start: Date): string {
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const endLabel = `${end.getDate()}. ${DA_MONTHS_SHORT[end.getMonth()]}`;
+  return start.getMonth() === end.getMonth()
+    ? `${start.getDate()}.–${endLabel}`
+    : `${start.getDate()}. ${DA_MONTHS_SHORT[start.getMonth()]}–${endLabel}`;
+}
+
+/** A distance for display: whole km, comma decimal only when it isn't ("7,5 km"). */
+function kmLabel(km: number): string {
+  return `${formatDanish(km, Number.isInteger(km) ? 0 : 1)} km`;
+}
+
+/**
+ * The week's runs as concrete rows (issue #247): the long run, the quality
+ * session and the easy runs it groups together, each with the distance it
+ * carries at this week's `scale` and the pace target for it. Order is
+ * race → long → quality → easy, so the row leads with the session the week is
+ * actually built around.
+ */
+function upcomingSessions(
+  sessions: PlannedSession[],
+  scale: number,
+  paces: Record<PaceZone, number>
+): UpcomingSession[] {
+  const rows: UpcomingSession[] = [];
+  const scaledKm = (session: PlannedSession) => roundHalfKm((session.distanceKm ?? 0) * scale);
+
+  const race = sessions.find((session) => session.type === "race");
+  if (race) {
+    rows.push({
+      id: "race",
+      label: "Race",
+      // Race day is the race distance — never scaled down by the load model.
+      distance: kmLabel(race.distanceKm ?? 0),
+      pace: null,
+      tone: "race",
+    });
+  }
+
+  const longRun = sessions.find((session) => session.type === "long");
+  if (longRun) {
+    rows.push({
+      id: "long",
+      label: "Langtur",
+      distance: kmLabel(scaledKm(longRun)),
+      pace: `${formatPaceClock(paces.long)} /km`,
+      tone: "long",
+    });
+  }
+
+  const tempo = sessions.find((session) => session.type === "tempo");
+  if (tempo) {
+    rows.push({
+      id: "tempo",
+      label: "Tempo",
+      distance: kmLabel(scaledKm(tempo)),
+      pace: `${formatPaceClock(paces.tempo)} /km`,
+      tone: "quality",
+    });
+  }
+
+  const easy = sessions.filter((session) => session.type === "easy");
+  if (easy.length > 0) {
+    const easyKm = roundHalfKm(easy.reduce((sum, session) => sum + scaledKm(session), 0));
+    rows.push({
+      id: "easy",
+      label: easy.length === 1 ? "Rolig tur" : `${easy.length} rolige ture`,
+      distance: kmLabel(easyKm),
+      pace: `${formatPaceClock(paces.easy)} /km`,
+      tone: "easy",
+    });
+  }
+
+  return rows;
+}
+
 /**
  * The next three weeks of the build, straight off the phase engine — shared by
  * the data-driven path (runner paces + load `scale`) and the template path
- * (fallback demo paces, `scale` = 1). Both derive `focus` and `km` from the
- * phase each week actually falls in, so the widget can't go static again: the
- * phase shows through in the label, `km` is the real forecasted volume, and each
- * row carries its week-within-the-phase so two consecutive weeks of the same
- * block never read identically (issue #237).
+ * (fallback demo paces, `scale` = 1).
+ *
+ * Every row is derived from the phase the week actually falls in, so the widget
+ * can't go static (issue #237) — and since #247 it says something you can act
+ * on: the calendar dates the week covers, the runs it prescribes with their
+ * distances and paces, the volume, and how that volume moves against the week
+ * before (`deltaKm`). `previousKm` is the volume of the week preceding the
+ * first row — this week's — so the first delta has something to measure against.
  */
 function derivedUpcomingWeeks(
   weekStart: Date,
   weekOfPlan: number,
   raceDate: Date,
   raceName: string,
+  raceDistanceKm: number,
   paces: Record<PaceZone, number>,
-  scale: number
+  scale: number,
+  previousKm: number
 ): UpcomingWeek[] {
+  let priorKm = previousKm;
+
   return [1, 2, 3].map((offset) => {
     const start = new Date(weekStart);
     start.setDate(start.getDate() + offset * 7);
-    const phase = getCurrentPhase(start, raceDate);
-    const sessions = getWeekPlan(phase, start, raceDate, raceName);
+    // A week that contains race day is planned as the race week. `getCurrentPhase`
+    // reads the week's Monday, and for a weekend race that Monday still sits in
+    // the peak block (the taper window opens five days out) — so without this the
+    // final row would prescribe a full peak week and never mention the race.
+    const daysToRace = daysBetween(start, raceDate);
+    const phase: PhaseKey =
+      daysToRace >= 0 && daysToRace <= 6 ? "taper" : getCurrentPhase(start, raceDate);
+    const sessions = getWeekPlan(phase, start, raceDate, raceName, raceDistanceKm);
     // The scale converges back to the phase's full prescription as the runner
     // absorbs the load — the same 10% ceiling, one week at a time.
     const weekScale = Math.min(1, scale * MAX_WEEKLY_INCREASE_RATIO ** offset);
     const km = Math.round(prescribedWeekKm(sessions) * weekScale);
+    const deltaKm = km - priorKm;
+    priorKm = km;
 
     // Which week of its phase this is — so a run of same-phase weeks (e.g. three
-    // burn weeks) reads as a progression ("uge 1/2/3 i blokken") instead of the
-    // same sentence three times, and the count resetting to 1 marks a new phase.
-    const phaseStart = buildPhases(raceDate)[phase].startDate;
-    const weekInPhase = Math.max(1, Math.floor(daysBetween(phaseStart, start) / 7) + 1);
-
-    const longRun = sessions.find((session) => session.type === "long");
-    const hasQuality = sessions.some((session) => session.type === "tempo");
-    const longLabel = longRun
-      ? ` + lang tur ${formatDanish(roundHalfKm((longRun.distanceKm ?? 0) * weekScale), 0)} km`
-      : "";
-    const focus =
-      phase === "taper"
-        ? "Nedtrapning · rolig uge, kroppen samler op"
-        : `${PHASE_LABELS[phase]} · ${
-            hasQuality ? `tempo @ ${formatPaceClock(paces.tempo)} /km` : "rolig base i Zone 2"
-          }${longLabel} · uge ${weekInPhase} i blokken`;
+    // burn weeks) reads as a progression ("uge 2 af 4") instead of the same line
+    // three times, and the count resetting to 1 marks a new block.
+    const phaseRules = buildPhases(raceDate)[phase];
+    const weekInPhase = Math.max(1, Math.floor(daysBetween(phaseRules.startDate, start) / 7) + 1);
+    const phaseWeeks = Math.max(
+      weekInPhase,
+      Math.ceil((daysBetween(phaseRules.startDate, phaseRules.endDate) + 1) / 7)
+    );
 
     return {
       id: `u${offset}`,
       week: weekOfPlan + offset,
-      focus,
+      dateRange: formatWeekRange(start),
+      phaseLabel: phase === "taper" ? "Nedtrapning" : PHASE_LABELS[phase],
+      phaseProgress: `uge ${weekInPhase} af ${phaseWeeks}`,
+      runCount: sessions.filter((session) => session.type !== "rest").length,
+      sessions: upcomingSessions(sessions, weekScale, paces),
       km,
+      deltaKm,
       muted: phase === "taper",
+      isRaceWeek: sessions.some((session) => session.type === "race"),
     };
   });
 }
@@ -533,14 +702,30 @@ function buildDerivedPlan(
 
   const weekStart = startOfTrainingWeek(now);
   const phase = getCurrentPhase(now, raceDate);
-  const sessions = getWeekPlan(phase, weekStart, raceDate, raceName);
+  const sessions = getWeekPlan(
+    phase,
+    weekStart,
+    raceDate,
+    raceName,
+    raceDistanceKm ?? HALF_MARATHON_KM
+  );
   const scale = volumeScale(runs, now, prescribedWeekKm(sessions));
+  const weekKm = Math.round(prescribedWeekKm(sessions) * scale);
 
   return {
     plan: {
       suggestions: buildRunSuggestions(phase, paces, raceDate, spread),
-      weekKm: Math.round(prescribedWeekKm(sessions) * scale),
-      upcomingWeeks: derivedUpcomingWeeks(weekStart, weekOfPlan, raceDate, raceName, paces, scale),
+      weekKm,
+      upcomingWeeks: derivedUpcomingWeeks(
+        weekStart,
+        weekOfPlan,
+        raceDate,
+        raceName,
+        raceDistanceKm ?? HALF_MARATHON_KM,
+        paces,
+        scale,
+        weekKm
+      ),
       prediction,
     },
     lock: null,
@@ -560,7 +745,11 @@ export interface PlanSuggestions {
   phase: PhaseKey;
   /** The phase's label ("Burn"), for prose. */
   phaseLabel: string;
-  /** Total suggested weekly volume in km, from the phase rules. */
+  /**
+   * Total suggested weekly volume in km — the phase's prescription, capped
+   * against what the runner's load says they can absorb, exactly as the plan
+   * page caps it. The two views must never quote different weeks.
+   */
   weekKm: number;
   suggestions: RunSuggestion[];
   /** True when paces came from the runner's own prediction; false = fallback grid. */
@@ -577,10 +766,18 @@ export function getPlanSuggestions(
   goalTimeSeconds?: number | null
 ): PlanSuggestions {
   const phase = getCurrentPhase(now, raceDate);
-  const sessions = getWeekPlan(phase, startOfTrainingWeek(now), raceDate, raceName);
-  const weekKm = Math.round(prescribedWeekKm(sessions));
-
+  const sessions = getWeekPlan(
+    phase,
+    startOfTrainingWeek(now),
+    raceDate,
+    raceName,
+    raceDistanceKm ?? HALF_MARATHON_KM
+  );
   const runs = activities.filter((activity) => /run/i.test(activity.type));
+  const weekKm = Math.round(
+    prescribedWeekKm(sessions) * volumeScale(runs, now, prescribedWeekKm(sessions))
+  );
+
   const prediction = predictRace(runs, now, raceDistanceKm ?? undefined, hrMax).prediction;
   const { paces, spread } = prediction
     ? derivePaces(prediction, raceDistanceKm, goalTimeSeconds)
@@ -693,6 +890,12 @@ export function buildPlanView(
   // the template path, the distances the suggestions carry.
   const phase = getCurrentPhase(now, raceDate);
 
+  // The distance the whole plan is built for. The predictor already treats a
+  // missing distance as the half marathon, so the page names one either way
+  // rather than leaving the goal unstated.
+  const goalDistanceKm =
+    raceDistanceKm != null && raceDistanceKm > 0 ? raceDistanceKm : HALF_MARATHON_KM;
+
   // The data-driven suggestions (issue #115) — distances from the phase engine,
   // volume from the load ratio, paces from the race predictor. Null when the
   // runner has no race of their own, no synced runs, or nothing recent enough to
@@ -721,7 +924,7 @@ export function buildPlanView(
   // scaling. This keeps the suggestions and "Kommende uger" phase-correct in every
   // state — a taper reads as a taper, a base week as a base week.
   const weekStart = startOfTrainingWeek(now);
-  const templateSessions = getWeekPlan(phase, weekStart, raceDate, raceName);
+  const templateSessions = getWeekPlan(phase, weekStart, raceDate, raceName, goalDistanceKm);
   const templateSuggestions = buildRunSuggestions(phase, FALLBACK_PACES, raceDate);
   const templateWeekKm = Math.round(prescribedWeekKm(templateSessions));
   const templateUpcomingWeeks = derivedUpcomingWeeks(
@@ -729,8 +932,10 @@ export function buildPlanView(
     weekOfPlan,
     raceDate,
     raceName,
+    goalDistanceKm,
     FALLBACK_PACES,
-    1
+    1,
+    templateWeekKm
   );
 
   // The race card. Live: the predictor's finish time is the AI estimate, and the
@@ -744,9 +949,11 @@ export function buildPlanView(
   // so the card contrasts what they're aiming for with what the model expects.
   const prediction = derived?.prediction;
   const hasGoal = goalTimeSeconds != null && goalTimeSeconds > 0;
-  const goalDistanceKm =
-    raceDistanceKm != null && raceDistanceKm > 0 ? raceDistanceKm : HALF_MARATHON_KM;
   const goalRacePace = hasGoal ? formatPaceClock(goalTimeSeconds / goalDistanceKm) : null;
+  // What the runner is actually training for. `goalDistanceKm` already falls back
+  // to the half marathon the predictor assumes, so this is never blank — the plan
+  // says "Halvmaraton" on the demo race as truthfully as on a chosen one.
+  const distanceLabel = raceDistanceLabel(goalDistanceKm);
   const race = prediction
     ? {
         goalTime: hasGoal ? formatGoalClock(goalTimeSeconds) : goalTimeFor(prediction.timeSeconds),
@@ -784,6 +991,9 @@ export function buildPlanView(
       dayLabel: raceDayLabel,
       dateValue: dateInputValue(raceDate),
       distanceKm: raceDistanceKm ?? null,
+      distanceLabel,
+      distanceInline: inlineDistanceLabel(distanceLabel),
+      distanceKmLabel: kmLabel(goalDistanceKm),
       goalTimeSeconds: goalTimeSeconds ?? null,
       ...race,
       lock,

@@ -45,6 +45,7 @@ export function PlanPageClient({
         weekOfPlan={view.weekOfPlan}
         daysToRace={view.daysToRace}
         goalLabel={view.goalLabel}
+        distanceInline={view.race.distanceInline}
         started={started}
       />
 

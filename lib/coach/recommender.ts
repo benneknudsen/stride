@@ -26,7 +26,6 @@ import {
   getPhaseRules,
   getWeekPlan,
   MIN_RECOVERY_HOURS,
-  type PlannedSession,
   type SessionRisk,
   type SessionType,
   validateWorkout,
@@ -35,9 +34,6 @@ import {
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import type { Goal } from "@/lib/training/goals";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
-
-/** One day of the recommendation's week strip — the engine's planned session. */
-export type WeekDay = PlannedSession;
 
 export interface WorkoutInput {
   /** Carried for future multi-goal support — not yet wired into the recommender. */
@@ -70,7 +66,6 @@ export interface WorkoutRecommendation {
   heartRateCap: number;
   shoe: "vomero" | "adios-pro-4";
   reason: string[];
-  weekStrip: WeekDay[];
 }
 
 // ── Tunables ────────────────────────────────────────────────────────────────
@@ -112,7 +107,7 @@ function mondayOfWeek(date: Date): Date {
   return monday;
 }
 
-function restCard(reason: string[], weekStrip: WeekDay[]): WorkoutRecommendation {
+function restCard(reason: string[]): WorkoutRecommendation {
   return {
     type: "rest",
     distanceKm: 0,
@@ -120,7 +115,6 @@ function restCard(reason: string[], weekStrip: WeekDay[]): WorkoutRecommendation
     heartRateCap: ZONE2_CEILING_BPM,
     shoe: "vomero",
     reason,
-    weekStrip,
   };
 }
 
@@ -140,14 +134,14 @@ export function recommendWorkout(
   const today = getLocalDate(now);
   const phase = getCurrentPhase(today, input.raceDate);
   const rules = getPhaseRules(phase, input.raceDate);
-  const weekStrip = getWeekPlan(phase, mondayOfWeek(today), input.raceDate);
+  const weekPlan = getWeekPlan(phase, mondayOfWeek(today), input.raceDate);
   const reason: string[] = [];
 
   // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
-  const slot = weekStrip[(today.getDay() + 6) % 7];
+  const slot = weekPlan[(today.getDay() + 6) % 7];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
-    return restCard(reason, weekStrip);
+    return restCard(reason);
   }
 
   // 6. Intensity: tempo only where the phase allows it; otherwise Zone 2.
@@ -176,7 +170,7 @@ export function recommendWorkout(
         `Kun ${Math.round(gap)} timer siden sidste løbetur — under ${recoveryHours}-timers restitutionsbufferen før ${type === "tempo" ? "et hårdt pas" : "en rolig tur"}.`
       );
     }
-    return restCard(reason, weekStrip);
+    return restCard(reason);
   }
 
   // 3. Football yesterday → no hard session.
@@ -200,7 +194,7 @@ export function recommendWorkout(
     reason.push(
       `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Din krop har brug for restitution i dag.`
     );
-    return restCard(reason, weekStrip);
+    return restCard(reason);
   }
   if (readiness.band === "easy") {
     if (type !== "easy") {
@@ -246,7 +240,7 @@ export function recommendWorkout(
     reason.push(`${PAUSE_DAYS}+ dages pause — distancen er sat 20% ned for en sikker genstart.`);
   }
 
-  // B5: the phase's `maxDistanceKm` is the upper bound the week strip agrees on.
+  // B5: the phase's `maxDistanceKm` is the upper bound the week plan agrees on.
   // Clamp band runs (easy/tempo) to it so the card never exceeds the plan; a
   // ready-to-progress athlete may reach up to 15% beyond it. The long run has
   // its own `longRunMaxKm` ceiling and is exempt.
@@ -291,5 +285,5 @@ export function recommendWorkout(
   const paceRange: PaceRange = PACE_RANGES[type];
   const heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
 
-  return { type, distanceKm, paceRange, heartRateCap, shoe, reason, weekStrip };
+  return { type, distanceKm, paceRange, heartRateCap, shoe, reason };
 }
