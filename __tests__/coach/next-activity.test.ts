@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CoachActivityInput } from "@/lib/coach/dashboard";
-import { buildPhases, getPhaseRules, type PhaseKey } from "@/lib/coach/engine";
-import { buildNextActivity } from "@/lib/coach/next-activity";
+import { buildPhases, getPhaseRules, type PhaseKey, ZONE2_CEILING_BPM } from "@/lib/coach/engine";
+import { buildNextActivity, VARIETY_PACE_RANGES } from "@/lib/coach/next-activity";
 import { PACE_RANGES, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
@@ -94,48 +94,37 @@ describe("buildNextActivity", () => {
     expect(next.reason.join(" ")).toContain("readiness");
   });
 
-  it("recommends a tempo run when the last five were all easy", () => {
+  it("suggests a long Zone 2 run when none of the last five was long", () => {
     const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
     const next = build(fiveEasyRuns(SHARPEN), SHARPEN);
 
-    expect(next.type).toBe("tempo");
-    expect(next.distanceKm).toBe(rules.maxDistanceKm);
-    expect(next.paceRange).toEqual(PACE_RANGES.tempo);
-    expect(next.heartRateCap).toBe(TEMPO_HR_CAP_BPM);
+    expect(next.type).toBe("long");
+    expect(next.distanceKm).toBe(rules.longRunMaxKm);
+    expect(next.paceRange).toEqual(PACE_RANGES.long);
+    expect(next.heartRateCap).toBe(ZONE2_CEILING_BPM);
     expect(next.basis).toBe("Sidste 5 ture: 5 rolige · 0 kvalitet · 0 lange");
   });
 
-  it("keeps a Zone-2 base phase easy instead of prescribing tempo it disallows", () => {
-    // Burn has no tempo session, and a long run is already in the mix — so the
-    // all-easy signal can't become quality work here.
-    const activities = [
-      run(BURN, 72, { distance: 16_000 }),
-      ...fiveEasyRuns(BURN, 120).slice(0, 4),
-    ];
-    const next = build(activities, BURN);
-
-    expect(next.type).toBe("easy");
-    expect(next.reason.join(" ")).toContain("Zone 2");
-  });
-
-  it("recommends a long run when none of the last five was long", () => {
+  it("suggests a fartlek when the mix is all steady and the long run is covered", () => {
     const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
     const activities = [
-      run(SHARPEN, 72, { averageHeartrate: TEMPO_HR }),
-      run(SHARPEN, 120, { averageHeartrate: HARD_HR, distance: 6_000 }),
+      run(SHARPEN, 72, { distance: 16_000 }),
+      run(SHARPEN, 120),
       run(SHARPEN, 168),
       run(SHARPEN, 216),
       run(SHARPEN, 264),
     ];
     const next = build(activities, SHARPEN);
 
-    expect(next.type).toBe("long");
-    expect(next.distanceKm).toBe(rules.longRunMaxKm);
-    expect(next.paceRange).toEqual(PACE_RANGES.long);
-    expect(next.basis).toBe("Sidste 5 ture: 3 rolige · 2 kvalitet · 0 lange");
+    expect(next.type).toBe("fartlek");
+    expect(next.distanceKm).toBe(rules.maxDistanceKm);
+    expect(next.paceRange).toEqual(VARIETY_PACE_RANGES.fartlek);
+    expect(next.heartRateCap).toBe(TEMPO_HR_CAP_BPM);
+    expect(next.basis).toBe("Sidste 5 ture: 4 rolige · 0 kvalitet · 1 lange");
+    expect(next.reason.join(" ")).toContain("fartlek");
   });
 
-  it("falls back to an easy run when the mix already holds quality and a long run", () => {
+  it("suggests intervals when the mix holds tempo but no real speed", () => {
     const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
     const activities = [
       run(SHARPEN, 72, { averageHeartrate: TEMPO_HR }),
@@ -146,21 +135,60 @@ describe("buildNextActivity", () => {
     ];
     const next = build(activities, SHARPEN);
 
+    expect(next.type).toBe("intervals");
+    expect(next.distanceKm).toBe((rules.minDistanceKm + rules.maxDistanceKm) / 2);
+    expect(next.paceRange).toEqual(VARIETY_PACE_RANGES.intervals);
+    // Reps are meant to reach Zone 4–5, so the card carries no HR ceiling.
+    expect(next.heartRateCap).toBeNull();
+  });
+
+  it("falls back to a rolig tur when the mix already holds speed and a long run", () => {
+    const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
+    const activities = [
+      run(SHARPEN, 72, { averageHeartrate: HARD_HR }),
+      run(SHARPEN, 120, { distance: 16_000 }),
+      run(SHARPEN, 168),
+      run(SHARPEN, 216),
+      run(SHARPEN, 264),
+    ];
+    const next = build(activities, SHARPEN);
+
     expect(next.type).toBe("easy");
     expect(next.distanceKm).toBe((rules.minDistanceKm + rules.maxDistanceKm) / 2);
     expect(next.paceRange).toEqual(PACE_RANGES.easy);
+    expect(next.reason.join(" ")).toContain("både fart og distance");
   });
 
-  it("downgrades a quality session to easy when readiness is only moderate", () => {
+  it("keeps a Zone-2 base phase easy instead of prescribing the speed it disallows", () => {
+    // Burn has no tempo session, and a long run is already in the mix — so the
+    // all-steady signal can't become fartlek/interval work here.
+    const activities = [
+      run(BURN, 72, { distance: 16_000 }),
+      ...fiveEasyRuns(BURN, 120).slice(0, 4),
+    ];
+    const next = build(activities, BURN);
+
+    expect(next.type).toBe("easy");
+    expect(next.reason.join(" ")).toContain("Zone 2");
+  });
+
+  it("downgrades the variation to easy when readiness is only moderate", () => {
     const next = build(fiveEasyRuns(SHARPEN), SHARPEN, EASY_BAND_RATIO);
 
     expect(next.type).toBe("easy");
     expect(next.reason.join(" ")).toContain("Hold det roligt");
   });
 
-  it("downgrades tempo to easy when only the 24 h buffer has passed, not 48 h", () => {
-    // Newest run 30 h ago: past the easy buffer, short of the quality one.
-    const activities = fiveEasyRuns(SHARPEN, 30);
+  it("downgrades a fast variation to easy when only the 24 h buffer has passed, not 48 h", () => {
+    // Newest run 30 h ago: past the easy buffer, short of the quality one — and
+    // it is the long run, so the long-Zone-2 branch can't fire either.
+    const activities = [
+      run(SHARPEN, 30, { distance: 16_000 }),
+      run(SHARPEN, 78),
+      run(SHARPEN, 126),
+      run(SHARPEN, 174),
+      run(SHARPEN, 222),
+    ];
     const next = build(activities, SHARPEN);
 
     expect(next.type).toBe("easy");
@@ -169,7 +197,8 @@ describe("buildNextActivity", () => {
 
   it("classifies intensity from Strava's hr_zones buckets when present", () => {
     // Same easy average HR, but the zone buckets say it was threshold work — so
-    // the mix carries quality and the all-easy tempo rule must not fire.
+    // the mix reads as five quality sessions and the fartlek rule must not fire;
+    // what it is missing is the long tur.
     const activities = fiveEasyRuns(SHARPEN).map((activity) => ({
       ...activity,
       hrZones: [{ zone: 4, min: 152, max: 170, seconds: 2_700 }],
@@ -195,7 +224,7 @@ describe("buildNextActivity", () => {
     ];
     const next = build(activities, SHARPEN);
 
-    expect(next.type).toBe("tempo");
+    expect(next.type).toBe("long");
     expect(next.basis).toBe("Sidste 5 ture: 5 rolige · 0 kvalitet · 0 lange");
   });
 

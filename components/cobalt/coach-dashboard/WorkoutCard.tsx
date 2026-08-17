@@ -5,6 +5,12 @@ import type { WorkoutCardView } from "@/lib/coach/dashboard";
 // "Næste pas" — the recommender's card (#32) in Cobalt Glass: session type on a
 // cobalt surface, the three key numbers in mono, the recommender's reasons, and
 // the "Logfør dette pas" quick action.
+//
+// This is the *plan-grounded* card (issue #253): the right run for today, from
+// the phase's week plan filtered through the recovery buffer and readiness. The
+// silver NextActivityCard beside it answers a different question — which
+// *variation* the last five runs are missing — and the two hint lines say so, so
+// the pair never reads as the same recommendation twice.
 
 const TYPE_LABELS: Record<WorkoutCardView["type"], string> = {
   rest: "Hvile",
@@ -23,10 +29,15 @@ export function WorkoutCard({ workout }: { workout: WorkoutCardView }) {
 
   return (
     <GlassCard variant="cobalt" className="flex flex-col gap-5 p-[26px]">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="cg-label tracking-[0.2em] text-silver/90">Næste pas</span>
-        <span className="rounded-pill bg-silver/15 px-3 py-1 cg-label text-[10.5px] text-silver">
-          {TYPE_LABELS[workout.type]}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="cg-label tracking-[0.2em] text-silver/90">Næste pas</span>
+          <span className="rounded-pill bg-silver/15 px-3 py-1 cg-label text-[10.5px] text-silver">
+            {TYPE_LABELS[workout.type]}
+          </span>
+        </div>
+        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-silver/70">
+          Plan-grundet · det rigtige pas i dag
         </span>
       </div>
 

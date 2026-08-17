@@ -1,16 +1,17 @@
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import type { NextActivityView } from "@/lib/coach/next-activity";
 
-// "Næste aktivitet" — the recommendation read off the runner's last five runs
-// (the card that replaced the fixed Mon–Sun "Ugens plan" strip). Sits beside the
-// phase-driven "Næste pas": a silver glass surface so the cobalt WorkoutCard
-// stays the section's primary voice.
+// "Næste aktivitet" — the *variation* read off the runner's last five runs
+// (issue #253): the kind of session the mix is missing, not a second take on
+// today's planned pas. Sits beside the plan-grounded "Næste pas" on a silver
+// glass surface, so the cobalt WorkoutCard stays the section's primary voice.
 
 const TYPE_LABELS: Record<NextActivityView["type"], string> = {
   rest: "Hvile",
   easy: "Rolig tur",
-  tempo: "Tempo",
-  long: "Lang tur",
+  long: "Lang Zone 2-tur",
+  fartlek: "Fartlek",
+  intervals: "Intervaller",
 };
 
 export function NextActivityCard({ activity }: { activity: NextActivityView }) {
@@ -25,9 +26,14 @@ export function NextActivityCard({ activity }: { activity: NextActivityView }) {
         </span>
       </div>
 
-      <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink/70">
-        {activity.basis}
-      </span>
+      <div className="flex flex-col gap-1">
+        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-red">
+          Variation · et andet slags pas end planens
+        </span>
+        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink/70">
+          {activity.basis}
+        </span>
+      </div>
 
       {isRest ? (
         <p className="m-0 font-cg-display text-[26px] leading-tight text-cobalt">Hviledag</p>

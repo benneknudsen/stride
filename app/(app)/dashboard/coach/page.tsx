@@ -22,8 +22,9 @@ import { demoActivities } from "@/lib/demo/data";
 // NavBar and BottomTabBar point at; /coach permanently redirects here
 // (next.config.ts). A server component composing four sections, each behind its
 // own Suspense boundary so it streams in independently:
-//   1. Næste pas   — the recommender's card + the last-five-runs "næste
-//                    aktivitet" recommendation, recomputed per request
+//   1. Dagens træning — the recommender's plan-grounded "Næste pas" card beside
+//                    the last-five-runs "Næste aktivitet" variation (#253),
+//                    recomputed per request
 //   2. AI-coach    — chat + form/readiness + 14-day training load (was /coach)
 //   3. Progression — pace/zone/volume/load charts, cached 1 h (getProgressionCharts)
 //   4. Coach-feed  — AI coach cards streamed client-side from /api/ai/analyze
@@ -66,7 +67,7 @@ function SectionLoader({ height }: { height: number }) {
   );
 }
 
-// ── 1. Næste pas (real-time) ────────────────────────────────────────────────
+// ── 1. Dagens træning (real-time) ───────────────────────────────────────────
 // Takes the already-computed dashboard as a prop (issue #167): CoachPage runs
 // computeCoachDashboard once and shares the result with the coach console, so
 // the workout card and the console can never disagree and the engine runs a
@@ -199,7 +200,7 @@ export default async function CoachPage() {
       </header>
 
       <section>
-        <SectionHeading index="01" title="Næste pas" hint="Realtid" />
+        <SectionHeading index="01" title="Dagens træning" hint="Plan + variation" />
         <Suspense fallback={<SectionLoader height={280} />}>
           <NextWorkoutSection dashboard={dashboard} />
         </Suspense>
