@@ -4,8 +4,9 @@ import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { ROUTES } from "@/lib/routes";
 
 // "AI Coach" widget (5/12, cobalt variant): the runner glyph + mono label, a
-// serif-italic coaching quote in guillemets, and two pill actions (silver solid
-// + silver outline).
+// serif-italic coaching quote in guillemets, and the "Spørg coach" pill. The
+// "Ugens plan" pill is gone with the weekly schedule it pointed at — the coach
+// recommends the next activity from the last five runs instead.
 export function AiCoachCard({ quote }: { quote: string }) {
   return (
     <GlassCard
@@ -25,12 +26,6 @@ export function AiCoachCard({ quote }: { quote: string }) {
           className="cg-interactive rounded-pill bg-silver px-[18px] py-[9px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-white"
         >
           Spørg coach
-        </Link>
-        <Link
-          href={ROUTES.PLAN}
-          className="cg-interactive rounded-pill border border-silver/50 px-[18px] py-[9px] text-[12.5px] font-medium text-silver transition-colors hover:bg-silver/12"
-        >
-          Ugens plan
         </Link>
       </div>
     </GlassCard>

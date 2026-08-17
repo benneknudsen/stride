@@ -1,19 +1,15 @@
 // Stride — coach dashboard view models (issue #34). Pure builders that turn a
 // user's activity history into the chart-ready, JSON-serializable data the
-// /dashboard/coach sections render: the next-workout card + week strip, the
-// pace-efficiency trend, the rolling zone distribution, the training-load gauge
-// and the weekly volume bars.
+// /dashboard/coach sections render: the next-workout card, the last-five-runs
+// "næste aktivitet" recommendation, the pace-efficiency trend, the rolling zone
+// distribution, the training-load gauge and the weekly volume bars.
 //
 // Everything here is pure — the clock is always a parameter — so the whole
 // dashboard is unit-testable with fixture data. The server page decides what
 // to cache (progression series, 1 h) vs. compute per request (workout card).
 
-import { getLocalDate, type PlannedSession } from "@/lib/coach/engine";
-import {
-  recommendWorkout,
-  type WeekDay,
-  type WorkoutRecommendation,
-} from "@/lib/coach/recommender";
+import { buildNextActivity, type NextActivityView } from "@/lib/coach/next-activity";
+import { recommendWorkout, type WorkoutRecommendation } from "@/lib/coach/recommender";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { GOALS } from "@/lib/training/goals";
 import type {
@@ -175,43 +171,18 @@ export function buildLoadGauge(load: TrainingLoad): LoadGaugeView {
   };
 }
 
-// ── Week strip ──────────────────────────────────────────────────────────────
-
-export interface WeekStripDay {
-  weekday: PlannedSession["weekday"];
-  type: PlannedSession["type"];
-  description: string;
-  isToday: boolean;
-  isNext: boolean;
-}
-
-/**
- * The recommendation's Mon–Sun strip with today and the next session marked.
- * "Next" is the first run day at or after today; today itself counts when it
- * carries a run. Only rest left this week → nothing is marked next.
- */
-export function buildWeekStrip(weekStrip: WeekDay[], now: Date): WeekStripDay[] {
-  // E2: "today" is the athlete's Danish weekday, so the marker lines up with the
-  // recommender's slot (both derived via `getLocalDate`) even on a UTC server.
-  const todayIndex = (getLocalDate(now).getDay() + 6) % 7;
-  const nextIndex = weekStrip.findIndex((day, index) => index >= todayIndex && day.type !== "rest");
-  return weekStrip.map((day, index) => ({
-    weekday: day.weekday,
-    type: day.type,
-    description: day.description,
-    isToday: index === todayIndex,
-    isNext: index === nextIndex,
-  }));
-}
-
 // ── The assembled dashboard ─────────────────────────────────────────────────
 
-/** The workout card without its embedded week strip (rendered separately). */
+/**
+ * The workout card without the recommender's week plan — nothing renders a
+ * Mon–Sun strip any more, so it never leaves the recommender.
+ */
 export type WorkoutCardView = Omit<WorkoutRecommendation, "weekStrip">;
 
 export interface CoachDashboardData {
   workout: WorkoutCardView;
-  weekStrip: WeekStripDay[];
+  /** The recommendation derived from the runner's last five runs. */
+  nextActivity: NextActivityView;
   paceSeries: PacePoint[];
   zoneSeries: ZoneWeek[];
   volumeSeries: VolumeWeek[];
@@ -248,7 +219,9 @@ export function buildCoachDashboard(
       return latest === null || runStart.getTime() > latest.getTime() ? runStart : latest;
     }, null);
 
-  const { weekStrip, ...workout } = recommendWorkout(
+  // The recommender still builds its phase week plan internally to find today's
+  // slot; the page renders no strip, so it is dropped here.
+  const { weekStrip: _weekStrip, ...workout } = recommendWorkout(
     {
       // The signed-in user's own id; "demo" only on the fixture path. The goal
       // stays the product's Zone-2 philosophy — no per-user goal exists yet, and
@@ -265,7 +238,7 @@ export function buildCoachDashboard(
 
   return {
     workout,
-    weekStrip: buildWeekStrip(weekStrip, now),
+    nextActivity: buildNextActivity({ activities, progression: current, now, raceDate }),
     paceSeries: buildPaceEfficiencySeries(snapshots),
     zoneSeries: buildZoneSeries(activities, weeks, now),
     volumeSeries: buildVolumeSeries(activities, weeks, now),

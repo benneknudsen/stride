@@ -2,9 +2,9 @@ import { Suspense } from "react";
 import { CoachConsole } from "@/components/cobalt/coach/CoachConsole";
 import { CoachFeed } from "@/components/cobalt/coach-dashboard/CoachFeed";
 import { LoadGauge } from "@/components/cobalt/coach-dashboard/LoadGauge";
+import { NextActivityCard } from "@/components/cobalt/coach-dashboard/NextActivityCard";
 import { PaceEfficiencyChart } from "@/components/cobalt/coach-dashboard/PaceEfficiencyChart";
 import { VolumeTrendChart } from "@/components/cobalt/coach-dashboard/VolumeTrendChart";
-import { WeekStrip } from "@/components/cobalt/coach-dashboard/WeekStrip";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
 import { GlassCard } from "@/components/cobalt/GlassCard";
@@ -22,7 +22,8 @@ import { demoActivities } from "@/lib/demo/data";
 // NavBar and BottomTabBar point at; /coach permanently redirects here
 // (next.config.ts). A server component composing four sections, each behind its
 // own Suspense boundary so it streams in independently:
-//   1. Næste pas   — the recommender's card + week strip, recomputed per request
+//   1. Næste pas   — the recommender's card + the last-five-runs "næste
+//                    aktivitet" recommendation, recomputed per request
 //   2. AI-coach    — chat + form/readiness + 14-day training load (was /coach)
 //   3. Progression — pace/zone/volume/load charts, cached 1 h (getProgressionCharts)
 //   4. Coach-feed  — AI coach cards streamed client-side from /api/ai/analyze
@@ -71,14 +72,14 @@ function SectionLoader({ height }: { height: number }) {
 // the workout card and the console can never disagree and the engine runs a
 // single time per request.
 async function NextWorkoutSection({ dashboard }: { dashboard: CoachDashboardData }) {
-  const { workout, weekStrip } = dashboard;
+  const { workout, nextActivity } = dashboard;
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 lg:col-span-7">
         <WorkoutCard workout={workout} />
       </div>
       <div className="col-span-12 lg:col-span-5">
-        <WeekStrip days={weekStrip} />
+        <NextActivityCard activity={nextActivity} />
       </div>
     </div>
   );
