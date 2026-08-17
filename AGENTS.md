@@ -49,6 +49,10 @@ Linter/formatter is **Biome 2.5** (not ESLint). Config: `biome.json` — 2-space
 - **Cobalt Glass** is the standard design: `components/cobalt/` (UI) + `lib/cobalt/` (view-models, Danish: `hjem.ts`, `plan.ts`, `aktiviteter.ts`). Pages are Danish: `/` (hjem), `/aktiviteter`, `/plan`.
 - Coach lives at `/dashboard/coach` only (#86); old `/coach` permanently redirects.
 - Race date is per-user (#99): `actions/race.ts` + `getRacePlan`, engine demo race as fallback.
+- **Plan page** (#244): no longer a Mon–Sun prescribed schedule. Surfaces 3 phase-aware run suggestions (easy/tempo/long) with distance + pace targets. The coach reads the suggestions via `getRunSuggestions` tool (`lib/ai/coach-tools.ts`) and recommends which to do today based on readiness + recovery.
+- **Recovery buffer** (#240): the coach enforces recovery (24h before easy/long, 48h before tempo) against the actual last run — the plan page no longer prescribes rest days.
+- **Readiness** (#241): asymmetric mapping in `lib/cobalt/readiness.ts` — full marks plateau at ratio 0.8–1.15, steep penalty only on the overload side, gentle decline when rested. Band thresholds: ≥80 "ready", ≥68 "easy", else "rest".
+- **Race distance/goal** (#238/#239): `RaceDateDialog` lets users pick race distance (10K/Half/Marathon/custom) and goal time/pace. Goal anchors the pace grid via `mergeGoalGrid` (#242) — easy side stays grounded in prediction when no observed easy pace exists.
 - Visitors (no session) get the Velkommen landing on `/` (`components/cobalt/velkommen/`); the public demo lives at `/demo`; `LandingChromeGate` hides NavBar/BottomTabBar on the landing.
 
 ## Demo mode
@@ -79,6 +83,12 @@ A fresh `git worktree add` has **no `node_modules`**. Symlink the main checkout'
 - Colors: Cobalt `#1b29c0`, Red `#ee2418`, Silver `#e9eae5`, Ink `#5560a8`. Tokens + `cg-*` utilities in `app/globals.css`.
 - Typography: Bricolage Grotesque (display), Instrument Sans (UI), Instrument Serif (heroes, italic), Spline Sans Mono (data) — `lib/fonts.ts`.
 - Legacy "Volt" system (`StrideLogo`/`StrideLoader`, Geist/Space Grotesk) has been **removed** — do not reference it.
+
+## AI provider
+OpenRouter (single `OPENROUTER_API_KEY` fronts all models). Preferred primary: `google/gemma-4-26b-a4b-it`, fallback: `openai/gpt-4o-mini` (independent vendor). Config in `lib/ai/provider.ts`, overridable via `AI_PRIMARY`/`AI_FALLBACK` env vars. Chat coach uses `streamText` + typed tools (`lib/ai/coach-tools.ts`); activity analysis uses `streamObject` with deterministic heuristic fallback when no key is set.
+
+## Coach tools (`lib/ai/coach-tools.ts`)
+The coach has typed tools it can call during a conversation: `getProgression` (training snapshot), `getRecentActivities` (last N runs), `getRunSuggestions` (the 3 phase-aware suggestions from the plan page — issue #244), and `analyzeActivity` (deep single-run analysis). Tools return structured data; the coach synthesizes it into Danish advice.
 
 ## Env vars (see `.env.example`)
 `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID/SECRET`, `RESEND_API_KEY`, `STRAVA_*`, `ENCRYPTION_KEY` (AES-256-GCM), `UPSTASH_REDIS_REST_URL/TOKEN`, `OPENROUTER_API_KEY`, `AI_PRIMARY`/`AI_FALLBACK`.

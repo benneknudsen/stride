@@ -39,11 +39,15 @@ See `docs/architecture.md` for the original plan (the codebase has evolved past 
 - Drizzle over Prisma (SQL-first, edge-compatible, lighter)
 - NextAuth v5 over Clerk (free, no vendor lock-in, demonstrates OAuth competence)
 - Server-side AI only (cost control, GDPR, key security)
-- Chat coach via typed tools (`streamText` + tool calls); activity analysis via `streamObject` with a deterministic heuristic fallback when no AI key is set
+- Chat coach via typed tools (`streamText` + tool calls in `lib/ai/coach-tools.ts`); activity analysis via `streamObject` with a deterministic heuristic fallback when no AI key is set
+- AI provider: OpenRouter (`OPENROUTER_API_KEY`), primary `google/gemma-4-26b-a4b-it`, fallback `openai/gpt-4o-mini` — config in `lib/ai/provider.ts`
 - Event-driven revalidation over ISR (running data changes on new activity only)
 - Cobalt Glass is the standard design — `components/cobalt/` (UI) + `lib/cobalt/` (view-models); pages are Danish: `/` (hjem), `/aktiviteter`, `/plan`
 - Coach lives at `/dashboard/coach` only (#86); the old `/coach` permanently redirects
 - Race date is per-user (#99) — `actions/race.ts` + `getRacePlan`, with the engine's demo race as fallback
+- **Plan page** (#244): 3 phase-aware run suggestions (easy/tempo/long) with distance + pace targets, not a Mon–Sun schedule. Coach reads suggestions via `getRunSuggestions` tool and recommends which to do today. Recovery buffer (24h/48h) is coach-side (#240).
+- Race distance/goal via `RaceDateDialog` (#238/#239); goal anchors pace grid (#242).
+- Readiness: asymmetric mapping in `lib/cobalt/readiness.ts` (#241) — plateau 0.8–1.15, steep overload penalty, gentle rested decline.
 - Visitors (no session) get the Velkommen landing page on `/` (`components/cobalt/velkommen/`); the demo dashboard lives at `/demo` (`DEMO_HOME_ROUTE` in `lib/routes.ts`, a rewrite of `/?demo=1` in `next.config.ts` — legacy query links still work), and visitor navs point Hjem there so the demo stays browsable. The landing itself drops the app chrome — `LandingChromeGate` hides NavBar/BottomTabBar there, and the page brings its own header
 
 ## Demo mode
