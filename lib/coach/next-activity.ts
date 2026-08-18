@@ -33,9 +33,13 @@
 //   Fast variations are available in every phase (#254). A base block like burn
 //   has no tempo session, so there the fartlek/interval is prescribed at reduced
 //   intensity — surges and reps capped at the tempo band, never Zone 4–5.
+//   5. Cross-card coordination (#255): the mix alone can land on exactly the
+//      session today's "Næste pas" already prescribes — both cards saying "lang
+//      tur" is the duplicate #253 set out to remove. With `todayType` passed in,
+//      the variation steps aside; see `avoidPlanDuplicate`.
 //
-// Pure and deterministic: the clock is a parameter, so the same input always
-// yields the same card.
+// Pure and deterministic: the clock and today's planned pas are parameters, so
+// the same input always yields the same card.
 
 // The activity type is imported type-only, so this never becomes a runtime
 // import cycle with dashboard.ts (which imports `buildNextActivity` as a value).
@@ -50,7 +54,7 @@ import {
   type SessionType,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
-import { PACE_RANGES, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
+import { PACE_RANGES, type RecommendedType, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
 import { formatDanish } from "@/lib/cobalt/format";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
@@ -139,6 +143,13 @@ export interface NextActivityInput {
   now: Date;
   /** The user's race date (issue #99); omitted → the engine's demo default. */
   raceDate?: Date;
+  /**
+   * Today's "Næste pas" — the type `recommendWorkout` landed on (#255). The
+   * variation steps aside when the plan already prescribes that session, so the
+   * two cards never read as duplicates. Optional: omitted, the card is the plain
+   * last-five-runs read it was before the coordination existed.
+   */
+  todayType?: RecommendedType;
 }
 
 /** Running activity types: "Run", "TrailRun", "VirtualRun", … */
@@ -206,6 +217,55 @@ function heartRateCapFor(type: RunType, reduced: boolean): number | null {
   return ZONE2_CEILING_BPM;
 }
 
+/** How each variation is named in the Danish de-dup note. */
+const TYPE_LABELS: Record<RunType, string> = {
+  easy: "en rolig tur",
+  long: "en lang Zone 2-tur",
+  fartlek: "en fartlek",
+  intervals: "et intervalpas",
+};
+
+/** What the last five runs say about which fast session is the right one. */
+interface MixContext {
+  longCount: number;
+  hardCount: number;
+  /** Whether the full 48 h an intervalpas needs have passed (#254). */
+  intervalBufferClear: boolean;
+}
+
+/**
+ * The fast variation that is safe right now: intervals when the mix holds no
+ * real speed and the 48 h buffer is clear, otherwise the fartlek that clears on
+ * the 24 h already checked (#254).
+ */
+function fastVariation(mix: MixContext): VarietyType {
+  return mix.hardCount === 0 && mix.intervalBufferClear ? "intervals" : "fartlek";
+}
+
+/**
+ * Cross-card coordination (#255). "Næste pas" and "Næste aktivitet" share only
+ * two words — `easy` and `long`: the plan never schedules a fartlek or an
+ * intervalpas, and the variation never prescribes a tempo. So those two are the
+ * only collisions possible, and when one happens the variation yields:
+ *   • plan = lang tur → the fast variation the mix allows, since the week's
+ *     distance is already covered by the plan itself.
+ *   • plan = rolig tur → the long Zone 2-tur if the mix lacks one, otherwise the
+ *     fast variation.
+ * Safety-forced cards never reach here: a broken recovery buffer or a readiness
+ * band asking for hvile/rolig is answered before the mix is ever read, and there
+ * agreeing with the plan is the right call, not a duplicate to design away.
+ */
+export function avoidPlanDuplicate(
+  natural: RunType,
+  todayType: RecommendedType | undefined,
+  mix: MixContext
+): RunType {
+  if (natural !== todayType) return natural;
+  if (natural === "long") return fastVariation(mix);
+  if (natural === "easy") return mix.longCount === 0 ? "long" : fastVariation(mix);
+  return natural;
+}
+
 function runCard(
   type: RunType,
   rules: PhaseRules,
@@ -243,6 +303,7 @@ export function buildNextActivity({
   progression,
   now,
   raceDate,
+  todayType,
 }: NextActivityInput): NextActivityView {
   // E2: which phase we're in must read the athlete's Danish calendar day, not
   // the server's UTC one — same rule the recommender follows.
@@ -310,6 +371,7 @@ export function buildNextActivity({
   const reduced = !rules.hasTempoSession;
 
   let type: RunType;
+  const mix: MixContext = { longCount, hardCount, intervalBufferClear };
   if (longCount === 0) {
     type = "long";
     reason.push(
@@ -335,6 +397,17 @@ export function buildNextActivity({
     reason.push(
       `De sidste ${recent.length} ture dækker både fart og distance — så variationen i dag er en fartlek, der holder benene kvikke uden at lægge et nyt hårdt pas oven i.`
     );
+  }
+
+  // 5. Cross-card coordination (#255) — the mix has spoken, but if the plan
+  // already prescribes exactly that session today, the variation steps aside so
+  // the two cards name two different pas.
+  const coordinated = avoidPlanDuplicate(type, todayType, mix);
+  if (coordinated !== type) {
+    reason.push(
+      `Men dagens "Næste pas" er allerede ${TYPE_LABELS[type]}, så variationen bliver ${TYPE_LABELS[coordinated]} i stedet — de to kort skal ikke sige det samme.`
+    );
+    type = coordinated;
   }
 
   // The dæmpet note belongs on the fast variations only — the long Zone 2 tur is

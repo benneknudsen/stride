@@ -21,13 +21,16 @@ const DAY_MS = 24 * HOUR_MS;
 const TEST_RACE_DATE = new Date(2026, 8, 20);
 
 /** First date with the given JS weekday (0 = Sun) inside a phase, at 08:00. */
-function anchorIn(phase: "burn", jsWeekday: number): Date {
+function anchorIn(phase: "burn" | "peak", jsWeekday: number): Date {
   const d = new Date(buildPhases(TEST_RACE_DATE)[phase].startDate);
   while (d.getDay() !== jsWeekday) d.setDate(d.getDate() + 1);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 8, 0);
 }
 
 const BURN_WEDNESDAY = anchorIn("burn", 3);
+// Peak is the only phase whose week plan carries a long run (Sundays) — the one
+// place today's pas can collide with the variation's long Zone 2-tur (#255).
+const PEAK_MONDAY = anchorIn("peak", 1);
 
 /** A run `daysAgo` days before `asOf`; hrZones omitted like demo fixtures. */
 function run(
@@ -198,6 +201,31 @@ describe("buildCoachDashboard", () => {
     const activities = [...steadyHistory(asOf), run(asOf, 0.5)]; // 12 h ago
     const dashboard = buildCoachDashboard(activities, asOf, DASHBOARD_WEEKS, TEST_RACE_DATE);
     expect(dashboard.workout.type).toBe("rest");
+  });
+
+  it("never lets the variation prescribe the same run type as today's pas (#255)", () => {
+    // Two weeks of consecutive days in each of the two phases: whatever the plan
+    // slots in, the variation must name a different session — hvile on both
+    // cards is the one allowed overlap, since a body asking for restitution
+    // outranks variety.
+    const seen = new Set<string>();
+    for (const anchor of [BURN_WEDNESDAY, PEAK_MONDAY]) {
+      for (let day = 0; day < 14; day++) {
+        const asOf = new Date(anchor.getTime() + day * DAY_MS);
+        const dashboard = buildCoachDashboard(
+          steadyHistory(asOf),
+          asOf,
+          DASHBOARD_WEEKS,
+          TEST_RACE_DATE
+        );
+        seen.add(dashboard.workout.type);
+        if (dashboard.workout.type === "rest" || dashboard.nextActivity.type === "rest") continue;
+        expect(dashboard.nextActivity.type).not.toBe(dashboard.workout.type);
+      }
+    }
+    // Guard against a vacuous sweep: the steady history's variation is the long
+    // Zone 2-tur, so the run must actually cover a day the plan schedules one.
+    expect(seen.has("long")).toBe(true);
   });
 
   it("is JSON-serializable (no Date instances or undefined gaps)", () => {

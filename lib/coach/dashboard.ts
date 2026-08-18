@@ -238,7 +238,15 @@ export function buildCoachDashboard(
 
   return {
     workout,
-    nextActivity: buildNextActivity({ activities, progression: current, now, raceDate }),
+    // The variation is built *after* the pas and told what it landed on, so it
+    // can step aside rather than prescribe the same session twice (#255).
+    nextActivity: buildNextActivity({
+      activities,
+      progression: current,
+      now,
+      raceDate,
+      todayType: workout.type,
+    }),
     paceSeries: buildPaceEfficiencySeries(snapshots),
     zoneSeries: buildZoneSeries(activities, weeks, now),
     volumeSeries: buildVolumeSeries(activities, weeks, now),

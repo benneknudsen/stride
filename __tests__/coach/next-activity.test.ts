@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { CoachActivityInput } from "@/lib/coach/dashboard";
 import { buildPhases, getPhaseRules, type PhaseKey, ZONE2_CEILING_BPM } from "@/lib/coach/engine";
 import {
+  avoidPlanDuplicate,
   buildNextActivity,
   REDUCED_VARIETY_PACE_RANGES,
   VARIETY_PACE_RANGES,
 } from "@/lib/coach/next-activity";
-import { PACE_RANGES, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
+import { PACE_RANGES, type RecommendedType, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
 const HOUR_MS = 3_600_000;
@@ -71,12 +72,18 @@ const READY_RATIO = 1.0;
 const EASY_BAND_RATIO = 1.6;
 const REST_BAND_RATIO = 1.9;
 
-function build(activities: CoachActivityInput[], now: Date, ratio: number | null = READY_RATIO) {
+function build(
+  activities: CoachActivityInput[],
+  now: Date,
+  ratio: number | null = READY_RATIO,
+  todayType?: RecommendedType
+) {
   return buildNextActivity({
     activities,
     progression: snapshot(ratio),
     now,
     raceDate: TEST_RACE_DATE,
+    todayType,
   });
 }
 
@@ -296,5 +303,113 @@ describe("buildNextActivity", () => {
 
     expect(second).toEqual(first);
     expect(JSON.parse(JSON.stringify(first))).toEqual(first);
+  });
+});
+
+// Issue #255: the variation must never name the session today's "Næste pas"
+// already prescribes. The two vocabularies overlap on `easy` and `long` only,
+// so those are the only collisions these tests can provoke.
+describe("buildNextActivity — coordination with today's Næste pas", () => {
+  it("shifts the long tur to a fast variation when the plan already prescribes it", () => {
+    const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
+    // No long run in the mix, so the variation's natural pick is the long tur —
+    // exactly what the plan schedules today.
+    const next = build(fiveEasyRuns(SHARPEN), SHARPEN, READY_RATIO, "long");
+
+    expect(next.type).not.toBe("long");
+    expect(next.type).toBe("intervals");
+    expect(next.distanceKm).toBe((rules.minDistanceKm + rules.maxDistanceKm) / 2);
+    expect(next.paceRange).toEqual(VARIETY_PACE_RANGES.intervals);
+    expect(next.reason.join(" ")).toContain("de to kort skal ikke sige det samme");
+  });
+
+  it("falls back to the fartlek when the interval buffer blocks the shifted session", () => {
+    // Same collision, but only 30 h since the last run: intervals keep their
+    // 48 h gate, so the de-dup lands on the fartlek that clears on 24 h (#254).
+    const next = build(fiveEasyRuns(SHARPEN, 30), SHARPEN, READY_RATIO, "long");
+
+    expect(next.type).toBe("fartlek");
+    expect(next.paceRange).toEqual(VARIETY_PACE_RANGES.fartlek);
+  });
+
+  it("leaves the variation alone when the plan prescribes a tempo — no overlap possible", () => {
+    const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
+    const next = build(fiveEasyRuns(SHARPEN), SHARPEN, READY_RATIO, "tempo");
+
+    expect(next.type).toBe("long");
+    expect(next.distanceKm).toBe(rules.longRunMaxKm);
+    expect(next.reason.join(" ")).not.toContain("de to kort skal ikke sige det samme");
+  });
+
+  it("keeps safety ahead of de-dup: a broken recovery buffer still means hvile", () => {
+    const activities = [run(SHARPEN, 10), ...fiveEasyRuns(SHARPEN)];
+    const next = build(activities, SHARPEN, READY_RATIO, "long");
+
+    expect(next.type).toBe("rest");
+  });
+
+  it("keeps safety ahead of de-dup: readiness in the rest band still means hvile", () => {
+    const next = build(fiveEasyRuns(SHARPEN), SHARPEN, REST_BAND_RATIO, "long");
+
+    expect(next.type).toBe("rest");
+  });
+
+  it("keeps the readiness-capped rolig tur even when the plan is also a rolig tur", () => {
+    // The one allowed same-type day besides hvile: at moderate readiness the only
+    // safe session is a rolig Zone 2-tur, and a longer or faster "variation"
+    // would contradict the readiness band both cards read.
+    const next = build(fiveEasyRuns(SHARPEN), SHARPEN, EASY_BAND_RATIO, "easy");
+
+    expect(next.type).toBe("easy");
+    expect(next.reason.join(" ")).toContain("Hold det roligt");
+  });
+
+  it("still applies the base phase's reduced intensity to the shifted session", () => {
+    const next = build(fiveEasyRuns(BURN), BURN, READY_RATIO, "long");
+
+    expect(next.type).toBe("intervals");
+    expect(next.paceRange).toEqual(REDUCED_VARIETY_PACE_RANGES.intervals);
+    expect(next.paceRange).not.toEqual(VARIETY_PACE_RANGES.intervals);
+    expect(next.heartRateCap).toBe(TEMPO_HR_CAP_BPM);
+    expect(next.reason.join(" ")).toContain("uden fulde Zone 4–5-blokke");
+  });
+
+  it("stays deterministic once the pas is part of the input", () => {
+    const activities = fiveEasyRuns(SHARPEN);
+    const first = build(activities, SHARPEN, READY_RATIO, "long");
+    const second = build([...activities].reverse(), SHARPEN, READY_RATIO, "long");
+
+    expect(second).toEqual(first);
+  });
+});
+
+describe("avoidPlanDuplicate", () => {
+  const CLEAR = { longCount: 0, hardCount: 0, intervalBufferClear: true };
+
+  it("leaves a variation the plan does not prescribe untouched", () => {
+    expect(avoidPlanDuplicate("long", "tempo", CLEAR)).toBe("long");
+    expect(avoidPlanDuplicate("fartlek", "easy", CLEAR)).toBe("fartlek");
+    expect(avoidPlanDuplicate("intervals", "long", CLEAR)).toBe("intervals");
+  });
+
+  it("leaves everything untouched when no pas is passed in", () => {
+    expect(avoidPlanDuplicate("long", undefined, CLEAR)).toBe("long");
+    expect(avoidPlanDuplicate("easy", undefined, CLEAR)).toBe("easy");
+  });
+
+  it("shifts a duplicated long tur to the fast variation the buffer allows", () => {
+    expect(avoidPlanDuplicate("long", "long", CLEAR)).toBe("intervals");
+    expect(avoidPlanDuplicate("long", "long", { ...CLEAR, intervalBufferClear: false })).toBe(
+      "fartlek"
+    );
+    expect(avoidPlanDuplicate("long", "long", { ...CLEAR, hardCount: 1 })).toBe("fartlek");
+  });
+
+  it("shifts a duplicated rolig tur to the long tur, or to speed when one is covered", () => {
+    expect(avoidPlanDuplicate("easy", "easy", CLEAR)).toBe("long");
+    expect(avoidPlanDuplicate("easy", "easy", { ...CLEAR, longCount: 1 })).toBe("intervals");
+    expect(
+      avoidPlanDuplicate("easy", "easy", { ...CLEAR, longCount: 1, intervalBufferClear: false })
+    ).toBe("fartlek");
   });
 });
