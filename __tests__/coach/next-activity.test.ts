@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CoachActivityInput } from "@/lib/coach/dashboard";
 import { buildPhases, getPhaseRules, type PhaseKey, ZONE2_CEILING_BPM } from "@/lib/coach/engine";
-import { buildNextActivity, VARIETY_PACE_RANGES } from "@/lib/coach/next-activity";
+import {
+  buildNextActivity,
+  REDUCED_VARIETY_PACE_RANGES,
+  VARIETY_PACE_RANGES,
+} from "@/lib/coach/next-activity";
 import { PACE_RANGES, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
@@ -142,7 +146,9 @@ describe("buildNextActivity", () => {
     expect(next.heartRateCap).toBeNull();
   });
 
-  it("falls back to a rolig tur when the mix already holds speed and a long run", () => {
+  it("makes the fartlek the default variety when the mix already holds speed and a long run", () => {
+    // #254: a covered mix used to fall back to a rolig tur, which is exactly what
+    // "Næste pas" already prescribes — the two cards read as duplicates.
     const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
     const activities = [
       run(SHARPEN, 72, { averageHeartrate: HARD_HR }),
@@ -153,23 +159,44 @@ describe("buildNextActivity", () => {
     ];
     const next = build(activities, SHARPEN);
 
-    expect(next.type).toBe("easy");
-    expect(next.distanceKm).toBe((rules.minDistanceKm + rules.maxDistanceKm) / 2);
-    expect(next.paceRange).toEqual(PACE_RANGES.easy);
+    expect(next.type).toBe("fartlek");
+    expect(next.distanceKm).toBe(rules.maxDistanceKm);
+    expect(next.paceRange).toEqual(VARIETY_PACE_RANGES.fartlek);
     expect(next.reason.join(" ")).toContain("både fart og distance");
+    expect(next.reason.join(" ")).toContain("fartlek");
   });
 
-  it("keeps a Zone-2 base phase easy instead of prescribing the speed it disallows", () => {
-    // Burn has no tempo session, and a long run is already in the mix — so the
-    // all-steady signal can't become fartlek/interval work here.
+  it("prescribes the base phase's fartlek at reduced intensity rather than skipping it", () => {
+    // Burn has no tempo session, and a long run is already in the mix. Since #254
+    // the all-steady signal still becomes a fartlek here — just dæmpet.
     const activities = [
       run(BURN, 72, { distance: 16_000 }),
       ...fiveEasyRuns(BURN, 120).slice(0, 4),
     ];
     const next = build(activities, BURN);
 
-    expect(next.type).toBe("easy");
-    expect(next.reason.join(" ")).toContain("Zone 2");
+    expect(next.type).toBe("fartlek");
+    expect(next.paceRange).toEqual(REDUCED_VARIETY_PACE_RANGES.fartlek);
+    expect(next.paceRange).not.toEqual(VARIETY_PACE_RANGES.fartlek);
+    expect(next.heartRateCap).toBe(TEMPO_HR_CAP_BPM);
+    expect(next.reason.join(" ")).toContain("uden fulde Zone 4–5-blokke");
+  });
+
+  it("prescribes the base phase's intervals at reduced intensity with a tempo HR cap", () => {
+    const activities = [
+      run(BURN, 72, { averageHeartrate: TEMPO_HR }),
+      run(BURN, 120, { distance: 16_000 }),
+      run(BURN, 168),
+      run(BURN, 216),
+      run(BURN, 264),
+    ];
+    const next = build(activities, BURN);
+
+    expect(next.type).toBe("intervals");
+    expect(next.paceRange).toEqual(REDUCED_VARIETY_PACE_RANGES.intervals);
+    // The reps must not reach Zone 4–5 in a Zone 2 block, so they carry a cap.
+    expect(next.heartRateCap).toBe(TEMPO_HR_CAP_BPM);
+    expect(next.reason.join(" ")).toContain("uden fulde Zone 4–5-blokke");
   });
 
   it("downgrades the variation to easy when readiness is only moderate", () => {
@@ -179,9 +206,10 @@ describe("buildNextActivity", () => {
     expect(next.reason.join(" ")).toContain("Hold det roligt");
   });
 
-  it("downgrades a fast variation to easy when only the 24 h buffer has passed, not 48 h", () => {
-    // Newest run 30 h ago: past the easy buffer, short of the quality one — and
-    // it is the long run, so the long-Zone-2 branch can't fire either.
+  it("lets the fartlek fire on the 24 h buffer alone, without waiting for 48 h", () => {
+    // Newest run 30 h ago: past the easy buffer, short of the interval one — and
+    // it is the long run, so the long-Zone-2 branch can't fire either. A fartlek
+    // is not a hard intervalpas, so 24 h is enough (#254).
     const activities = [
       run(SHARPEN, 30, { distance: 16_000 }),
       run(SHARPEN, 78),
@@ -191,8 +219,41 @@ describe("buildNextActivity", () => {
     ];
     const next = build(activities, SHARPEN);
 
-    expect(next.type).toBe("easy");
-    expect(next.reason.join(" ")).toContain("48");
+    expect(next.type).toBe("fartlek");
+    expect(next.paceRange).toEqual(VARIETY_PACE_RANGES.fartlek);
+  });
+
+  it("lets the fartlek fire on the 24 h buffer in a base phase too, at reduced intensity", () => {
+    const activities = [
+      run(BURN, 30, { distance: 16_000 }),
+      run(BURN, 78),
+      run(BURN, 126),
+      run(BURN, 174),
+      run(BURN, 222),
+    ];
+    const next = build(activities, BURN);
+
+    expect(next.type).toBe("fartlek");
+    expect(next.paceRange).toEqual(REDUCED_VARIETY_PACE_RANGES.fartlek);
+    expect(next.reason.join(" ")).toContain("roligere");
+  });
+
+  it("still holds intervals back until the full 48 h have passed", () => {
+    // Tempo in the mix, no real speed, long run covered — the interval branch's
+    // trigger — but only 30 h since the last run. Intervals keep the 48 h gate,
+    // so the variation drops to the fartlek that only needs 24 h.
+    const activities = [
+      run(SHARPEN, 30, { averageHeartrate: TEMPO_HR }),
+      run(SHARPEN, 78, { distance: 16_000 }),
+      run(SHARPEN, 126),
+      run(SHARPEN, 174),
+      run(SHARPEN, 222),
+    ];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).not.toBe("intervals");
+    expect(next.type).toBe("fartlek");
+    expect(next.reason.join(" ")).toContain("48 timer et intervalpas kræver");
   });
 
   it("classifies intensity from Strava's hr_zones buckets when present", () => {

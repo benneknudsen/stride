@@ -18,14 +18,21 @@
 //      one heart-rate→zone model the whole app shares, so a run is never
 //      classified by a rule invented here.
 //   2. Recovery buffer against the newest run — `EASY_MIN_RECOVERY_HOURS`
-//      before any run, `MIN_RECOVERY_HOURS` before a fast session.
+//      before any run at all, and the full `MIN_RECOVERY_HOURS` before the one
+//      session that really is hard: intervals. A fartlek is fartspring inside an
+//      otherwise easy run, not a hard interval pas, so it clears on the same
+//      24 h as a Zone 2 tur (issue #254).
 //   3. Readiness via `readinessFromRatio`, the same asymmetric mapping the Hjem
 //      gauge and the recommender read: rest → hvile, easy → a rolig tur.
 //   4. What the mix lacks: no long run → the long Zone 2 tur; no quality at all
 //      → fartlek; tempo but no real speed → intervals; everything covered →
-//      a rolig restitutionstur. Distances come from the phase rules and paces
-//      from `PACE_RANGES`, so this card can never prescribe something the plan
-//      page and the recommender disagree with.
+//      fartlek again, since a rolig tur is what "Næste pas" already prescribes
+//      and would collapse the two cards back into duplicates (#254). Distances
+//      come from the phase rules and paces from `PACE_RANGES`, so this card can
+//      never prescribe something the plan page and the recommender disagree with.
+//   Fast variations are available in every phase (#254). A base block like burn
+//   has no tempo session, so there the fartlek/interval is prescribed at reduced
+//   intensity — surges and reps capped at the tempo band, never Zone 4–5.
 //
 // Pure and deterministic: the clock is a parameter, so the same input always
 // yields the same card.
@@ -78,6 +85,9 @@ export type NextActivityType = Extract<
 /** Everything but `rest` — the types that actually prescribe a run. */
 type RunType = Exclude<NextActivityType, "rest">;
 
+/** The two fast sessions — the ones a base phase gets in a dæmpet variant (#254). */
+type VarietyType = Extract<RunType, "fartlek" | "intervals">;
+
 /** How a past run is read: its role in the mix, not its label in Strava. */
 type RunKind = "easy" | "tempo" | "long" | "hard";
 
@@ -92,7 +102,18 @@ type PaceRange = { min: string; max: string };
 export const VARIETY_PACE_RANGES = {
   fartlek: { min: PACE_RANGES.tempo.min, max: PACE_RANGES.easy.max },
   intervals: { min: "4:20", max: PACE_RANGES.tempo.min },
-} satisfies Record<"fartlek" | "intervals", PaceRange>;
+} satisfies Record<VarietyType, PaceRange>;
+
+/**
+ * The same two sessions, dæmpet — what a Zone 2 base block (no `hasTempoSession`)
+ * gets instead of nothing at all (#254). Both bands stop at the tempo band's fast
+ * end, so neither the surges nor the reps reach into Zone 4–5: a base-phase
+ * fartlek surges to tempo's slow end, and its intervals run the tempo band flat.
+ */
+export const REDUCED_VARIETY_PACE_RANGES = {
+  fartlek: { min: PACE_RANGES.tempo.max, max: PACE_RANGES.easy.max },
+  intervals: { min: PACE_RANGES.tempo.min, max: PACE_RANGES.tempo.max },
+} satisfies Record<VarietyType, PaceRange>;
 
 /** The card, plain JSON — safe to cache and to cross the server→client boundary. */
 export interface NextActivityView {
@@ -101,8 +122,9 @@ export interface NextActivityView {
   distanceKm: number;
   /** Target pace, fast → slow in min/km; "–" on a rest day. */
   paceRange: PaceRange;
-  /** Heart-rate ceiling in bpm; null on a rest day and for intervals (whose
-   *  reps are meant to reach Zone 4–5, so a ceiling would misdescribe them). */
+  /** Heart-rate ceiling in bpm; null on a rest day and for full-intensity
+   *  intervals (whose reps are meant to reach Zone 4–5, so a ceiling would
+   *  misdescribe them). A base phase's dæmpet intervals do carry one (#254). */
   heartRateCap: number | null;
   /** Danish one-liner over the sampled mix ("Sidste 5 ture: 4 rolige · …"). */
   basis: string;
@@ -168,14 +190,18 @@ function distanceFor(type: RunType, rules: PhaseRules): number {
   return roundHalf((rules.minDistanceKm + rules.maxDistanceKm) / 2);
 }
 
-function paceFor(type: RunType): PaceRange {
-  if (type === "fartlek") return VARIETY_PACE_RANGES.fartlek;
-  if (type === "intervals") return VARIETY_PACE_RANGES.intervals;
+/** `reduced` — a Zone 2 base phase, where the fast work is prescribed dæmpet. */
+function paceFor(type: RunType, reduced: boolean): PaceRange {
+  if (type === "fartlek" || type === "intervals") {
+    return reduced ? REDUCED_VARIETY_PACE_RANGES[type] : VARIETY_PACE_RANGES[type];
+  }
   return PACE_RANGES[type];
 }
 
-function heartRateCapFor(type: RunType): number | null {
-  if (type === "intervals") return null;
+function heartRateCapFor(type: RunType, reduced: boolean): number | null {
+  // Only full-intensity reps are meant to reach Zone 4–5; the dæmpet variant is
+  // capped at tempo precisely so it cannot (#254).
+  if (type === "intervals") return reduced ? TEMPO_HR_CAP_BPM : null;
   if (type === "fartlek") return TEMPO_HR_CAP_BPM;
   return ZONE2_CEILING_BPM;
 }
@@ -184,13 +210,14 @@ function runCard(
   type: RunType,
   rules: PhaseRules,
   basis: string,
-  reason: string[]
+  reason: string[],
+  reduced = false
 ): NextActivityView {
   return {
     type,
     distanceKm: distanceFor(type, rules),
-    paceRange: paceFor(type),
-    heartRateCap: heartRateCapFor(type),
+    paceRange: paceFor(type, reduced),
+    heartRateCap: heartRateCapFor(type, reduced),
     basis,
     reason,
   };
@@ -275,14 +302,12 @@ export function buildNextActivity({
   }
 
   // 4. What the mix is missing — the variation, never a copy of the phase's
-  // standard session. A fast variation needs the full 48 h (not the 24 h a Zone
-  // 2 run needs) and a phase that allows intensity at all; the long Zone 2 tur
-  // is exempt, since it is aerobic work every phase can take.
-  const intensityPhase = rules.hasTempoSession;
-  const bufferClear = gapHours >= MIN_RECOVERY_HOURS;
-  // Both fast variations need something the mix lacks: all-aerobic asks for a
-  // fartlek, tempo-without-speed asks for intervals.
-  const wantsIntensity = qualityCount === 0 || hardCount === 0;
+  // standard session. Only intervals still need the full 48 h; a fartlek is
+  // fartspring inside an easy run and clears on the 24 h already checked above
+  // (#254), as does the long Zone 2 tur.
+  const intervalBufferClear = gapHours >= MIN_RECOVERY_HOURS;
+  // A Zone 2 base block still gets the variation — just dæmpet, capped at tempo.
+  const reduced = !rules.hasTempoSession;
 
   let type: RunType;
   if (longCount === 0) {
@@ -290,34 +315,39 @@ export function buildNextActivity({
     reason.push(
       `Ingen lang tur (${formatDanish(longThresholdKm)}+ km) blandt de sidste ${recent.length} ture — en lang rolig Zone 2-tur er den variation din uge mangler.`
     );
-  } else if (qualityCount === 0 && intensityPhase && bufferClear) {
+  } else if (qualityCount === 0) {
     type = "fartlek";
     reason.push(
       `Alle ${recent.length} seneste ture var rolige og jævne — en fartlek bryder rytmen med fartspring uden at være et hårdt intervalpas.`
     );
-  } else if (hardCount === 0 && intensityPhase && bufferClear) {
+  } else if (hardCount === 0 && intervalBufferClear) {
     type = "intervals";
     reason.push(
-      `Der er tempo i mixet, men ingen rigtige fartpas — korte intervaller i Zone 4–5 rammer den fart, planens standardpas ikke gør.`
+      `Der er tempo i mixet, men ingen rigtige fartpas — korte intervaller rammer den fart, planens standardpas ikke gør.`
+    );
+  } else if (hardCount === 0) {
+    type = "fartlek";
+    reason.push(
+      `Der mangler rigtige fartpas, men der er kun gået ${Math.round(gapHours)} timer siden sidste tur — under de ${MIN_RECOVERY_HOURS} timer et intervalpas kræver, så variationen bliver en fartlek i stedet.`
     );
   } else {
-    type = "easy";
-    if (wantsIntensity && !intensityPhase) {
-      reason.push(
-        `${phase}-fasen holder alt i Zone 2, så fartarbejdet venter — variationen bliver en rolig tur.`
-      );
-    } else if (wantsIntensity && !bufferClear) {
-      reason.push(
-        `Kun ${Math.round(gapHours)} timer siden sidste tur — under de ${MIN_RECOVERY_HOURS} timer et fartpas kræver, så variationen bliver en rolig tur.`
-      );
-    } else {
-      reason.push(
-        `De sidste ${recent.length} ture dækker både fart og distance — så variationen i dag er en rolig restitutionstur.`
-      );
-    }
+    type = "fartlek";
+    reason.push(
+      `De sidste ${recent.length} ture dækker både fart og distance — så variationen i dag er en fartlek, der holder benene kvikke uden at lægge et nyt hårdt pas oven i.`
+    );
+  }
+
+  // The dæmpet note belongs on the fast variations only — the long Zone 2 tur is
+  // aerobic work every phase already prescribes at full værdi.
+  if (reduced && (type === "fartlek" || type === "intervals")) {
+    reason.push(
+      type === "fartlek"
+        ? `${phase}-fasen er en Zone 2-fase, så fartspringene køres roligere — op i tempobåndet, uden fulde Zone 4–5-blokke.`
+        : `${phase}-fasen er en Zone 2-fase, så intervallerne køres roligere — reps i tempobåndet med puls under ${TEMPO_HR_CAP_BPM}, uden fulde Zone 4–5-blokke.`
+    );
   }
 
   reason.push(`Din readiness er på ${readiness.pct}% — du er klar til variationen.`);
 
-  return runCard(type, rules, basis, reason);
+  return runCard(type, rules, basis, reason, reduced);
 }
