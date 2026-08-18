@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { ActivityCard } from "@/components/cobalt/coach/ActivityCard";
 import { ChatMarkdown } from "@/components/cobalt/coach/ChatMarkdown";
+import { NextActivityCard } from "@/components/cobalt/coach-dashboard/NextActivityCard";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import type { ChatMessage } from "@/lib/cobalt/coach";
 import { cn } from "@/lib/utils";
@@ -10,7 +11,8 @@ import { cn } from "@/lib/utils";
 // right). Each new bubble slides in with the fadeUp entrance.
 //
 // A coach turn can also carry generative-UI blocks (issue #221): clickable
-// activity cards and workout cards, built server-side from tool output. They
+// activity cards, workout cards and variation cards (issue #258), built
+// server-side from tool output. They
 // render below the text so an answer reads "prose, then the cards it refers to";
 // text and blocks can both appear in the same turn. A turn may be blocks-only
 // (no text bubble) when the model let the cards speak for themselves.
@@ -33,7 +35,9 @@ function MessageBubbleImpl({ message }: { message: ChatMessage }) {
     const base =
       block.kind === "activity"
         ? `activity-${block.activity.id}`
-        : `workout-${block.workout.type}-${block.workout.distanceKm}`;
+        : block.kind === "workout"
+          ? `workout-${block.workout.type}-${block.workout.distanceKm}`
+          : `variation-${block.variation.type}-${block.variation.distanceKm}`;
     const occurrence = seen.get(base) ?? 0;
     seen.set(base, occurrence + 1);
     return { block, key: `${base}#${occurrence}` };
@@ -61,8 +65,12 @@ function MessageBubbleImpl({ message }: { message: ChatMessage }) {
           {keyedBlocks.map(({ block, key }) =>
             block.kind === "activity" ? (
               <ActivityCard key={key} activity={block.activity} />
-            ) : (
+            ) : block.kind === "workout" ? (
               <WorkoutCard key={key} workout={block.workout} />
+            ) : (
+              // The variation the coach offered instead of the standard pas
+              // (issue #258) — the same card the dashboard shows.
+              <NextActivityCard key={key} activity={block.variation} />
             )
           )}
         </div>

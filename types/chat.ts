@@ -15,6 +15,7 @@
 
 import { z } from "zod";
 import type { WorkoutCardView } from "@/lib/coach/dashboard";
+import type { NextActivityView } from "@/lib/coach/next-activity";
 
 export type ChatRole = "user" | "assistant";
 
@@ -71,11 +72,15 @@ export interface ChatActivity {
  *
  * The workout block carries {@link WorkoutCardView} (the recommendation without
  * its week strip, which the chat card does not render) so it feeds the existing
- * `coach-dashboard/WorkoutCard` unchanged.
+ * `coach-dashboard/WorkoutCard` unchanged. The variation block (issue #258) does
+ * the same with {@link NextActivityView} and `coach-dashboard/NextActivityCard`,
+ * so an alternative session the coach suggests in chat renders exactly as its
+ * "Næste aktivitet" twin on the dashboard.
  */
 export type ChatBlock =
   | { kind: "activity"; activity: ChatActivity }
-  | { kind: "workout"; workout: WorkoutCardView };
+  | { kind: "workout"; workout: WorkoutCardView }
+  | { kind: "variation"; variation: NextActivityView };
 
 /** One streamed NDJSON line of the assistant's reply. */
 export type ChatReply =

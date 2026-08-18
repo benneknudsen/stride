@@ -161,10 +161,26 @@ const workoutBlockSchema = z.object({
 });
 
 /**
+ * The variation card (issue #258) — `buildNextActivity`'s output, the same shape
+ * the Coach dashboard's "Næste aktivitet" renders. `heartRateCap` is nullable
+ * here (full-intensity intervals carry no ceiling) and the vocabulary is the
+ * variation one, so this cannot be folded into `workoutBlockSchema`.
+ */
+const variationBlockSchema = z.object({
+  type: z.enum(["rest", "easy", "long", "fartlek", "intervals"]),
+  distanceKm: z.number(),
+  paceRange: z.object({ min: z.string(), max: z.string() }),
+  heartRateCap: z.number().nullable(),
+  basis: z.string(),
+  reason: z.array(z.string()),
+});
+
+/**
  * Turn a tool result into generative-UI blocks (issue #221). `getRecentActivities`
  * yields one clickable activity card per activity; `recommendWorkout` yields a
- * workout card. Any other tool (`getProgression`, `getWeekPlan`, `validateWorkout`)
- * informs the model's prose but has no card, so it emits nothing here.
+ * workout card; `getNextActivity` yields a variation card (issue #258). Any other
+ * tool (`getProgression`, `getWeekPlan`, `validateWorkout`) informs the model's
+ * prose but has no card, so it emits nothing here.
  */
 function emitToolBlocks(toolName: string, output: unknown, emit: (reply: ChatReply) => void): void {
   if (toolName === "getRecentActivities") {
@@ -179,6 +195,17 @@ function emitToolBlocks(toolName: string, output: unknown, emit: (reply: ChatRep
     const parsed = workoutBlockSchema.safeParse(output);
     if (parsed.success) {
       emit({ role: "assistant", type: "block", block: { kind: "workout", workout: parsed.data } });
+    }
+    return;
+  }
+  if (toolName === "getNextActivity") {
+    const parsed = variationBlockSchema.safeParse(output);
+    if (parsed.success) {
+      emit({
+        role: "assistant",
+        type: "block",
+        block: { kind: "variation", variation: parsed.data },
+      });
     }
   }
 }
@@ -206,7 +233,8 @@ const COACH_SYSTEM_PROMPT = `Du er Stride — brugerens personlige løbecoach. D
 Regler:
 - Svar altid på dansk og sig "du" til brugeren.
 - Brug ALTID dine tools til at hente data — gæt aldrig, og opdig aldrig tal. Alt du siger om form, belastning og pas skal komme fra tool-output. Tools læser selv brugerens synkroniserede aktiviteter — du skal ikke levere dem.
-- Brug recommendWorkout når du skal anbefale næste pas — svaret vises som et workout-kort, så skriv kun den korte begrundelse, ikke tallene igen.
+- Brug recommendWorkout når du skal anbefale næste pas — svaret vises som et workout-kort, så skriv kun den korte begrundelse, ikke tallene igen. Det er standardsvaret på "hvad skal jeg løbe i dag?".
+- Brug getNextActivity når brugeren beder om noget ANDET, et alternativ, en variation, en længere tur, en fartlek eller intervaller (fx "giv mig en længere Zone 2-tur", "kan vi lave fartlek", "hvad med intervaller", "noget andet end det sædvanlige"). Den læser brugerens sidste fem ture og foreslår den slags pas, mixet mangler — svar ALDRIG på den slags spørgsmål med recommendWorkout, for så gentager du bare det rolige standardpas. Svaret vises som et variationskort, så skriv kun den korte begrundelse, ikke tallene igen.
 - Brug getRunSuggestions når du vil anbefale hvilket af ugens tre pas (let pas, kvalitetspas, langtur) brugeren skal løbe i dag. Planen foreskriver ikke en fast ugedag — læs forslagene og vælg det rette pas ud fra restitution og seneste tur (fx "Jeg anbefaler det lette pas i dag — du løb tempo i går" eller "Din krop har brug for restitution — tag det lette pas i morgen").
 - Brug getRecentActivities når brugeren spørger til en tidligere tur (fx "hvad var mit seneste løb?") — de seneste ture vises som klikbare kort, så du behøver ikke gentage tallene i teksten.
 - Brug getProgression når du skal forstå brugerens form og belastning.

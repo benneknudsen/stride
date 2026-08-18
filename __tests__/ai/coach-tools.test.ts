@@ -116,6 +116,16 @@ describe("coach tools — provider robustness (#200)", () => {
     expect(result.weekKm).toBeGreaterThan(0);
   });
 
+  it("getNextActivity declares a parameter (no empty object) and runs with null", async () => {
+    const t = tools().getNextActivity;
+    // Empty parameter objects break function-calling on some providers, so the
+    // schema must expose at least one property.
+    const parsed = parse(t, { reason: null });
+    expect(parsed.success).toBe(true);
+    const result = await t.execute?.(parsed.data as never, {} as never);
+    expect(result).toBeTruthy();
+  });
+
   it("getRecentActivities accepts a null limit and returns card-shaped rows (#221)", async () => {
     const t = tools().getRecentActivities;
     const parsed = parse(t, { limit: null });
@@ -254,5 +264,114 @@ describe("coach tools — string dates from the Neon driver (#190/#194/#195)", (
     ).recommendWorkout.execute?.({} as never, {} as never);
 
     expect(JSON.stringify(result)).toBe(JSON.stringify(baseline));
+  });
+});
+
+/**
+ * The variety engine in chat (issue #258).
+ *
+ * Asking the coach for "noget andet" used to return the same relaxed Zone 2 pas,
+ * because `recommendWorkout` was the only session tool the model had. The chat
+ * now exposes `buildNextActivity` — the Coach dashboard's "Næste aktivitet"
+ * engine — so an alternative is a real, grounded prescription rather than the
+ * model rewording the standard pas.
+ *
+ * The fixture is six weeks of ordinary easy running, every other day: long
+ * enough that the acute load sits on its own chronic base (a short history
+ * reads as an overload and answers "hvil" before the mix is ever consulted),
+ * and a mix with no long tur and no quality at all — exactly the case the
+ * variation exists for.
+ */
+describe("getNextActivity — the variety engine in chat (#258)", () => {
+  /** Easy 8 km runs, every other day, newest 2 days before NOW. */
+  const EASY_BASE: CoachChatActivity[] = Array.from({ length: 21 }, (_, i) => ({
+    id: `easy-${i}`,
+    type: "Run",
+    startDate: new Date(NOW.getTime() - (2 + i * 2) * 24 * 60 * 60 * 1000),
+    distance: 8000,
+    movingTime: 2400,
+    averageHeartrate: 142,
+    hrZones: null,
+  }));
+
+  function build(activities: CoachChatActivity[] = EASY_BASE) {
+    return buildCoachTools("user-1", NOW, { raceDate: null, raceName: null }, activities);
+  }
+
+  type Variation = {
+    type: string;
+    distanceKm: number;
+    paceRange: { min: string; max: string };
+    heartRateCap: number | null;
+    basis: string;
+    reason: string[];
+  };
+
+  it("is registered as a tool on the chat coach", () => {
+    expect(build().getNextActivity).toBeTruthy();
+  });
+
+  it("returns a NextActivityView-shaped card grounded in the last five runs", async () => {
+    const result = (await build().getNextActivity.execute?.(
+      { reason: null } as never,
+      {} as never
+    )) as Variation;
+
+    expect(["rest", "easy", "long", "fartlek", "intervals"]).toContain(result.type);
+    expect(result.distanceKm).toBeGreaterThan(0);
+    expect(result.paceRange.min).toMatch(/^\d+:\d{2}$/);
+    expect(result.paceRange.max).toMatch(/^\d+:\d{2}$/);
+    // Grounded in the user's real history: the basis line counts the sampled
+    // runs, so it can only come from the bound activities.
+    expect(result.basis).toContain("Sidste 5 ture");
+    expect(result.reason.length).toBeGreaterThan(0);
+  });
+
+  it("prescribes the variation the mix lacks, not another easy run", async () => {
+    const result = (await build().getNextActivity.execute?.({} as never, {} as never)) as Variation;
+    // Five flat easy runs and no long tur — the variation must be the long
+    // Zone 2 tur, which is precisely what the chat could not say before #258.
+    expect(result.type).toBe("long");
+  });
+
+  it("is deterministic — same history and clock, same card", async () => {
+    const first = await build().getNextActivity.execute?.({} as never, {} as never);
+    const second = await build().getNextActivity.execute?.({} as never, {} as never);
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+  });
+
+  /**
+   * Cross-tool coordination (#255) inside one chat turn. Sunday of the peak
+   * phase (race two weeks out) is the one day the plan itself prescribes the
+   * long tur — exactly the session this fixture's mix is missing — so the two
+   * tools would otherwise name the same pas twice in the same answer.
+   */
+  it("steps aside when recommendWorkout already named that pas in the turn (#255)", async () => {
+    const SUNDAY = new Date("2026-08-02T09:00:00.000Z");
+    const RACE = new Date("2026-08-16T09:00:00.000Z");
+    const history: CoachChatActivity[] = EASY_BASE.map((a, i) => ({
+      ...a,
+      startDate: new Date(SUNDAY.getTime() - (2 + i * 2) * 24 * 60 * 60 * 1000),
+    }));
+    const peak = () =>
+      buildCoachTools("user-1", SUNDAY, { raceDate: RACE, raceName: "Testløb" }, history);
+
+    // Asked on its own, the variation is the long tur the mix lacks.
+    const solo = (await peak().getNextActivity.execute?.({} as never, {} as never)) as Variation;
+    expect(solo.type).toBe("long");
+
+    // Same turn, but the model asked for today's pas first — and the plan says
+    // long tur too. The variation must then name a different session.
+    const coordinated = peak();
+    const workout = (await coordinated.recommendWorkout.execute?.({} as never, {} as never)) as {
+      type: string;
+    };
+    expect(workout.type).toBe("long");
+    const variation = (await coordinated.getNextActivity.execute?.(
+      {} as never,
+      {} as never
+    )) as Variation;
+    expect(variation.type).not.toBe(workout.type);
+    expect(variation.reason.join(" ")).toContain("skal ikke sige det samme");
   });
 });

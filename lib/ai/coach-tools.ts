@@ -28,7 +28,12 @@ import {
   validateWorkout,
   type WorkoutContext,
 } from "@/lib/coach/engine";
-import { recommendWorkout, weekToDateDistanceKm } from "@/lib/coach/recommender";
+import { buildNextActivity } from "@/lib/coach/next-activity";
+import {
+  type RecommendedType,
+  recommendWorkout,
+  weekToDateDistanceKm,
+} from "@/lib/coach/recommender";
 import { getPlanSuggestions } from "@/lib/cobalt/plan";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { formatPace } from "@/lib/metrics";
@@ -110,6 +115,14 @@ export function buildCoachTools(
   // Null/undefined falls back to the engine's demo defaults.
   const raceDate = race?.raceDate ?? undefined;
   const raceName = race?.raceName ?? undefined;
+  // Cross-tool coordination (#255, in chat: #258). Set by `recommendWorkout`
+  // and read by `getNextActivity`, so a turn that first asks for today's pas and
+  // then for an alternative never gets the same session named twice. Scoped to
+  // this request's tool set — the route builds a fresh one per turn, so this is
+  // per-turn state, never shared between users or requests. Left undefined when
+  // the model asks for the variation on its own; then the variation is the plain
+  // last-five-runs read, exactly as on the dashboard.
+  let lastRecommendedType: RecommendedType | undefined;
   return {
     getRecentActivities: tool({
       description:
@@ -170,7 +183,7 @@ export function buildCoachTools(
         // The recommendation is grounded in the user's real history: the
         // progression snapshot and the last-run date both come from the
         // activities the route loaded, never from model-supplied numbers.
-        return recommendWorkout(
+        const recommendation = recommendWorkout(
           {
             userId,
             goal: GOALS[goal ?? "zone2"],
@@ -186,7 +199,36 @@ export function buildCoachTools(
           },
           now
         );
+        lastRecommendedType = recommendation.type;
+        return recommendation;
       },
+    }),
+
+    getNextActivity: tool({
+      description:
+        'Hent dagens VARIATION — det slags pas brugerens sidste fem ture mangler: en lang Zone 2-tur, en fartlek eller et intervalpas, med distance, pace-bånd og pulsloft. BRUG DEN når brugeren beder om noget andet end det sædvanlige: "giv mig en længere Zone 2-tur", "kan vi lave fartlek", "hvad med intervaller", "noget andet end det sædvanlige". Det er et alternativ til planens standardpas — ikke det samme som recommendWorkout, som svarer på "hvad skal jeg løbe i dag?".',
+      // A nominal, ignored parameter: some providers reject function
+      // declarations with an empty parameter object (issue #200).
+      inputSchema: z.object({
+        reason: z
+          .string()
+          .nullish()
+          .describe("Valgfri kort begrundelse — påvirker ikke beregningen"),
+      }),
+      execute: async () =>
+        // The same engine the Coach dashboard's "Næste aktivitet" card runs
+        // (issue #253), grounded in the user's own last five runs —
+        // `ProgressionActivityInput` is assignable to `CoachActivityInput`, so
+        // the bound history feeds it unchanged. Pure and deterministic: same
+        // history, same clock, same card.
+        buildNextActivity({
+          activities: progressionInputs,
+          progression: computeSnapshot(progressionInputs, now),
+          now,
+          raceDate,
+          // Only set if the model already asked for today's pas in this turn.
+          todayType: lastRecommendedType,
+        }),
     }),
 
     getRunSuggestions: tool({

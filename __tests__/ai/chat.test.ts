@@ -380,6 +380,76 @@ describe("POST /api/ai/chat", () => {
     );
   });
 
+  it("exposes getNextActivity and tells the model to use it for alternatives (#258)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+
+    await POST(chatRequest({ messages: [{ role: "user", content: "Giv mig noget andet" }] }));
+
+    const call = streamTextMock.mock.calls[0][0] as {
+      system: string;
+      tools: Record<string, unknown>;
+    };
+    // The variety engine must be reachable from chat at all — before #258 the
+    // model had no tool that could produce an alternative session.
+    expect(call.tools).toHaveProperty("getNextActivity");
+    // …and the prompt must send the model there for "noget andet"-style asks,
+    // instead of repeating the same relaxed Zone 2 pas via recommendWorkout.
+    expect(call.system).toContain("getNextActivity");
+    expect(call.system).toContain("noget andet end det sædvanlige");
+    expect(call.system).toMatch(/fartlek/i);
+    expect(call.system).toMatch(/intervaller/i);
+    // recommendWorkout stays the default answer to "what should I run today".
+    expect(call.system).toContain('standardsvaret på "hvad skal jeg løbe i dag?"');
+  });
+
+  it("emits a variation block from a getNextActivity tool result (#258)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    streamTextMock.mockImplementation(() => ({
+      fullStream: (async function* () {
+        yield {
+          type: "tool-result",
+          toolCallId: "tc-1",
+          toolName: "getNextActivity",
+          output: {
+            type: "intervals",
+            distanceKm: 10,
+            paceRange: { min: "4:20", max: "4:45" },
+            // Full-intensity reps carry no ceiling — the block schema must
+            // accept null where the workout card requires a number.
+            heartRateCap: null,
+            basis: "Sidste 5 ture: 5 rolige · 0 kvalitet · 0 lange",
+            reason: ["Der mangler rigtige fartpas"],
+          },
+        };
+        yield { type: "text-delta", text: "Prøv intervaller i stedet." };
+      })(),
+    }));
+
+    const res = await POST(chatRequest());
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    const blocks = replies.filter((r) => r.type === "block");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].block).toEqual({
+      kind: "variation",
+      variation: {
+        type: "intervals",
+        distanceKm: 10,
+        paceRange: { min: "4:20", max: "4:45" },
+        heartRateCap: null,
+        basis: "Sidste 5 ture: 5 rolige · 0 kvalitet · 0 lange",
+        reason: ["Der mangler rigtige fartpas"],
+      },
+    });
+    // Like the workout card, a variation is time-sensitive advice — it stays out
+    // of the persisted history so a replayed turn can't present it as current
+    // (issue #228).
+    expect(insertChatMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: "user-1", role: "assistant", blocks: undefined })
+    );
+  });
+
   it("skips a block when the tool output fails validation (no fabrication) (#221)", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     streamTextMock.mockImplementation(() => ({
