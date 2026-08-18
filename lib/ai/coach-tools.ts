@@ -28,7 +28,7 @@ import {
   validateWorkout,
   type WorkoutContext,
 } from "@/lib/coach/engine";
-import { recommendWorkout } from "@/lib/coach/recommender";
+import { recommendWorkout, weekToDateDistanceKm } from "@/lib/coach/recommender";
 import { getPlanSuggestions } from "@/lib/cobalt/plan";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { formatPace } from "@/lib/metrics";
@@ -180,6 +180,9 @@ export function buildCoachTools(
             injuryHistory: injuryHistory ?? false,
             risk: orUndefined(risk),
             raceDate,
+            // Ugens hidtidige volumen (#256) — read from the same bound
+            // activities, so a loaded week softens the pas instead of stacking.
+            weekToDateKm: weekToDateDistanceKm(progressionInputs, now),
           },
           now
         );

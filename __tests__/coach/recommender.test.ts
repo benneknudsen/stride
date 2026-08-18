@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPhases, getPhaseRules, type PhaseKey } from "@/lib/coach/engine";
+import { buildPhases, getPhaseRules, getWeekPlan, type PhaseKey } from "@/lib/coach/engine";
 import {
   recommendWorkout,
   TEMPO_HR_CAP_BPM,
@@ -160,6 +160,87 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       });
       expect(rec.type).toBe("rest");
       expect(rec.reason.join(" ")).toMatch(/24/);
+    });
+  });
+
+  describe("step 3c — week-to-date load (#256)", () => {
+    /** The phase week's intended total — the exact budget the gate measures against. */
+    function intendedWeekKm(phase: PhaseKey, now: Date): number {
+      const monday = addDays(now, -((now.getDay() + 6) % 7));
+      return getWeekPlan(phase, monday, RACE).reduce((sum, d) => sum + (d.distanceKm ?? 0), 0);
+    }
+
+    it("changes nothing on a fresh week — identical to omitting the field", () => {
+      expect(recommend({ weekToDateKm: 5 })).toEqual(recommend());
+    });
+
+    it("keeps the tempo day hard when the week is barely started", () => {
+      const rec = recommend(
+        { progression: snapshot({ date: SHARPEN_WEDNESDAY }), weekToDateKm: 6 },
+        SHARPEN_WEDNESDAY
+      );
+      expect(rec.type).toBe("tempo");
+    });
+
+    it("downgrades a tempo day to easy when the week is nearly at its volume", () => {
+      const budget = intendedWeekKm("sharpen", SHARPEN_WEDNESDAY);
+      const rec = recommend(
+        { progression: snapshot({ date: SHARPEN_WEDNESDAY }), weekToDateKm: budget - 2 },
+        SHARPEN_WEDNESDAY
+      );
+      expect(rec.type).toBe("easy");
+      expect(rec.shoe).toBe("vomero");
+      expect(rec.reason.join(" ")).toMatch(/uge/i);
+    });
+
+    it("downgrades the long run to easy on a loaded week", () => {
+      const budget = intendedWeekKm("peak", PEAK_SUNDAY);
+      const rec = recommend(
+        { progression: snapshot({ date: PEAK_SUNDAY }), weekToDateKm: budget - 12 },
+        PEAK_SUNDAY
+      );
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toMatch(/uge/i);
+    });
+
+    it("recommends rest once the week has reached its intended volume", () => {
+      const rec = recommend({ weekToDateKm: intendedWeekKm("burn", BURN_WEDNESDAY) });
+      expect(rec.type).toBe("rest");
+      expect(rec.distanceKm).toBe(0);
+      expect(rec.reason.join(" ")).toMatch(/uge/i);
+    });
+
+    it("shortens the run to the phase minimum when today would blow past the budget", () => {
+      const progression = snapshot({ readyToIncrease: true });
+      const fresh = recommend({ progression });
+      expect(fresh.distanceKm).toBe(getPhaseRules("burn", RACE).maxDistanceKm);
+
+      const loaded = recommend({
+        progression,
+        weekToDateKm: intendedWeekKm("burn", BURN_WEDNESDAY) - 5,
+      });
+      expect(loaded.distanceKm).toBe(getPhaseRules("burn", RACE).minDistanceKm);
+      expect(loaded.reason.join(" ")).toMatch(/uge/i);
+    });
+
+    it("keeps the recovery buffer ahead of the week-load gate", () => {
+      const rec = recommend({
+        lastRun: new Date(BURN_WEDNESDAY.getTime() - 12 * HOUR_MS),
+        weekToDateKm: intendedWeekKm("burn", BURN_WEDNESDAY),
+      });
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/24/);
+    });
+
+    it("keeps the readiness rest band ahead of the week-load gate", () => {
+      const rec = recommend({
+        progression: snapshot({
+          trainingLoad: { acute: 60, chronic: 30, ratio: 2.0, risk: "high" },
+        }),
+        weekToDateKm: intendedWeekKm("burn", BURN_WEDNESDAY),
+      });
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/restitution/i);
     });
   });
 

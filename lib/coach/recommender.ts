@@ -12,6 +12,9 @@
 //   3b. Readiness band (#245) — the same asymmetric readiness the Hjem gauge
 //      shows: rest when the body needs restitution, downgrade to easy when
 //      readiness is only moderate. Freshness, distinct from the recovery buffer.
+//   3c. Week-to-date load (#256) — how much the athlete has ALREADY run this
+//      Mon–Sun week vs. the phase week's intended total: at/over budget → rest,
+//      about to blow past it → soften the session instead of stacking it.
 //   4. Distance from the phase band (adapt 6–8, burn 8–10, …).
 //   5. Improved pace efficiency + optimal load → unlock the band's upper end.
 //   6. Intensity: Zone 2 by default; tempo only where the phase allows it.
@@ -33,6 +36,7 @@ import {
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
+import { ensureDate } from "@/lib/db/calendar-date";
 import type { Goal } from "@/lib/training/goals";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
@@ -53,6 +57,14 @@ export interface WorkoutInput {
   risk?: SessionRisk;
   /** The user's race date (issue #99); omitted → the engine's demo default. */
   raceDate?: Date;
+  /**
+   * Running km already covered this Mon–Sun week, through today and NOT
+   * counting the session being recommended (issue #256). Optional: callers that
+   * don't know the week's tally get the pure phase/recovery/readiness decision,
+   * unchanged. Build it with {@link weekToDateDistanceKm} so the week window
+   * matches the one the recommender reasons over.
+   */
+  weekToDateKm?: number;
 }
 
 /**
@@ -85,6 +97,16 @@ export const PAUSE_DISTANCE_FACTOR = 0.8;
 /** Heart-rate ceiling for a tempo session, in bpm. */
 export const TEMPO_HR_CAP_BPM = 172;
 
+/**
+ * How much of the phase week's intended volume the week is allowed to reach
+ * before the recommender starts holding back (issue #256). The week strip *is*
+ * the plan's budget, so the default 1.0 means "never plan past what the phase
+ * week intended" — raise it to allow deliberate overreach weeks, lower it to
+ * spread the volume even harder. The engine's `MAX_WEEKLY_INCREASE_RATIO` is a
+ * separate, week-over-week guard; this one is week-against-plan.
+ */
+export const WEEKLY_VOLUME_RATIO = 1;
+
 /** Target pace bands per run type, min (fast) → max (slow), in min/km.
  * Exported so the plan page's target metas quote the same bands the
  * recommender prescribes — one source of truth for "what pace is an easy run". */
@@ -110,6 +132,33 @@ function mondayOfWeek(date: Date): Date {
   const monday = new Date(date);
   monday.setDate(monday.getDate() - ((date.getDay() + 6) % 7));
   return monday;
+}
+
+/** One decimal, for Danish reason copy — "32,5 km", never "32,499999 km". */
+function round1(km: number): number {
+  return Math.round(km * 10) / 10;
+}
+
+/**
+ * Running km already covered in the Mon–Sun week `now` falls in (issue #256) —
+ * the value {@link WorkoutInput.weekToDateKm} wants. Lives here, next to the
+ * gate that consumes it, so both call sites (the coach dashboard and the chat
+ * tool) measure the exact week the recommender reasons over: the athlete's
+ * Danish calendar days, Monday through today inclusive.
+ */
+export function weekToDateDistanceKm(
+  activities: readonly { type: string; distance: number; startDate: Date | string }[],
+  now: Date = new Date()
+): number {
+  const today = getLocalDate(now);
+  const monday = mondayOfWeek(today);
+  return activities
+    .filter((activity) => /run/i.test(activity.type))
+    .filter((activity) => {
+      const day = getLocalDate(ensureDate(activity.startDate));
+      return day.getTime() >= monday.getTime() && day.getTime() <= today.getTime();
+    })
+    .reduce((sum, activity) => sum + activity.distance / 1000, 0);
 }
 
 function restCard(reason: string[], weekStrip: WeekDay[]): WorkoutRecommendation {
@@ -213,6 +262,24 @@ export function recommendWorkout(
     reason.push(`Din readiness er på ${readiness.pct}% — du er klar til dagens pas.`);
   }
 
+  // 3c. Week-to-date load (#256). The week strip is the phase's own budget for
+  // the week, so its planned distances sum to what this week is meant to hold.
+  // An athlete who has already covered that budget doesn't need another session
+  // — even at healthy readiness and with the recovery buffer clear, one more run
+  // stacks load onto a full week instead of spreading it. Only active when the
+  // caller knows the week's tally; the scale-down half of the gate sits just
+  // below the distance step, where today's km are known.
+  const intendedWeeklyKm = weekStrip.reduce((sum, day) => sum + (day.distanceKm ?? 0), 0);
+  const weekBudgetKm = intendedWeeklyKm * WEEKLY_VOLUME_RATIO;
+  const weekToDateKm = input.weekToDateKm;
+  const weekLoadKnown = weekToDateKm != null && intendedWeeklyKm > 0;
+  if (weekLoadKnown && weekToDateKm >= weekBudgetKm) {
+    reason.push(
+      `Du har allerede løbet ${round1(weekToDateKm)} km i denne uge — ugens planlagte volumen i ${phase}-fasen er ${round1(intendedWeeklyKm)} km, så i dag er en hviledag.`
+    );
+    return restCard(reason, weekStrip);
+  }
+
   // 4 + 5. Distance from the phase band; progression unlocks the upper end.
   // B6: `readyToIncrease` is null when load data is missing — guard it to false
   // (not ready) so a null never reads as "unlock the upper distance".
@@ -255,6 +322,29 @@ export function recommendWorkout(
       ? Math.round(rules.maxDistanceKm * 1.15 * 10) / 10
       : rules.maxDistanceKm;
     distanceKm = Math.min(distanceKm, upperBound);
+  }
+
+  // 3c (cont.). Today's session would push the week past its budget — scale it
+  // down rather than let the week overshoot. The complaint behind #256 is
+  // specifically back-to-back hard days, so the effort goes first: a tempo/long
+  // becomes a rolig Zone 2-tur, and only if that alone doesn't fit does the
+  // distance drop to the phase minimum. Never raises anything — every step is a
+  // `Math.min`, so the pause and no-full-window clamps above still hold.
+  if (weekLoadKnown && weekToDateKm + distanceKm > weekBudgetKm) {
+    if (type !== "easy") {
+      const softened = type;
+      type = "easy";
+      distanceKm = Math.min(distanceKm, readyForMore ? rules.maxDistanceKm : rules.minDistanceKm);
+      reason.push(
+        `Du har løbet ${round1(weekToDateKm)} km af ugens ${round1(intendedWeeklyKm)} km — ${softened === "tempo" ? "tempopasset" : "den lange tur"} bliver en rolig Zone 2-tur, så ugen ikke stables med hårde dage.`
+      );
+    }
+    if (weekToDateKm + distanceKm > weekBudgetKm) {
+      distanceKm = Math.min(distanceKm, rules.minDistanceKm);
+      reason.push(
+        `Ugens volumen er næsten brugt (${round1(weekToDateKm)} af ${round1(intendedWeeklyKm)} km) — distancen holdes på ${phase}-fasens minimum på ${rules.minDistanceKm} km.`
+      );
+    }
   }
 
   // 7. Shoe: the Adios Pro 4 is tempo-only; everything else runs in the Vomero.

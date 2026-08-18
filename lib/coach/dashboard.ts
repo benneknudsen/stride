@@ -9,7 +9,11 @@
 // to cache (progression series, 1 h) vs. compute per request (workout card).
 
 import { buildNextActivity, type NextActivityView } from "@/lib/coach/next-activity";
-import { recommendWorkout, type WorkoutRecommendation } from "@/lib/coach/recommender";
+import {
+  recommendWorkout,
+  type WorkoutRecommendation,
+  weekToDateDistanceKm,
+} from "@/lib/coach/recommender";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { GOALS } from "@/lib/training/goals";
 import type {
@@ -232,6 +236,9 @@ export function buildCoachDashboard(
       lastRun: lastRun ?? new Date(now.getTime() - 3 * DAY_MS),
       footballYesterday: false,
       raceDate,
+      // What the runner has already covered Mon→today (#256), so the card can
+      // spread the week's load instead of stacking another hard day on top.
+      weekToDateKm: weekToDateDistanceKm(normalized, now),
     },
     now
   );
