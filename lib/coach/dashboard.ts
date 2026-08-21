@@ -15,6 +15,7 @@ import {
   weekToDateDistanceKm,
 } from "@/lib/coach/recommender";
 import { ensureDate } from "@/lib/db/calendar-date";
+import { hoursSinceHardEffort } from "@/lib/training/effort";
 import { GOALS } from "@/lib/training/goals";
 import type {
   LoadRisk,
@@ -191,6 +192,14 @@ export interface CoachDashboardData {
   zoneSeries: ZoneWeek[];
   volumeSeries: VolumeWeek[];
   loadGauge: LoadGaugeView;
+  /**
+   * Hours since the runner's last Zone 4–5 effort, or null when there is none in
+   * the lookback window (issue #259). The Form-status card caps its readiness
+   * with this, so the gauge can't promise "Klar til hårdt pas" while the
+   * recommender's 48 h buffer is still refusing one. Computed per request — it
+   * changes by the hour, so it must never land in the cached charts path.
+   */
+  hoursSinceHardEffort: number | null;
 }
 
 /**
@@ -215,8 +224,9 @@ export function buildCoachDashboard(
     throw new Error(`buildCoachDashboard: weeks must be ≥ 1, got ${weeks}`);
   }
 
-  const lastRun = normalized
-    .filter(isRun)
+  const runs = normalized.filter(isRun);
+
+  const lastRun = runs
     .filter((run) => ensureDate(run.startDate).getTime() <= now.getTime())
     .reduce<Date | null>((latest, run) => {
       const runStart = ensureDate(run.startDate);
@@ -258,5 +268,9 @@ export function buildCoachDashboard(
     zoneSeries: buildZoneSeries(activities, weeks, now),
     volumeSeries: buildVolumeSeries(activities, weeks, now),
     loadGauge: buildLoadGauge(current.trainingLoad),
+    // Recovery state for the Form-status cap (#259) — read off the same runs
+    // everything else here does, so the card, the recommender and the variation
+    // all answer "how long since the last hard pas" identically.
+    hoursSinceHardEffort: hoursSinceHardEffort(runs, now),
   };
 }

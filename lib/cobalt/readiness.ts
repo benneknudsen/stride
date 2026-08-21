@@ -15,6 +15,15 @@
 // it declines only gently (fresh, maybe a touch undertrained — never a "rest"
 // warning), and the steep penalty applies only on the overload side above the
 // plateau, where injury risk actually climbs.
+//
+// Load alone cannot answer "am I recovered *right now*" (issue #259). The EWMA
+// load signal is moving minutes with no intensity weighting, so a threshold
+// session barely lifts the acute load and the gauge kept saying "Klar til hårdt
+// pas" an hour after a hard tur. {@link readinessWithRecovery} layers the
+// recommender's 48 h recovery buffer on top as a *cap* — never a raise — so the
+// gauge and "Næste pas" can't contradict each other on the same day.
+
+import { MIN_RECOVERY_HOURS } from "@/lib/coach/engine";
 
 export type ReadinessBand = "ready" | "easy" | "rest";
 
@@ -62,6 +71,28 @@ const OVERLOAD_SLOPE = (FULL_PCT - FLOOR_PCT) / (OVERLOAD_FLOOR_RATIO - PLATEAU_
 // low enough to trip the "rest" band — freshness is not penalised like risk.
 const REST_SLOPE = 25;
 
+// Band floors — the percentages that separate rest / easy / ready. Named so the
+// recovery cap below can sit exactly at the top of the easy band instead of
+// repeating a magic 79.
+const READY_FLOOR_PCT = 80;
+const EASY_FLOOR_PCT = 68;
+
+/**
+ * The highest readiness a runner inside the recovery window may show: the top
+ * of the "easy" band, one point below {@link READY_FLOOR_PCT}. High enough to
+ * still read as a usable training day, low enough that the card can never say
+ * "Klar til hårdt pas".
+ */
+export const RECOVERY_CAP_PCT = READY_FLOOR_PCT - 1;
+
+/**
+ * The band a percentage falls in — the single place the thresholds live, so the
+ * cap below can never produce a pct and a band that disagree.
+ */
+function bandForPct(pct: number): ReadinessBand {
+  return pct >= READY_FLOOR_PCT ? "ready" : pct >= EASY_FLOOR_PCT ? "easy" : "rest";
+}
+
 /**
  * Readiness from the acute:chronic load ratio (`computeSnapshot`'s
  * `trainingLoad.ratio`). Null — no chronic base yet — reads as a neutral
@@ -79,7 +110,36 @@ export function readinessFromRatio(ratio: number | null): Readiness {
     raw = FULL_PCT;
   }
   const pct = Math.min(FULL_PCT, Math.max(FLOOR_PCT, Math.round(raw)));
-  const band: ReadinessBand = pct >= 80 ? "ready" : pct >= 68 ? "easy" : "rest";
+  const band = bandForPct(pct);
+  return { pct, band, note: BAND_NOTES[band] };
+}
+
+/**
+ * The load-derived readiness, capped by how long ago the runner last went hard
+ * (issue #259). Inside the recommender's {@link MIN_RECOVERY_HOURS} window the
+ * result can be no better than the top of the "easy" band — "Let træning
+ * anbefalet", never "Klar til hårdt pas" — because the acute:chronic ratio does
+ * not know a threshold session just happened: `dailyLoad` is moving minutes
+ * with no intensity weighting, so a hard 35-minute tur moves it exactly as much
+ * as a rolig one.
+ *
+ * Strictly a **monotone downgrade**. It never raises readiness, so the #241
+ * asymmetry survives untouched: an underloaded, well-rested week with no recent
+ * hard effort (`hoursSinceHardEffort === null`) still reads high and "ready" —
+ * freshness is not penalised, only a fresh hard effort is.
+ *
+ * @param base the readiness {@link readinessFromRatio} derived from load alone
+ * @param hoursSinceHardEffort per `lib/training/effort.ts`; null = no hard
+ *   effort in the lookback window, which leaves `base` untouched
+ */
+export function readinessWithRecovery(
+  base: Readiness,
+  hoursSinceHardEffort: number | null
+): Readiness {
+  if (hoursSinceHardEffort === null || hoursSinceHardEffort >= MIN_RECOVERY_HOURS) return base;
+  const pct = Math.min(base.pct, RECOVERY_CAP_PCT);
+  // The cap lowers the ceiling; it must not lift a "rest" read into "easy".
+  const band = base.band === "rest" ? "rest" : bandForPct(pct);
   return { pct, band, note: BAND_NOTES[band] };
 }
 

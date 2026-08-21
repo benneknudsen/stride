@@ -58,8 +58,8 @@ import { PACE_RANGES, type RecommendedType, TEMPO_HR_CAP_BPM } from "@/lib/coach
 import { formatDanish } from "@/lib/cobalt/format";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
+import { dominantZone, isHardEffort } from "@/lib/training/effort";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
-import { aggregateZones, type ZoneNumber } from "@/lib/training/zones";
 
 /** How many recent runs the recommendation reads. */
 export const NEXT_ACTIVITY_SAMPLE = 5;
@@ -163,29 +163,17 @@ function roundHalf(km: number): number {
 }
 
 /**
- * The zone a single run spent most of its time in, via the shared aggregator —
- * Strava's `hrZones` buckets when present, otherwise the zone its average heart
- * rate implies. Null when the run carries no heart-rate data at all.
- */
-function dominantZone(run: CoachActivityInput): ZoneNumber | null {
-  const { slices, totalSeconds } = aggregateZones([run]);
-  if (totalSeconds === 0) return null;
-  return slices.reduce((top, slice) => (slice.seconds > top.seconds ? slice : top)).meta.zone;
-}
-
-/**
  * A past run's role in the mix. Distance decides first: a 20 km run is the
  * week's long run however hard the heart rate ran. Below the long-run bar the
- * dominant zone decides — Z4–Z5 is a hard session, Z3 a tempo, the rest easy.
- * A run without heart rate reads as easy rather than inventing an intensity.
+ * intensity decides — Z4–Z5 is a hard session (the shared {@link isHardEffort},
+ * which the readiness cap reads too, so the two can never disagree about what
+ * "hard" means), Z3 a tempo, the rest easy. A run without heart rate reads as
+ * easy rather than inventing an intensity.
  */
 function classifyRun(run: CoachActivityInput, longThresholdKm: number): RunKind {
   if (run.distance / 1000 >= longThresholdKm) return "long";
-  const zone = dominantZone(run);
-  if (zone === null) return "easy";
-  if (zone >= 4) return "hard";
-  if (zone === 3) return "tempo";
-  return "easy";
+  if (isHardEffort(run)) return "hard";
+  return dominantZone(run) === 3 ? "tempo" : "easy";
 }
 
 /**

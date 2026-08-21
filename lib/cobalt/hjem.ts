@@ -18,11 +18,12 @@ import {
   inferRaceDistanceKm,
   type RaceEstimate,
 } from "@/lib/cobalt/race-estimate";
-import { readinessFromRatio } from "@/lib/cobalt/readiness";
+import { readinessFromRatio, readinessWithRecovery } from "@/lib/cobalt/readiness";
 import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
+import { hoursSinceHardEffort } from "@/lib/training/effort";
 import { detectPersonalRecord } from "@/lib/training/personal-record";
 import { computeSnapshot } from "@/lib/training/progression-core";
 import type { ZoneHrConfig } from "@/lib/training/zones";
@@ -417,7 +418,15 @@ export function buildHomeView(
     runs.map((run) => ({ ...run, hrZones: null })),
     now
   ).trainingLoad.ratio;
-  const readiness = readinessFromRatio(ratio);
+  // …then capped by the recovery buffer (#259). The load ratio is moving
+  // minutes with no intensity weighting, so a threshold tur an hour ago barely
+  // moves it; the cap is what keeps the hero from saying "Kroppen er klar" the
+  // morning after a hard pas. The Coach card applies the identical cap over the
+  // same runs, so `readinessPct` and `form.pct` still agree exactly.
+  const readiness = readinessWithRecovery(
+    readinessFromRatio(ratio),
+    hoursSinceHardEffort(runs, now)
+  );
   const heroNote = {
     ready: "Kroppen er klar i dag.",
     easy: "Hold tempoet roligt i dag.",

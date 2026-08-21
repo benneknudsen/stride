@@ -17,10 +17,11 @@
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
 import { DEFAULT_RACE_DATE } from "@/lib/coach/engine";
 import { TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
-import { readinessFromRatio } from "@/lib/cobalt/readiness";
+import { readinessFromRatio, readinessWithRecovery } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { type DemoActivity, demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
+import { hoursSinceHardEffort } from "@/lib/training/effort";
 import { computeSnapshot } from "@/lib/training/progression-core";
 import type { ChatBlock } from "@/types/chat";
 
@@ -154,6 +155,11 @@ const COACH_PROMPTS = ["Analysér min uge", "Foreslå næste pas", "Er jeg klar 
 
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** Running activity types: "Run", "TrailRun", "VirtualRun", … */
+function isRunActivity(activity: { type: string }): boolean {
+  return /run/i.test(activity.type);
 }
 
 /** Kilometres run on the calendar day `daysAgo` days before `now`. */
@@ -355,7 +361,13 @@ export function buildCoachView(now: Date = new Date(), userName?: string): Coach
     demoActivities.map((a) => ({ ...a, hrZones: null })),
     now
   ).trainingLoad.ratio;
-  const { pct, note } = readinessFromRatio(snapshotRatio);
+  // …capped by the recovery buffer (#259): load alone carries no intensity, so
+  // without this the fixtures' hard parkrun this morning would still read "Klar
+  // til hårdt pas". Same cap the Hjem card applies over the same fixtures.
+  const { pct, note } = readinessWithRecovery(
+    readinessFromRatio(snapshotRatio),
+    hoursSinceHardEffort(demoActivities.filter(isRunActivity), now)
+  );
 
   // Form trend: this week's volume vs. last week's.
   const thisWeek = getWeeklyVolume(demoActivities, 0);
@@ -460,8 +472,16 @@ export function buildLiveCoachView(
 
   // Form (readiness) from the progression snapshot's acute:chronic ratio,
   // through the same readinessFromRatio the Hjem card uses (issue #127) —
-  // readiness peaks when the load sits right on the chronic base (ratio ≈ 1).
-  const { pct, note } = readinessFromRatio(ratio);
+  // readiness peaks when the load sits right on the chronic base (ratio ≈ 1) —
+  // then capped by the recovery buffer (#259) so the card can't say "Klar til
+  // hårdt pas" in the 48 h after a Zone 4–5 tur, which the load signal alone
+  // (moving minutes, no intensity weighting) is blind to. The `?? null` keeps
+  // partial dashboards — fixtures, older cached payloads — on the uncapped path
+  // rather than throwing.
+  const { pct, note } = readinessWithRecovery(
+    readinessFromRatio(ratio),
+    dashboard.hoursSinceHardEffort ?? null
+  );
 
   const [trend, trendTone] =
     ratio !== null && ratio > 1.05

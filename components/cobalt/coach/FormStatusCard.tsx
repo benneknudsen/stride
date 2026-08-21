@@ -3,20 +3,22 @@ import type { CoachView } from "@/lib/cobalt/coach";
 import { cn } from "@/lib/utils";
 
 // "Form-status": current readiness percentage in the display font, a plain-
-// language note, and a progress bar that grows out to `pct` once `started`. The
-// trend chip (STIGENDE / STABIL / FALDENDE) reads red when form is falling.
+// language note, and a progress bar that grows out to `pct` once `started`.
+//
+// The chip is explicitly labelled "Belastning" (issue #259): STIGENDE / STABIL
+// / FALDENDE describes the *training load* trend, not the readiness percentage
+// next to it — an unlabelled "FALDENDE" over a 93 % gauge read as a
+// contradiction. Red still means the load is falling.
 export function FormStatusCard({ form, started }: { form: CoachView["form"]; started: boolean }) {
   return (
     <GlassCard className="rounded-widget px-[26px] py-[22px]">
       <div className="mb-3.5 flex items-baseline justify-between">
         <span className="cg-label tracking-[0.18em]">Form-status</span>
-        <span
-          className={cn(
-            "font-cg-mono text-[10.5px]",
-            form.trendTone === "red" ? "text-red" : "text-cobalt"
-          )}
-        >
-          {form.trend}
+        <span className="font-cg-mono text-[10.5px]">
+          <span className="text-ink/70">Belastning</span>{" "}
+          <span className={cn(form.trendTone === "red" ? "text-red" : "text-cobalt")}>
+            {form.trend}
+          </span>
         </span>
       </div>
 

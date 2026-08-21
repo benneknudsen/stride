@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
 import { buildHomeView, type HomeActivityLike, zoneForHeartRate } from "@/lib/cobalt/hjem";
-import { readinessFromRatio } from "@/lib/cobalt/readiness";
+import {
+  BAND_NOTES,
+  RECOVERY_CAP_PCT,
+  readinessFromRatio,
+  readinessWithRecovery,
+} from "@/lib/cobalt/readiness";
 import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
 import { demoActivities } from "@/lib/demo/data";
+import { hoursSinceHardEffort } from "@/lib/training/effort";
 import { computeSnapshot, type ProgressionActivityInput } from "@/lib/training/progression-core";
 import { zoneForHeartRate as trainingZone } from "@/lib/training/zones";
 
@@ -83,12 +89,85 @@ describe("readinessFromRatio", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Recovery-aware cap (issue #259)
+// ---------------------------------------------------------------------------
+
+describe("readinessWithRecovery", () => {
+  const ready = readinessFromRatio(1.0); // 95 / ready
+  const easy = readinessFromRatio(1.5); // 79 / easy
+  const rest = readinessFromRatio(2.0); // 55 / rest
+
+  it("leaves readiness untouched when there is no recent hard effort", () => {
+    expect(readinessWithRecovery(ready, null)).toEqual(ready);
+    expect(readinessWithRecovery(easy, null)).toEqual(easy);
+    expect(readinessWithRecovery(rest, null)).toEqual(rest);
+  });
+
+  it("caps to the top of the easy band inside the 48 h window", () => {
+    expect(readinessWithRecovery(ready, 1)).toEqual({
+      pct: RECOVERY_CAP_PCT,
+      band: "easy",
+      note: "Let træning anbefalet",
+    });
+    // The reported case: a hard tur an hour ago, 93 % on the gauge.
+    expect(
+      readinessWithRecovery({ pct: 93, band: "ready", note: "Klar til hårdt pas" }, 1).note
+    ).not.toBe("Klar til hårdt pas");
+  });
+
+  it.each([0, 1, 12, 24, 47.9])("still caps %f hours after the hard effort", (hours) => {
+    const capped = readinessWithRecovery(ready, hours);
+    expect(capped.band).not.toBe("ready");
+    expect(capped.pct).toBe(RECOVERY_CAP_PCT);
+  });
+
+  it.each([48, 49, 72, 168])("releases the cap %f hours after the hard effort", (hours) => {
+    expect(readinessWithRecovery(ready, hours)).toEqual(ready);
+  });
+
+  it("is a monotone downgrade — it never raises readiness", () => {
+    for (const ratio of [0, 0.4, 0.8, 1.0, 1.15, 1.5, 1.8, 2.5]) {
+      const base = readinessFromRatio(ratio);
+      const capped = readinessWithRecovery(base, 6);
+      expect(capped.pct).toBeLessThanOrEqual(base.pct);
+    }
+    // A "rest" read is not lifted into "easy" by the cap.
+    expect(readinessWithRecovery(rest, 6)).toEqual(rest);
+  });
+
+  it("keeps percentage, band and note in agreement after the cap", () => {
+    for (const hours of [null, 0, 47, 48, 100]) {
+      for (const ratio of [0.5, 1.0, 1.5, 2.0]) {
+        const r = readinessWithRecovery(readinessFromRatio(ratio), hours);
+        expect(r.note).toBe(BAND_NOTES[r.band]);
+        expect(readinessFromRatio(null).band).toBe("easy"); // band thresholds unchanged
+        if (r.band === "ready") expect(r.pct).toBeGreaterThanOrEqual(80);
+        if (r.band === "easy") expect(r.pct).toBeGreaterThanOrEqual(68);
+      }
+    }
+  });
+
+  it("keeps an underloaded, well-rested week high — freshness is still not penalised (#241)", () => {
+    // Ratio 0.72, the issue's own "93 % + FALDENDE" case: underloaded relative
+    // to the 42-day base. With no hard effort in the window it stays "ready".
+    const base = readinessFromRatio(0.72);
+    expect(base.band).toBe("ready");
+    expect(readinessWithRecovery(base, null)).toEqual(base);
+    expect(readinessWithRecovery(base, 96)).toEqual(base);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Hjem ↔ Coach agreement (issue #127)
 // ---------------------------------------------------------------------------
 
 /** Minimal CoachDashboardData carrying only what buildLiveCoachView reads. */
-function dashboard(ratio: number | null): CoachDashboardData {
+function dashboard(
+  ratio: number | null,
+  recentHardHours: number | null = null
+): CoachDashboardData {
   return {
+    hoursSinceHardEffort: recentHardHours,
     workout: {
       type: "tempo",
       distanceKm: 10,
@@ -105,9 +184,16 @@ function dashboard(ratio: number | null): CoachDashboardData {
   } as any;
 }
 
-/** Six weeks of steady running — enough history for a non-null load ratio. */
-function liveHistory(): HomeActivityLike[] {
-  return Array.from({ length: 14 }, (_, i) => {
+/**
+ * Steady running every third day — enough history for a non-null load ratio.
+ *
+ * `runCount` is a knob because the chronic base is a 42-day EWMA: the default
+ * six weeks (14 runs) is long enough to *have* a ratio but not long enough for
+ * the base to saturate, so it still reads as an overload. Tests that need the
+ * load-only readiness to land in a particular band pass a longer history.
+ */
+function liveHistory(runCount = 14): HomeActivityLike[] {
+  return Array.from({ length: runCount }, (_, i) => {
     const daysAgo = i * 3;
     const startDate = new Date(NOW);
     startDate.setDate(startDate.getDate() - daysAgo);
@@ -150,6 +236,38 @@ describe("Hjem and Coach show the same readiness (issue #127)", () => {
 
     expect(home.readinessPct).toBe(coach.form.pct);
     expect(home.readinessNote).toBe(coach.form.note);
+  });
+
+  it("still agrees once a recent hard effort caps both surfaces (#259)", () => {
+    // A long enough history that the chronic base has saturated and the
+    // load-only read is comfortably "ready" — otherwise the cap would have
+    // nothing to downgrade and the test would pass for the wrong reason.
+    // Only the newest run's intensity changes, so the load ratio is *identical*
+    // (dailyLoad is moving minutes, no intensity weighting): the cap is the
+    // whole difference.
+    const activities = liveHistory(28).map((a, i) =>
+      i === 0 ? { ...a, averageHeartrate: 178 } : a
+    );
+    const ratio = computeSnapshot(
+      activities.map((a) => ({ ...a, hrZones: null })),
+      NOW
+    ).trainingLoad.ratio;
+    // The newest run started at 07:30 — 1,5 h before NOW, deep inside the 48 h.
+    const recentHardHours = hoursSinceHardEffort(activities, NOW);
+    expect(recentHardHours).not.toBeNull();
+    expect(recentHardHours ?? 0).toBeLessThan(48);
+
+    const home = buildHomeView(activities, NOW);
+    const coach = buildLiveCoachView(dashboard(ratio, recentHardHours), activities, NOW);
+
+    expect(home.readinessPct).toBe(coach.form.pct);
+    expect(home.readinessNote).toBe(coach.form.note);
+    // …and both are capped: no "Klar til hårdt pas" an hour after a hard tur.
+    expect(home.readinessPct).toBe(RECOVERY_CAP_PCT);
+    expect(home.readinessNote).toBe(BAND_NOTES.easy);
+    expect(home.heroNote).toBe("Hold tempoet roligt i dag.");
+    // The uncapped load read on its own would still have said "ready".
+    expect(readinessFromRatio(ratio).band).toBe("ready");
   });
 
   it("derives the Hjem readiness from the load ratio, not from heart rate", () => {
