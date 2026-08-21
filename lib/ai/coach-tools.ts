@@ -121,8 +121,29 @@ export function buildCoachTools(
   // this request's tool set — the route builds a fresh one per turn, so this is
   // per-turn state, never shared between users or requests. Left undefined when
   // the model asks for the variation on its own; then the variation is the plain
-  // last-five-runs read, exactly as on the dashboard.
+  // last-five-runs read — except on a hviledag, see `isRestDay` below (#260).
   let lastRecommendedType: RecommendedType | undefined;
+  // Whether today is a hviledag in its own right (#260). A rest day is a fact
+  // about today — a planned hviledag, a broken recovery buffer, a spent weekly
+  // volume budget — not a de-dup preference, so the variation must honour it
+  // even in a turn where the model never asked for today's pas. Computed with
+  // the same defaults `buildCoachDashboard` passes, so chat and dashboard can
+  // never disagree about whether today is a rest day. Deliberately narrower
+  // than always seeding `todayType`: asked on its own, the variation stays the
+  // plain last-five-runs read (#258), it only refuses to run through a hviledag.
+  const isRestDay = (): boolean =>
+    recommendWorkout(
+      {
+        userId,
+        goal: GOALS.zone2,
+        progression: computeSnapshot(progressionInputs, now),
+        lastRun: latestRun ?? new Date(now.getTime() - 2 * DAY_MS),
+        footballYesterday: false,
+        raceDate,
+        weekToDateKm: weekToDateDistanceKm(progressionInputs, now),
+      },
+      now
+    ).type === "rest";
   return {
     getRecentActivities: tool({
       description:
@@ -226,8 +247,10 @@ export function buildCoachTools(
           progression: computeSnapshot(progressionInputs, now),
           now,
           raceDate,
-          // Only set if the model already asked for today's pas in this turn.
-          todayType: lastRecommendedType,
+          // Set when the model already asked for today's pas in this turn —
+          // otherwise only to flag a hviledag, which the variation must never
+          // prescribe a run through (#260).
+          todayType: lastRecommendedType ?? (isRestDay() ? "rest" : undefined),
         }),
     }),
 

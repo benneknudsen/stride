@@ -354,6 +354,42 @@ describe("buildNextActivity — coordination with today's Næste pas", () => {
     expect(next.type).toBe("rest");
   });
 
+  // Issue #260: the plan rests for reasons this card cannot see (planned
+  // hviledag, the recommender's recovery buffer, a spent weekly volume budget),
+  // and a run beside "Næste pas: Hvile" is a contradiction, not a variation.
+  it("rests when today's pas is hvile, however healthy the mix looks", () => {
+    // Ready readiness, 24 h+ clear and no long tur in the mix: on any other day
+    // this is the long Zone 2-tur.
+    const withoutPlan = build(fiveEasyRuns(SHARPEN), SHARPEN, READY_RATIO);
+    expect(withoutPlan.type).toBe("long");
+
+    const next = build(fiveEasyRuns(SHARPEN), SHARPEN, READY_RATIO, "rest");
+
+    expect(next.type).toBe("rest");
+    expect(next.distanceKm).toBe(0);
+    expect(next.paceRange).toEqual({ min: "–", max: "–" });
+    expect(next.heartRateCap).toBeNull();
+    expect(next.basis).toBe("Sidste 5 ture: 5 rolige · 0 kvalitet · 0 lange");
+    expect(next.reason.join(" ")).toContain("hvile");
+  });
+
+  it("rests on a hviledag even when readiness only asks for a rolig tur", () => {
+    // The readiness "easy" band prescribes a run of its own, so the hvile gate
+    // has to outrank it — otherwise a rolig tur lands next to "Næste pas: Hvile".
+    const capped = build(fiveEasyRuns(SHARPEN), SHARPEN, EASY_BAND_RATIO);
+    expect(capped.type).toBe("easy");
+
+    const next = build(fiveEasyRuns(SHARPEN), SHARPEN, EASY_BAND_RATIO, "rest");
+    expect(next.type).toBe("rest");
+  });
+
+  it("rests on a hviledag in a base phase too", () => {
+    const next = build(fiveEasyRuns(BURN), BURN, READY_RATIO, "rest");
+
+    expect(next.type).toBe("rest");
+    expect(next.reason.join(" ")).not.toContain("Zone 4–5-blokke");
+  });
+
   it("keeps the readiness-capped rolig tur even when the plan is also a rolig tur", () => {
     // The one allowed same-type day besides hvile: at moderate readiness the only
     // safe session is a rolig Zone 2-tur, and a longer or faster "variation"
@@ -390,6 +426,13 @@ describe("avoidPlanDuplicate", () => {
     expect(avoidPlanDuplicate("long", "tempo", CLEAR)).toBe("long");
     expect(avoidPlanDuplicate("fartlek", "easy", CLEAR)).toBe("fartlek");
     expect(avoidPlanDuplicate("intervals", "long", CLEAR)).toBe("intervals");
+  });
+
+  it("leaves a hviledag to the gate upstream — a run type can never collide with it", () => {
+    // #260 answers `todayType === "rest"` before the mix is read, so this
+    // function only ever sees run types and passes them straight through.
+    expect(avoidPlanDuplicate("long", "rest", CLEAR)).toBe("long");
+    expect(avoidPlanDuplicate("easy", "rest", CLEAR)).toBe("easy");
   });
 
   it("leaves everything untouched when no pas is passed in", () => {

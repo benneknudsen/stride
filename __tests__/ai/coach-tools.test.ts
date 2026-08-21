@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { buildCoachTools, type CoachChatActivity } from "@/lib/ai/coach-tools";
+import { buildPhases } from "@/lib/coach/engine";
 
 const NOW = new Date("2026-07-27T09:00:00.000Z");
 
@@ -373,5 +374,50 @@ describe("getNextActivity — the variety engine in chat (#258)", () => {
     )) as Variation;
     expect(variation.type).not.toBe(workout.type);
     expect(variation.reason.join(" ")).toContain("skal ikke sige det samme");
+  });
+
+  /**
+   * A hviledag is a fact about today, not a de-dup preference (#260). The burn
+   * phase runs mon/wed/fri/sun, so its Tuesday is a planned rest slot: the
+   * variation must answer hvile there even in a turn where the model never
+   * asked for today's pas, or chat contradicts the dashboard on the same day.
+   */
+  it("rests on a hviledag even when asked for the variation on its own (#260)", async () => {
+    const RACE = new Date(2026, 8, 20);
+    const dayIn = (jsWeekday: number): Date => {
+      const d = new Date(buildPhases(RACE).burn.startDate);
+      while (d.getDay() !== jsWeekday) d.setDate(d.getDate() + 1);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 9, 0);
+    };
+    const historyFor = (asOf: Date): CoachChatActivity[] =>
+      EASY_BASE.map((a, i) => ({
+        ...a,
+        startDate: new Date(asOf.getTime() - (2 + i * 2) * 24 * 60 * 60 * 1000),
+      }));
+    const chatOn = (asOf: Date) =>
+      buildCoachTools("user-1", asOf, { raceDate: RACE, raceName: "Testløb" }, historyFor(asOf));
+
+    // Control: Wednesday is a run day in burn, and there the variation runs.
+    const wednesday = dayIn(3);
+    const onRunDay = (await chatOn(wednesday).getNextActivity.execute?.(
+      {} as never,
+      {} as never
+    )) as Variation;
+    expect(onRunDay.type).not.toBe("rest");
+
+    const tuesday = dayIn(2);
+    const pas = (await chatOn(tuesday).recommendWorkout.execute?.({} as never, {} as never)) as {
+      type: string;
+    };
+    expect(pas.type).toBe("rest");
+
+    // A fresh tool set — this turn the model asks for the variation only.
+    const solo = (await chatOn(tuesday).getNextActivity.execute?.(
+      {} as never,
+      {} as never
+    )) as Variation;
+    expect(solo.type).toBe("rest");
+    expect(solo.distanceKm).toBe(0);
+    expect(solo.reason.join(" ")).toContain("hvile");
   });
 });

@@ -22,9 +22,16 @@
 //      session that really is hard: intervals. A fartlek is fartspring inside an
 //      otherwise easy run, not a hard interval pas, so it clears on the same
 //      24 h as a Zone 2 tur (issue #254).
-//   3. Readiness via `readinessFromRatio`, the same asymmetric mapping the Hjem
+//   3. Today's "Næste pas" itself, when it is hvile (#260). The plan rests for
+//      reasons this card cannot see — a planned hviledag in the phase week, the
+//      recommender's own recovery buffer, or a week whose volume budget is
+//      already spent (#256) — and any run prescribed beside it reads as a
+//      contradiction ("Næste pas: Hvile" next to "Næste aktivitet: Intervalpas,
+//      9 km"). So the variation rests too; hvile on both cards is the one
+//      overlap the de-dup in step 6 has always allowed.
+//   4. Readiness via `readinessFromRatio`, the same asymmetric mapping the Hjem
 //      gauge and the recommender read: rest → hvile, easy → a rolig tur.
-//   4. What the mix lacks: no long run → the long Zone 2 tur; no quality at all
+//   5. What the mix lacks: no long run → the long Zone 2 tur; no quality at all
 //      → fartlek; tempo but no real speed → intervals; everything covered →
 //      fartlek again, since a rolig tur is what "Næste pas" already prescribes
 //      and would collapse the two cards back into duplicates (#254). Distances
@@ -33,7 +40,7 @@
 //   Fast variations are available in every phase (#254). A base block like burn
 //   has no tempo session, so there the fartlek/interval is prescribed at reduced
 //   intensity — surges and reps capped at the tempo band, never Zone 4–5.
-//   5. Cross-card coordination (#255): the mix alone can land on exactly the
+//   6. Cross-card coordination (#255): the mix alone can land on exactly the
 //      session today's "Næste pas" already prescribes — both cards saying "lang
 //      tur" is the duplicate #253 set out to remove. With `todayType` passed in,
 //      the variation steps aside; see `avoidPlanDuplicate`.
@@ -239,9 +246,11 @@ function fastVariation(mix: MixContext): VarietyType {
  *     distance is already covered by the plan itself.
  *   • plan = rolig tur → the long Zone 2-tur if the mix lacks one, otherwise the
  *     fast variation.
- * Safety-forced cards never reach here: a broken recovery buffer or a readiness
- * band asking for hvile/rolig is answered before the mix is ever read, and there
- * agreeing with the plan is the right call, not a duplicate to design away.
+ * Safety-forced cards never reach here: a broken recovery buffer, a plan that
+ * says hvile (#260) or a readiness band asking for hvile/rolig is answered
+ * before the mix is ever read, and there agreeing with the plan is the right
+ * call, not a duplicate to design away. `todayType === "rest"` therefore never
+ * arrives — and could not collide anyway, since `natural` is always a run.
  */
 export function avoidPlanDuplicate(
   natural: RunType,
@@ -334,7 +343,21 @@ export function buildNextActivity({
     return restCard(basis, reason);
   }
 
-  // 3. Readiness — the same asymmetric mapping the Hjem gauge shows, so the two
+  // 3. Today's pas is hvile (#260). The recommender rests for reasons the mix
+  // below cannot see — a planned hviledag in the phase week, its own recovery
+  // buffer, or a week whose planned volume is already covered (#256) — and the
+  // variation used to prescribe straight through them, putting "Intervalpas,
+  // 9 km" next to "Næste pas: Hvile". This must outrank the readiness bands
+  // below, not follow them: the easy band still prescribes a rolig tur, and a
+  // run of any length beside a hviledag is the contradiction being removed.
+  if (todayType === "rest") {
+    reason.push(
+      'Dagens "Næste pas" er hvile — så variationen venter. Hviledagen er en del af planen, ikke et hul i den.'
+    );
+    return restCard(basis, reason);
+  }
+
+  // 4. Readiness — the same asymmetric mapping the Hjem gauge shows, so the two
   // surfaces can never contradict each other for the same load ratio.
   const readiness = readinessFromRatio(progression.trainingLoad.ratio);
   if (readiness.band === "rest") {
@@ -350,7 +373,7 @@ export function buildNextActivity({
     return runCard("easy", rules, basis, reason);
   }
 
-  // 4. What the mix is missing — the variation, never a copy of the phase's
+  // 5. What the mix is missing — the variation, never a copy of the phase's
   // standard session. Only intervals still need the full 48 h; a fartlek is
   // fartspring inside an easy run and clears on the 24 h already checked above
   // (#254), as does the long Zone 2 tur.
@@ -387,7 +410,7 @@ export function buildNextActivity({
     );
   }
 
-  // 5. Cross-card coordination (#255) — the mix has spoken, but if the plan
+  // 6. Cross-card coordination (#255) — the mix has spoken, but if the plan
   // already prescribes exactly that session today, the variation steps aside so
   // the two cards name two different pas.
   const coordinated = avoidPlanDuplicate(type, todayType, mix);

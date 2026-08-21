@@ -28,6 +28,9 @@ function anchorIn(phase: "burn" | "peak", jsWeekday: number): Date {
 }
 
 const BURN_WEDNESDAY = anchorIn("burn", 3);
+// Burn runs mon/wed/fri/sun, so Tuesday is a planned hviledag — the day the two
+// cards used to contradict each other (#260).
+const BURN_REST_DAY = anchorIn("burn", 2);
 // Peak is the only phase whose week plan carries a long run (Sundays) — the one
 // place today's pas can collide with the variation's long Zone 2-tur (#255).
 const PEAK_MONDAY = anchorIn("peak", 1);
@@ -219,13 +222,37 @@ describe("buildCoachDashboard", () => {
           TEST_RACE_DATE
         );
         seen.add(dashboard.workout.type);
-        if (dashboard.workout.type === "rest" || dashboard.nextActivity.type === "rest") continue;
+        if (dashboard.workout.type === "rest") {
+          // #260: a hviledag on "Næste pas" is never answered with a run.
+          expect(dashboard.nextActivity.type).toBe("rest");
+          continue;
+        }
+        if (dashboard.nextActivity.type === "rest") continue;
         expect(dashboard.nextActivity.type).not.toBe(dashboard.workout.type);
       }
     }
     // Guard against a vacuous sweep: the steady history's variation is the long
-    // Zone 2-tur, so the run must actually cover a day the plan schedules one.
+    // Zone 2-tur, so the run must actually cover a day the plan schedules one —
+    // and a hviledag, so the #260 branch above is really exercised.
     expect(seen.has("long")).toBe(true);
+    expect(seen.has("rest")).toBe(true);
+  });
+
+  it("never puts a run next to a planned hviledag (#260)", () => {
+    // A rest slot in the burn phase's week plan: the pas is hvile for a reason
+    // the variation cannot see, and before #260 it prescribed straight through
+    // it — "Næste pas: Hvile" beside "Næste aktivitet: Intervalpas, 9 km".
+    const dashboard = buildCoachDashboard(
+      steadyHistory(BURN_REST_DAY),
+      BURN_REST_DAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    expect(dashboard.workout.type).toBe("rest");
+    expect(dashboard.nextActivity.type).toBe("rest");
+    expect(dashboard.nextActivity.distanceKm).toBe(0);
+    expect(dashboard.nextActivity.reason.join(" ")).toContain("hvile");
   });
 
   it("is JSON-serializable (no Date instances or undefined gaps)", () => {
