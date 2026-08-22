@@ -13,8 +13,9 @@
 //      shows: rest when the body needs restitution, downgrade to easy when
 //      readiness is only moderate. Freshness, distinct from the recovery buffer.
 //   3c. Week-to-date load (#256) — how much the athlete has ALREADY run this
-//      Mon–Sun week vs. the phase week's intended total: at/over budget → rest,
-//      about to blow past it → soften the session instead of stacking it.
+//      Mon–Sun week vs. the phase week's intended total, prorated to the days
+//      elapsed so far (#261): at/over budget → rest, about to blow past it →
+//      soften the session instead of stacking it.
 //   4. Distance from the phase band (adapt 6–8, burn 8–10, …).
 //   5. Improved pace efficiency + optimal load → unlock the band's upper end.
 //   6. Intensity: Zone 2 by default; tempo only where the phase allows it.
@@ -148,15 +149,18 @@ function round1(km: number): number {
  */
 export function weekToDateDistanceKm(
   activities: readonly { type: string; distance: number; startDate: Date | string }[],
-  now: Date = new Date()
+  now: Date
 ): number {
+  // Both week boundaries collapse to numbers up front, so the per-activity test
+  // is a numeric comparison instead of two `getTime()` calls per row (#261).
   const today = getLocalDate(now);
-  const monday = mondayOfWeek(today);
+  const mondayEpoch = mondayOfWeek(today).getTime();
+  const todayEpoch = today.getTime();
   return activities
     .filter((activity) => /run/i.test(activity.type))
     .filter((activity) => {
-      const day = getLocalDate(ensureDate(activity.startDate));
-      return day.getTime() >= monday.getTime() && day.getTime() <= today.getTime();
+      const dayEpoch = getLocalDate(ensureDate(activity.startDate)).getTime();
+      return dayEpoch >= mondayEpoch && dayEpoch <= todayEpoch;
     })
     .reduce((sum, activity) => sum + activity.distance / 1000, 0);
 }
@@ -176,13 +180,12 @@ function restCard(reason: string[], weekStrip: WeekDay[]): WorkoutRecommendation
 // ── Recommender ─────────────────────────────────────────────────────────────
 
 /**
- * The next workout for an athlete, as a ready-to-render card. `now` defaults to
- * the real clock; pass a fixed date in tests or when previewing another day.
+ * The next workout for an athlete, as a ready-to-render card. `now` is required
+ * (#261): every caller already resolves the request's clock once and threads it
+ * through, and a silent `new Date()` default would let a future caller reason
+ * over a different instant than the snapshot it passes in.
  */
-export function recommendWorkout(
-  input: WorkoutInput,
-  now: Date = new Date()
-): WorkoutRecommendation {
+export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecommendation {
   // E2: "which day is it" must read the athlete's Danish calendar day, not the
   // server's UTC one — otherwise the phase, the week's Monday and the slot below
   // flip a day early on a boundary evening. Elapsed-time math keeps `now`.
@@ -193,7 +196,8 @@ export function recommendWorkout(
   const reason: string[] = [];
 
   // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
-  const slot = weekStrip[(today.getDay() + 6) % 7];
+  const dayOfWeek = (today.getDay() + 6) % 7; // 0 = Mon … 6 = Sun
+  const slot = weekStrip[dayOfWeek];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
     return restCard(reason, weekStrip);
@@ -270,12 +274,20 @@ export function recommendWorkout(
   // caller knows the week's tally; the scale-down half of the gate sits just
   // below the distance step, where today's km are known.
   const intendedWeeklyKm = weekStrip.reduce((sum, day) => sum + (day.distanceKm ?? 0), 0);
-  const weekBudgetKm = intendedWeeklyKm * WEEKLY_VOLUME_RATIO;
+  // #261: prorate the budget by how far into the week we are, so the gate asks
+  // "have you already run more than this week's share through today?" rather
+  // than "have you run the whole week's plan?". The full-week comparison let an
+  // athlete stack Mon–Wed with the entire week's volume and still be waved
+  // through — exactly the back-to-back-hard-days pattern #256 exists to stop.
+  // Sunday's fraction is 1, so a week run to plan ends on the same budget.
+  const weekFraction = Math.min(1, (dayOfWeek + 1) / 7);
+  const proratedWeeklyKm = intendedWeeklyKm * weekFraction;
+  const weekBudgetKm = proratedWeeklyKm * WEEKLY_VOLUME_RATIO;
   const weekToDateKm = input.weekToDateKm;
   const weekLoadKnown = weekToDateKm != null && intendedWeeklyKm > 0;
   if (weekLoadKnown && weekToDateKm >= weekBudgetKm) {
     reason.push(
-      `Du har allerede løbet ${round1(weekToDateKm)} km i denne uge — ugens planlagte volumen i ${phase}-fasen er ${round1(intendedWeeklyKm)} km, så i dag er en hviledag.`
+      `Du har allerede løbet ${round1(weekToDateKm)} km i denne uge — ugens planlagte volumen i ${phase}-fasen er ${round1(proratedWeeklyKm)} km indtil i dag, så i dag er en hviledag.`
     );
     return restCard(reason, weekStrip);
   }
@@ -336,13 +348,13 @@ export function recommendWorkout(
       type = "easy";
       distanceKm = Math.min(distanceKm, readyForMore ? rules.maxDistanceKm : rules.minDistanceKm);
       reason.push(
-        `Du har løbet ${round1(weekToDateKm)} km af ugens ${round1(intendedWeeklyKm)} km — ${softened === "tempo" ? "tempopasset" : "den lange tur"} bliver en rolig Zone 2-tur, så ugen ikke stables med hårde dage.`
+        `Du har løbet ${round1(weekToDateKm)} km af ugens ${round1(proratedWeeklyKm)} km — ${softened === "tempo" ? "tempopasset" : "den lange tur"} bliver en rolig Zone 2-tur, så ugen ikke stables med hårde dage.`
       );
     }
     if (weekToDateKm + distanceKm > weekBudgetKm) {
       distanceKm = Math.min(distanceKm, rules.minDistanceKm);
       reason.push(
-        `Ugens volumen er næsten brugt (${round1(weekToDateKm)} af ${round1(intendedWeeklyKm)} km) — distancen holdes på ${phase}-fasens minimum på ${rules.minDistanceKm} km.`
+        `Ugens volumen er næsten brugt (${round1(weekToDateKm)} af ${round1(proratedWeeklyKm)} km) — distancen holdes på ${phase}-fasens minimum på ${rules.minDistanceKm} km.`
       );
     }
   }

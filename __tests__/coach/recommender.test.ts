@@ -164,10 +164,19 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
   });
 
   describe("step 3c — week-to-date load (#256)", () => {
-    /** The phase week's intended total — the exact budget the gate measures against. */
+    /**
+     * The exact budget the gate measures against on `now`: the phase week's
+     * intended total, prorated by how far into the week we are (#261) so a
+     * transition week's mixed volumes don't rest the athlete out of Thu–Sun.
+     */
     function intendedWeekKm(phase: PhaseKey, now: Date): number {
-      const monday = addDays(now, -((now.getDay() + 6) % 7));
-      return getWeekPlan(phase, monday, RACE).reduce((sum, d) => sum + (d.distanceKm ?? 0), 0);
+      const dayOfWeek = (now.getDay() + 6) % 7;
+      const monday = addDays(now, -dayOfWeek);
+      const total = getWeekPlan(phase, monday, RACE).reduce(
+        (sum, d) => sum + (d.distanceKm ?? 0),
+        0
+      );
+      return total * Math.min(1, (dayOfWeek + 1) / 7);
     }
 
     it("changes nothing on a fresh week — identical to omitting the field", () => {
@@ -221,6 +230,15 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       });
       expect(loaded.distanceKm).toBe(getPhaseRules("burn", RACE).minDistanceKm);
       expect(loaded.reason.join(" ")).toMatch(/uge/i);
+    });
+
+    it("prorates the budget to the elapsed week, so Monday cannot spend all of it (#261)", () => {
+      // Half the week's plan, run by Monday: under the full-week total, but far
+      // over Monday's 1/7 share — the un-prorated gate waved this through.
+      const fullWeekKm = intendedWeekKm("burn", BURN_MONDAY) * 7;
+      const rec = recommend({ weekToDateKm: fullWeekKm * 0.5 }, BURN_MONDAY);
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/uge/i);
     });
 
     it("keeps the recovery buffer ahead of the week-load gate", () => {

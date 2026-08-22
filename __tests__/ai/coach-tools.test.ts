@@ -124,7 +124,9 @@ describe("coach tools — provider robustness (#200)", () => {
     const parsed = parse(t, { reason: null });
     expect(parsed.success).toBe(true);
     const result = await t.execute?.(parsed.data as never, {} as never);
-    expect(result).toBeTruthy();
+    // The discriminator, not just truthiness: a malformed card would still be
+    // an object, so assert the field the variation block is parsed from.
+    expect(result).toHaveProperty("type");
   });
 
   it("getRecentActivities accepts a null limit and returns card-shaped rows (#221)", async () => {

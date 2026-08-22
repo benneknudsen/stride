@@ -12,10 +12,10 @@ import { cn } from "@/lib/utils";
 //
 // A coach turn can also carry generative-UI blocks (issue #221): clickable
 // activity cards, workout cards and variation cards (issue #258), built
-// server-side from tool output. They
-// render below the text so an answer reads "prose, then the cards it refers to";
-// text and blocks can both appear in the same turn. A turn may be blocks-only
-// (no text bubble) when the model let the cards speak for themselves.
+// server-side from tool output. They render below the text so an answer reads
+// "prose, then the cards it refers to"; text and blocks can both appear in the
+// same turn. A turn may be blocks-only (no text bubble) when the model let the
+// cards speak for themselves.
 // Wrapped in React.memo so only the turn that is actively streaming re-renders
 // (and re-parses its markdown) as tokens arrive. streamReply patches state by
 // replacing only the streaming turn's object (see ChatPanel.render) while every

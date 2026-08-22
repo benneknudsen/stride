@@ -91,6 +91,12 @@ export function buildCoachTools(
     hrZones: a.hrZones ?? null,
     startDate: a.startDate,
   }));
+  // The progression snapshot is a pure function of the bound history and the
+  // request's clock, so every tool in this set would compute the identical
+  // object. Resolve it lazily and once (#261): a turn that never asks for
+  // progression pays nothing, and a turn that asks several times pays once.
+  let memoizedSnapshot: ReturnType<typeof computeSnapshot> | undefined;
+  const snapshot = () => (memoizedSnapshot ??= computeSnapshot(progressionInputs, now));
   // The accumulator must hold the *normalised* date, never the raw row value:
   // the Neon driver hands `startDate` back as an ISO string (see `ensureDate`),
   // so storing `run.startDate` here parked a string in a `Date`-typed slot and
@@ -136,7 +142,7 @@ export function buildCoachTools(
       {
         userId,
         goal: GOALS.zone2,
-        progression: computeSnapshot(progressionInputs, now),
+        progression: snapshot(),
         lastRun: latestRun ?? new Date(now.getTime() - 2 * DAY_MS),
         footballYesterday: false,
         raceDate,
@@ -208,7 +214,7 @@ export function buildCoachTools(
           {
             userId,
             goal: GOALS[goal ?? "zone2"],
-            progression: computeSnapshot(progressionInputs, now),
+            progression: snapshot(),
             lastRun: latestRun ?? new Date(now.getTime() - 2 * DAY_MS),
             footballYesterday: footballYesterday ?? false,
             injuryHistory: injuryHistory ?? false,
@@ -244,7 +250,7 @@ export function buildCoachTools(
         // history, same clock, same card.
         buildNextActivity({
           activities: progressionInputs,
-          progression: computeSnapshot(progressionInputs, now),
+          progression: snapshot(),
           now,
           raceDate,
           // Set when the model already asked for today's pas in this turn —
@@ -291,7 +297,7 @@ export function buildCoachTools(
           .nullish()
           .describe("Valgfri kort begrundelse — påvirker ikke beregningen"),
       }),
-      execute: async () => computeSnapshot(progressionInputs, now),
+      execute: async () => snapshot(),
     }),
 
     getWeekPlan: tool({

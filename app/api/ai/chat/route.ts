@@ -207,6 +207,7 @@ function emitToolBlocks(toolName: string, output: unknown, emit: (reply: ChatRep
         block: { kind: "variation", variation: parsed.data },
       });
     }
+    return;
   }
 }
 
