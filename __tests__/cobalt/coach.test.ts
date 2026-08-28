@@ -17,7 +17,12 @@ import { demoActivities } from "@/lib/demo/data";
  * load status) can be asserted without the full dashboard pipeline.
  */
 
-const NOW = new Date(2026, 6, 15, 9, 0);
+// The demo fixtures anchor their dates to "today" (startOfToday()); derive
+// the view-model's `now` from the newest fixture so the load window and the
+// activity window always overlap — the test stays deterministic because the
+// value is computed once at module load (issue #263).
+const NOW = new Date(demoActivities[0].startDate);
+const DAY_MS = 86_400_000;
 
 // ---------------------------------------------------------------------------
 // loadStatusFromRatio
@@ -81,7 +86,7 @@ describe("buildCoachView", () => {
   });
 
   it("attaches the actual long run as a clickable ActivityCard block, matching the fixture (issue #235)", () => {
-    const from = NOW.getTime() - 7 * 86_400_000;
+    const from = NOW.getTime() - 7 * DAY_MS;
     // The same fixture buildCoachView's longest-in-window read selects.
     const longest = demoActivities
       .filter((a) => a.startDate.getTime() >= from)
@@ -176,9 +181,11 @@ function dashboard(over: {
   } as any;
 }
 
+// Derived from NOW so the load window (NOW−13d … NOW) actually contains them,
+// regardless of when the suite runs (issue #263).
 const liveActivities: CoachLoadActivityLike[] = [
-  { startDate: new Date(2026, 6, 14), distance: 10_000 },
-  { startDate: new Date(2026, 6, 12), distance: 8_000 },
+  { startDate: new Date(NOW.getTime() - 1 * DAY_MS), distance: 10_000 },
+  { startDate: new Date(NOW.getTime() - 3 * DAY_MS), distance: 8_000 },
 ];
 
 describe("buildLiveCoachView", () => {
@@ -359,11 +366,15 @@ describe("buildLiveCoachView with persisted chat history (issue #202 + #205)", (
 // them through startOfDay(...).getDate(). Without ensureDate that throws
 // "getDate is not a function"; demo fixtures (Date objects) never hit it.
 describe("buildLiveCoachView with ISO-string startDate (issue #194)", () => {
-  // The DB row types startDate as Date but the driver returns a string.
+  // The DB row types startDate as Date but the driver returns a string. The
+  // instants are derived from NOW so the load bars are non-trivially populated
+  // whenever the suite runs (issue #263).
   const asString = (iso: string) => iso as unknown as Date;
+  const recent = new Date(NOW.getTime() - 1 * DAY_MS).toISOString();
+  const older = new Date(NOW.getTime() - 3 * DAY_MS).toISOString();
   const stringActivities: CoachLoadActivityLike[] = [
-    { startDate: asString("2026-07-14T07:30:00Z"), distance: 10_000 },
-    { startDate: asString("2026-07-12T07:30:00Z"), distance: 8_000 },
+    { startDate: asString(recent), distance: 10_000 },
+    { startDate: asString(older), distance: 8_000 },
   ];
 
   it("does not throw when startDate is an ISO string from the DB", () => {
@@ -377,8 +388,8 @@ describe("buildLiveCoachView with ISO-string startDate (issue #194)", () => {
     const fromDate = buildLiveCoachView(
       dashboard({ ratio: 1.0 }),
       [
-        { startDate: new Date("2026-07-14T07:30:00Z"), distance: 10_000 },
-        { startDate: new Date("2026-07-12T07:30:00Z"), distance: 8_000 },
+        { startDate: new Date(recent), distance: 10_000 },
+        { startDate: new Date(older), distance: 8_000 },
       ],
       NOW
     );
