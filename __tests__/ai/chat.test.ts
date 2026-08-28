@@ -571,7 +571,8 @@ describe("POST /api/ai/chat", () => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     const clientId = "retry-id-1";
 
-    // First request succeeds and persists the turn.
+    // First request succeeds and persists the turn — under the server-derived
+    // row id, never the raw client key (#270).
     const first = await POST(
       chatRequest({ messages: [{ role: "user", content: "Hej", clientMessageId: clientId }] })
     );
@@ -580,11 +581,18 @@ describe("POST /api/ai/chat", () => {
     expect(insertChatMessage).toHaveBeenCalledTimes(2);
     expect(insertChatMessage).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ id: clientId, userId: "user-1", role: "user", content: "Hej" })
+      expect.objectContaining({
+        id: "user-1::retry-id-1",
+        userId: "user-1",
+        role: "user",
+        content: "Hej",
+      })
     );
 
     // Second request carries the same clientMessageId: it should be treated as a
     // retry and neither insert the user turn again nor add a second assistant.
+    // The mocked history row uses the pre-#270 raw id format, which must keep
+    // deduplicating (legacy rows written before the derived id existed).
     vi.mocked(getChatHistory).mockResolvedValueOnce([
       { id: clientId, role: "user", content: "Hej" },
       { id: "assistant-1", role: "assistant", content: "Hej!" },
@@ -597,5 +605,111 @@ describe("POST /api/ai/chat", () => {
     expect(second.status).toBe(200);
     await readReplies(second);
     expect(insertChatMessage).not.toHaveBeenCalled();
+  });
+
+  it("persists the user turn under a server-derived row id with the client id sanitized (#270)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+
+    const res = await POST(
+      chatRequest({
+        messages: [{ role: "user", content: "Hej", clientMessageId: "cli\tent key-1" }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    await readReplies(res);
+    expect(insertChatMessage).toHaveBeenCalledTimes(2);
+    // The row id is `${userId}::${sanitized clientMessageId}` — whitespace and
+    // control characters stripped, user-scoped — and the assistant turn keeps
+    // its schema-generated id.
+    expect(insertChatMessage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        id: "user-1::clientkey-1",
+        userId: "user-1",
+        role: "user",
+        content: "Hej",
+      })
+    );
+    expect(insertChatMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ userId: "user-1", role: "assistant" })
+    );
+    const assistantCall = insertChatMessageMock.mock.calls[1]?.[0] as { id?: string } | undefined;
+    expect(assistantCall?.id).toBeUndefined();
+  });
+
+  it("derives collision-free row ids when two users send the same clientMessageId (#270)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+
+    authMock.mockResolvedValue({ user: { id: "user-1" } });
+    const first = await POST(
+      chatRequest({ messages: [{ role: "user", content: "Hej", clientMessageId: "shared-key" }] })
+    );
+    expect(first.status).toBe(200);
+    await readReplies(first);
+
+    authMock.mockResolvedValue({ user: { id: "user-2" } });
+    const second = await POST(
+      chatRequest({ messages: [{ role: "user", content: "Hej", clientMessageId: "shared-key" }] })
+    );
+    expect(second.status).toBe(200);
+    await readReplies(second);
+
+    // Both user turns persist — the shared client key is scoped behind each
+    // user id, so neither insert collides on the primary key.
+    const userInserts = insertChatMessageMock.mock.calls.filter(
+      (call) => (call[0] as { role: string }).role === "user"
+    );
+    expect(userInserts).toHaveLength(2);
+    const ids = userInserts.map((call) => (call[0] as { id?: string }).id);
+    expect(ids).toEqual(["user-1::shared-key", "user-2::shared-key"]);
+  });
+
+  it("does not duplicate a retry when history carries the derived row id (#270)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const clientId = "retry-id-2";
+
+    const first = await POST(
+      chatRequest({ messages: [{ role: "user", content: "Hej", clientMessageId: clientId }] })
+    );
+    expect(first.status).toBe(200);
+    await readReplies(first);
+
+    // A post-#270 history row is stored under the derived id; the retry with
+    // the same clientMessageId must still deduplicate against it.
+    vi.mocked(getChatHistory).mockResolvedValueOnce([
+      { id: "user-1::retry-id-2", role: "user", content: "Hej" },
+      { id: "assistant-1", role: "assistant", content: "Hej!" },
+    ]);
+    insertChatMessageMock.mockClear();
+
+    const second = await POST(
+      chatRequest({ messages: [{ role: "user", content: "Hej", clientMessageId: clientId }] })
+    );
+    expect(second.status).toBe(200);
+    await readReplies(second);
+    expect(insertChatMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the NDJSON reply shape and never leaks the derived row id (#270)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+
+    const res = await POST(
+      chatRequest({
+        messages: [{ role: "user", content: "Hej", clientMessageId: "leak-check-1" }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const replies = await readReplies(res);
+    expect(replies.map((r) => r.content).join("")).toBe("Hej Benjamin!");
+    // The client keeps its own idempotency key and the wire shape is unchanged:
+    // the internal row id is never streamed back to the browser.
+    for (const reply of replies) {
+      const wire = JSON.stringify(reply);
+      expect(wire).not.toContain("user-1::");
+      expect(wire).not.toContain("leak-check-1");
+    }
   });
 });

@@ -346,10 +346,20 @@ export async function POST(req: NextRequest) {
 
   // Idempotent retry: if the latest user turn has already been persisted
   // (same clientMessageId), it is already part of `history` and must not be
-  // inserted again (issue #205).
+  // inserted again (issue #205). Persisted rows carry the server-derived id
+  // (issue #270), so match against that — with the raw client id kept for rows
+  // written before #270 and for ids the client echoes back from loaded history.
+  const latestClientMessageId = latest?.clientMessageId;
+  const latestRowId =
+    latestClientMessageId !== undefined
+      ? derivedUserMessageRowId(userId, latestClientMessageId)
+      : undefined;
   const latestAlreadyInHistory =
-    latest?.clientMessageId !== undefined &&
-    history.some((entry) => entry.role === "user" && entry.id === latest.clientMessageId);
+    latestClientMessageId !== undefined &&
+    history.some(
+      (entry) =>
+        entry.role === "user" && (entry.id === latestRowId || entry.id === latestClientMessageId)
+    );
 
   const messages = (
     history.length > 0 && latest && !latestAlreadyInHistory
@@ -524,7 +534,12 @@ export async function POST(req: NextRequest) {
       if (answer.length > 0 && !isTruncated && !latestAlreadyInHistory) {
         if (latest?.role === "user") {
           await insertChatMessage({
-            ...(latest.clientMessageId ? { id: latest.clientMessageId } : {}),
+            // Server-derived PK (issue #270): the client's idempotency key is
+            // scoped behind the user id instead of being the global PK. A PK
+            // collision is still swallowed best-effort inside
+            // insertChatMessage — unreachable for the same user+message now,
+            // kept as defense-in-depth.
+            ...(latestRowId ? { id: latestRowId } : {}),
             userId,
             role: "user",
             content: latest.content,
@@ -559,6 +574,22 @@ async function currentUserId(): Promise<string | null> {
     captureError("api.ai.chat.auth", err);
     return null;
   }
+}
+
+/**
+ * Derive the server-side primary key for a persisted user chat turn (issue
+ * #270). The client-generated `clientMessageId` is an idempotency key, never a
+ * global PK: prefixing the user id makes the key unique per user, so a
+ * collision can only ever self-scope to the sending user. `chat_messages.id`
+ * is text with no length limit, so the composed key always fits and needs no
+ * hashing. The client part is stripped of whitespace/control characters and
+ * hard-capped at 128 — defense in depth on top of the request schema — and an
+ * empty result (e.g. a whitespace-only id) falls back to the schema's
+ * generated id, matching the previous falsy-id behaviour.
+ */
+function derivedUserMessageRowId(userId: string, clientMessageId: string): string | undefined {
+  const sanitized = clientMessageId.replace(/[\s\p{Cc}]+/gu, "").slice(0, 128);
+  return sanitized.length > 0 ? `${userId}::${sanitized}` : undefined;
 }
 
 /** Capture a provider error with the model id so incidents are debuggable. */
