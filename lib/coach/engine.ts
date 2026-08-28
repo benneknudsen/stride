@@ -31,7 +31,7 @@ export interface PhaseRules {
   longRunMaxKm: number;
 }
 
-export type Severity = "hard" | "soft" | "phase" | "safety";
+type Severity = "hard" | "soft" | "phase" | "safety";
 
 /**
  * A caller-supplied risk level for the planned session (issue #76 B2). Distinct
@@ -70,7 +70,7 @@ export const SESSION_TYPES = [
 
 export type SessionType = (typeof SESSION_TYPES)[number];
 
-export interface Constraint {
+interface Constraint {
   id: string;
   description: string;
   severity: Severity;
@@ -98,14 +98,14 @@ export interface WorkoutContext {
   raceDate?: Date;
 }
 
-export interface ValidationIssue {
+interface ValidationIssue {
   constraintId: string;
   severity: Severity;
   message: string;
   suggestion?: string;
 }
 
-export interface ValidationResult {
+interface ValidationResult {
   valid: boolean;
   issues: ValidationIssue[];
   warnings: ValidationIssue[];
@@ -145,7 +145,7 @@ export const MAX_WEEKLY_INCREASE_RATIO = 1.1;
  * The taper window: the final stretch before the race, once the peak block is
  * over. A date this close to the race date (and not past it) is a taper.
  */
-export const TAPER_WINDOW_DAYS = 21;
+const TAPER_WINDOW_DAYS = 21;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -298,7 +298,7 @@ export function getPhaseRules(phase: PhaseKey, raceDate: Date = DEFAULT_RACE_DAT
 }
 
 /** The user's home timezone — the plan and the athlete both live in Denmark. */
-export const APP_TIMEZONE = "Europe/Copenhagen";
+const APP_TIMEZONE = "Europe/Copenhagen";
 
 /**
  * Today's calendar day in Denmark, regardless of the server's timezone (E2).
@@ -353,7 +353,7 @@ export function getCurrentPhase(
 
 /** Monday-first weekday keys — the plan always runs Mon → Sun. */
 export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-export type Weekday = (typeof WEEKDAYS)[number];
+type Weekday = (typeof WEEKDAYS)[number];
 
 /**
  * How an easy Zone-2 run is shaped within the week (issue #211). The `type` stays
@@ -362,7 +362,7 @@ export type Weekday = (typeof WEEKDAYS)[number];
  * `easy-strides` day carries the strides before the long run, and `easy`/`medium`
  * alternate to give the volume a short/long wave.
  */
-export type EasySubtype = "recovery" | "easy" | "easy-strides" | "medium";
+type EasySubtype = "recovery" | "easy" | "easy-strides" | "medium";
 
 /** One day in a generated training week. Non-run days carry `type: "rest"`. */
 export interface PlannedSession {
@@ -870,7 +870,7 @@ export function validateWorkout(context: WorkoutContext): ValidationResult {
  * `undefined` gaps across a server→client prop) with a ready-to-render
  * `summary` line added.
  */
-export interface SerializedValidationResult {
+interface SerializedValidationResult {
   valid: boolean;
   issues: ValidationIssue[];
   warnings: ValidationIssue[];

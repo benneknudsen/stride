@@ -125,7 +125,7 @@ export interface PredictionActivity {
  * effort or one far shorter than the race; "high" means a body of recent work
  * with at least one effort in the race's own distance neighbourhood.
  */
-export type PredictionConfidence = "low" | "medium" | "high";
+type PredictionConfidence = "low" | "medium" | "high";
 
 /**
  * Where the heart-rate ceiling came from (issue #116). "database" is the
@@ -135,7 +135,7 @@ export type PredictionConfidence = "low" | "medium" | "high";
  * the effort discount it produces is conservative. "unknown" means no run
  * carried heart rate and no discount was applied at all.
  */
-export type HrMaxSource = "database" | "observations" | "unknown";
+type HrMaxSource = "database" | "observations" | "unknown";
 
 export interface RacePrediction {
   raceDistanceKm: number;
@@ -198,7 +198,7 @@ const LOCK_MESSAGES: Record<PredictionLockReason, (km: number) => string> = {
  * `message` and `requiredKm` are set — the "never guess" rule (issue #117): the
  * engine says what it's missing rather than inventing a race time from thin air.
  */
-export interface RacePredictionResult {
+interface RacePredictionResult {
   prediction: RacePrediction | null;
   reason: PredictionLockReason | null;
   message: string | null;

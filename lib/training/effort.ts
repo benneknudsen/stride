@@ -25,7 +25,7 @@ const HOUR_MS = 3_600_000;
  * (tærskel) and Zone 5 (VO2 max). Zone 3 is tempo — quality, but not the kind
  * of session that owes the body a 48 h recovery window.
  */
-export const HARD_EFFORT_MIN_ZONE = 4;
+const HARD_EFFORT_MIN_ZONE = 4;
 
 /**
  * How far back {@link hoursSinceHardEffort} looks. A week: far enough past the

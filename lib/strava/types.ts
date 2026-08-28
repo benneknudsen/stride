@@ -30,7 +30,7 @@ export type StravaWebhookSubscription = {
   updated_at: string;
 };
 
-export type StravaAthlete = {
+type StravaAthlete = {
   id: number;
   username: string | null;
   firstname: string;
@@ -43,7 +43,7 @@ export type StravaAthlete = {
   profile: string | null;
 };
 
-export type StravaMap = {
+type StravaMap = {
   id: string;
   summary_polyline: string | null;
   resource_state: number;
@@ -109,7 +109,7 @@ export type DetailedActivity = SummaryActivity & {
   embed_token: string | null;
 };
 
-export type StravLap = {
+type StravLap = {
   id: number;
   name: string;
   elapsed_time: number;

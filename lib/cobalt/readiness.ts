@@ -25,7 +25,7 @@
 
 import { MIN_RECOVERY_HOURS } from "@/lib/coach/engine";
 
-export type ReadinessBand = "ready" | "easy" | "rest";
+type ReadinessBand = "ready" | "easy" | "rest";
 
 export interface Readiness {
   /** Readiness percentage, clamped to 55–95 (never 0 or 100 — it's an estimate). */
@@ -141,14 +141,4 @@ export function readinessWithRecovery(
   // The cap lowers the ceiling; it must not lift a "rest" read into "easy".
   const band = base.band === "rest" ? "rest" : bandForPct(pct);
   return { pct, band, note: BAND_NOTES[band] };
-}
-
-/**
- * The readiness band for a ratio, under the name the coach modules import
- * (issue #245). A thin alias of {@link readinessFromRatio} so the coach reads
- * readiness through the exact same asymmetric mapping the gauge does — one
- * source of truth for "how ready is the athlete", no divergent risk thresholds.
- */
-export function getReadinessBand(ratio: number | null): Readiness {
-  return readinessFromRatio(ratio);
 }

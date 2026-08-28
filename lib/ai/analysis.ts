@@ -54,7 +54,7 @@ export interface AnalysisActivity {
  * of `ProgressionSnapshot` (lib/training/progression.ts), kept small and
  * deterministic so it hashes stably.
  */
-export interface AnalysisProgression {
+interface AnalysisProgression {
   /** True when at least 4 weeks of history exist. Metrics below are null without it. */
   hasFullWindow: boolean;
   /** Acute:chronic training-load ratio, rounded to 2 decimals. */

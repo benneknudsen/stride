@@ -328,7 +328,7 @@ function isRun(activity: HomeActivityLike): boolean {
  * any activity synced before `activities.source` existed (its column default is
  * "strava" for exactly the same reason).
  */
-export const ACTIVITY_SOURCE: ActivitySource = "strava";
+const ACTIVITY_SOURCE: ActivitySource = "strava";
 
 /**
  * The badge a row should carry. Source arrives as the DB's free-text column, so

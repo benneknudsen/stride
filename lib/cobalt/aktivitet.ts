@@ -90,7 +90,7 @@ export interface ActivityStatView {
 }
 
 /** One bar of the per-activity zone split. */
-export interface ZoneSliceView {
+interface ZoneSliceView {
   key: ZoneKey;
   label: string;
   color: string;

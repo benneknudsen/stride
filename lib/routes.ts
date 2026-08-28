@@ -45,5 +45,3 @@ export const LEGACY_COACH_ROUTE = "/coach";
 export function activityRoute(id: string): string {
   return `${ROUTES.AKTIVITETER}/${encodeURIComponent(id)}`;
 }
-
-export type RouteKey = keyof typeof ROUTES;

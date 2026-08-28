@@ -3,7 +3,6 @@ import type { ProgressionActivityInput } from "../../lib/training/progression";
 import {
   computeProgression,
   computeSnapshot,
-  getCurrentProgression,
   getProgression,
   TAU_ACUTE,
   TAU_CHRONIC,
@@ -424,7 +423,7 @@ describe("computeProgression — time series", () => {
   });
 });
 
-describe("getProgression / getCurrentProgression", () => {
+describe("getProgression", () => {
   const rows = [
     ...steadyBase(),
     run({ daysAgo: 1, km: 200, type: "Ride" }), // must be filtered out
@@ -433,8 +432,8 @@ describe("getProgression / getCurrentProgression", () => {
   beforeEach(() => {
     vi.mocked(getActivities).mockReset();
     vi.mocked(getActivities).mockResolvedValue(rows as never);
-    // getCurrentProgression reads the real clock; pin it to AS_OF so the
-    // fixtures' acute window can't drift out from under the test over time.
+    // getProgression reads the real clock; pin it to AS_OF so the fixtures'
+    // acute window can't drift out from under the test over time.
     vi.useFakeTimers();
     vi.setSystemTime(AS_OF);
   });
@@ -453,11 +452,5 @@ describe("getProgression / getCurrentProgression", () => {
     const series = await getProgression("user-1", 1);
     // The 200 km ride would dwarf the ~90 km of runs if it leaked through.
     expect(series.at(-1)?.volumeKm ?? 0).toBeLessThan(150);
-  });
-
-  it("getCurrentProgression returns a single snapshot", async () => {
-    const snapshot = await getCurrentProgression("user-1");
-    expect(snapshot.date).toBeInstanceOf(Date);
-    expect(snapshot.trainingLoad.acute).toBeGreaterThan(0);
   });
 });

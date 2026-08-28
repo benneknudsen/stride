@@ -13,7 +13,7 @@ import type { HrZone } from "@/types/domain";
 
 export type ZoneNumber = 1 | 2 | 3 | 4 | 5;
 
-export interface ZoneMeta {
+interface ZoneMeta {
   zone: ZoneNumber;
   /** Short key used as a Recharts dataKey, e.g. "z2". */
   key: `z${ZoneNumber}`;
@@ -127,14 +127,14 @@ export interface ZoneActivityInput {
 }
 
 /** One zone's slice of the aggregated breakdown. */
-export interface ZoneSlice {
+interface ZoneSlice {
   meta: ZoneMeta;
   seconds: number;
   /** Share of total time, 0–100. */
   percent: number;
 }
 
-export interface ZoneBreakdown {
+interface ZoneBreakdown {
   /** Always five slices, ordered zone 1 → 5. */
   slices: ZoneSlice[];
   totalSeconds: number;

@@ -126,14 +126,12 @@ vi.mock("@/lib/db/index", () => ({ db: mock.db }));
 
 import { fromDbDate, toDbDate } from "@/lib/db/calendar-date";
 import {
-  getAccountsByUserId,
   getActivities,
   getActivityById,
   getCachedAnalysis,
   getChatHistory,
   getRacePlan,
   getStravaTokens,
-  getUserByEmail,
   getUserById,
   getUserByStravaAthleteId,
   getUserHrMax,
@@ -152,36 +150,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
-});
-
-// ---------------------------------------------------------------------------
-// getUserByEmail
-// ---------------------------------------------------------------------------
-
-describe("getUserByEmail", () => {
-  it("returns the matching user row", async () => {
-    const user = { id: "u1", email: "a@b.com", name: "A" };
-    mock.setResult([user]);
-    expect(await getUserByEmail("a@b.com")).toEqual(user);
-    expect(mock.db.select).toHaveBeenCalledTimes(1);
-    // Ownership/identity lookups are single-row.
-    expect(mock.calls.limit?.[0]?.[0]).toBe(1);
-  });
-
-  it("returns null when no row matches (empty result)", async () => {
-    mock.setResult([]);
-    expect(await getUserByEmail("missing@b.com")).toBeNull();
-  });
-
-  it("returns null (not undefined) when the row is undefined", async () => {
-    mock.setResult([undefined]);
-    expect(await getUserByEmail("x@b.com")).toBeNull();
-  });
-
-  it("returns null when the query throws", async () => {
-    mock.setError(DB_ERROR);
-    expect(await getUserByEmail("a@b.com")).toBeNull();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -243,40 +211,7 @@ describe("getUserHrMax", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getAccountsByUserId
-// ---------------------------------------------------------------------------
-
-describe("getAccountsByUserId", () => {
-  it("returns the list of linked accounts", async () => {
-    const rows = [
-      { provider: "github", type: "oauth" },
-      { provider: "strava", type: "oauth" },
-    ];
-    mock.setResult(rows);
-    expect(await getAccountsByUserId("u1")).toEqual(rows);
-  });
-
-  it("selects only the non-sensitive identity columns", async () => {
-    mock.setResult([]);
-    await getAccountsByUserId("u1");
-    expect(mock.db.select).toHaveBeenCalledWith({
-      provider: expect.anything(),
-      type: expect.anything(),
-    });
-  });
-
-  it("returns an empty array when the user has no accounts", async () => {
-    mock.setResult([]);
-    expect(await getAccountsByUserId("u1")).toEqual([]);
-  });
-
-  it("returns an empty array when the query throws", async () => {
-    mock.setError(DB_ERROR);
-    expect(await getAccountsByUserId("u1")).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------
+// User identity resolution (by external provider id)
 // ---------------------------------------------------------------------------
 
 describe("getUserByStravaAthleteId", () => {

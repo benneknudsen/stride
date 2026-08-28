@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { GOAL_LIST, GOALS, ZONE_COLOR } from "../lib/training/goals";
+import { GOALS } from "../lib/training/goals";
 
 describe("Training Goals Configuration", () => {
   test("GOALS object structure contains all required fields for each goal", () => {
@@ -24,18 +24,5 @@ describe("Training Goals Configuration", () => {
       expect(goal.next).toHaveProperty("zone");
       expect(goal.next).toHaveProperty("why");
     });
-  });
-
-  test("ZONE_COLOR maps all 5 zones (z1-z5)", () => {
-    const zones = ["z1", "z2", "z3", "z4", "z5"];
-    zones.forEach((zone) => {
-      expect(ZONE_COLOR).toHaveProperty(zone);
-      expect(typeof ZONE_COLOR[zone as keyof typeof ZONE_COLOR]).toBe("string");
-    });
-    expect(Object.keys(ZONE_COLOR).length).toBe(5);
-  });
-
-  test("GOAL_LIST equals Object.values(GOALS)", () => {
-    expect(GOAL_LIST).toEqual(Object.values(GOALS));
   });
 });

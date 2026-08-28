@@ -28,7 +28,7 @@
 /** Channels whose content is shown to the user. `""` is the pre-channel default. */
 const EMIT_CHANNELS = new Set(["", "final"]);
 
-export interface HarmonyFilter {
+interface HarmonyFilter {
   /** Feed a streamed chunk; returns the user-facing text ready to emit now. */
   push(chunk: string): string;
   /** Signal end of stream; returns any held-back or salvaged trailing text. */
@@ -165,10 +165,4 @@ export function createHarmonyFilter(): HarmonyFilter {
       return out;
     },
   };
-}
-
-/** One-shot convenience: sanitise a complete string (used in tests). */
-export function stripHarmony(text: string): string {
-  const filter = createHarmonyFilter();
-  return filter.push(text) + filter.flush();
 }

@@ -1,14 +1,7 @@
 import { and, desc, eq, gt, gte, inArray, lt, lte, max } from "drizzle-orm";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { cache } from "react";
-import {
-  accounts,
-  activities,
-  aiAnalyses,
-  chatMessages,
-  stravaTokens,
-  users,
-} from "../../drizzle/schema";
+import { activities, aiAnalyses, chatMessages, stravaTokens, users } from "../../drizzle/schema";
 import type { ChatActivity, ChatBlock, ChatBlockReference } from "../../types/chat";
 import { chatBlockReferenceSchema } from "../../types/chat";
 import type { AnalysisScope, HrZone } from "../../types/domain";
@@ -54,16 +47,6 @@ function dashboardActivitiesTag(userId: string): string {
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
-
-export const getUserByEmail = cache(async (email: string) => {
-  try {
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    return user ?? null;
-  } catch (err) {
-    captureError("queries.getUserByEmail", err);
-    return null;
-  }
-});
 
 export const getUserById = cache(async (id: string) => {
   try {
@@ -141,22 +124,6 @@ export async function updateRacePlan(
   if (!user) return null;
   return { ...user, raceDate: fromDbDate(user.raceDate) };
 }
-
-/**
- * OAuth accounts linked to a user via NextAuth (GitHub, Google, …). Returns the
- * non-sensitive identity columns only — never the stored tokens.
- */
-export const getAccountsByUserId = cache(async (userId: string) => {
-  try {
-    return await db
-      .select({ provider: accounts.provider, type: accounts.type })
-      .from(accounts)
-      .where(eq(accounts.userId, userId));
-  } catch (err) {
-    captureError("queries.getAccountsByUserId", err);
-    return [];
-  }
-});
 
 // ---------------------------------------------------------------------------
 // User identity resolution (by external provider id)

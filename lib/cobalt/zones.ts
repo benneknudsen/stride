@@ -23,7 +23,7 @@ import {
 
 export type ZoneKey = "z1" | "z2" | "z3" | "z4" | "z5";
 
-export interface ZoneRampStep {
+interface ZoneRampStep {
   key: ZoneKey;
   label: string;
   color: string;
@@ -38,7 +38,7 @@ export const ZONE_RAMP: ZoneRampStep[] = [
 ];
 
 /** A zone as the activity badges wear it: IntensityMeter level + plain Danish. */
-export interface ZoneBadge {
+interface ZoneBadge {
   /** IntensityMeter level 1–5 — the ZoneNumber itself. */
   level: ZoneNumber;
   /** Plain-language Danish zone (never "Z3"). */

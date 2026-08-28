@@ -27,7 +27,7 @@ export interface CoachFeedActivityInput {
 }
 
 /** The wire-shaped request the analyze endpoint validates (see its zod schema). */
-export interface CoachFeedRequest {
+interface CoachFeedRequest {
   scope: AnalysisScope;
   activities: {
     startDate: string;

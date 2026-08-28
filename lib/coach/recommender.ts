@@ -42,7 +42,7 @@ import type { Goal } from "@/lib/training/goals";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
 /** One day of the recommendation's week strip — the engine's planned session. */
-export type WeekDay = PlannedSession;
+type WeekDay = PlannedSession;
 
 export interface WorkoutInput {
   /** Carried for future multi-goal support — not yet wired into the recommender. */
@@ -89,11 +89,11 @@ export interface WorkoutRecommendation {
 // ── Tunables ────────────────────────────────────────────────────────────────
 
 /** Recovery buffer when the athlete has an injury history: one extra day. */
-export const INJURY_RECOVERY_HOURS = 72;
+const INJURY_RECOVERY_HOURS = 72;
 
 /** A break this long or longer counts as a pause — restart 20% shorter. */
-export const PAUSE_DAYS = 14;
-export const PAUSE_DISTANCE_FACTOR = 0.8;
+const PAUSE_DAYS = 14;
+const PAUSE_DISTANCE_FACTOR = 0.8;
 
 /** Heart-rate ceiling for a tempo session, in bpm. */
 export const TEMPO_HR_CAP_BPM = 172;
@@ -106,7 +106,7 @@ export const TEMPO_HR_CAP_BPM = 172;
  * spread the volume even harder. The engine's `MAX_WEEKLY_INCREASE_RATIO` is a
  * separate, week-over-week guard; this one is week-against-plan.
  */
-export const WEEKLY_VOLUME_RATIO = 1;
+const WEEKLY_VOLUME_RATIO = 1;
 
 /** Target pace bands per run type, min (fast) → max (slow), in min/km.
  * Exported so the plan page's target metas quote the same bands the

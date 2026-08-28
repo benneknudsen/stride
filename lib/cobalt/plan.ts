@@ -142,7 +142,7 @@ export interface UpcomingWeek {
  * runner we couldn't predict a race for — a visitor on the demo plan sees the
  * designed numbers, not a lock they can't do anything about.
  */
-export interface RaceLock {
+interface RaceLock {
   reason: PredictionLockReason;
   /** Danish, action-directing: what the runner can do to unlock the estimate. */
   message: string;
@@ -322,7 +322,7 @@ function paceRangeOf(secondsPerKm: number, spread: number): { min: string; max: 
  * (`zonePaces`), so recovery/easy → easy target, tempo → quality target, long →
  * long target. `spread` widens the range under low confidence (issue #231).
  */
-export function buildRunSuggestions(
+function buildRunSuggestions(
   phase: PhaseKey,
   paces: Record<PaceZone, number>,
   raceDate: Date = DEFAULT_RACE_DATE,
@@ -556,7 +556,7 @@ function buildDerivedPlan(
  * its own recovery buffer to say *which* one to do — the plan never prescribes a
  * day.
  */
-export interface PlanSuggestions {
+interface PlanSuggestions {
   phase: PhaseKey;
   /** The phase's label ("Burn"), for prose. */
   phaseLabel: string;

@@ -2,18 +2,10 @@
 // "Pick your plan" screen and the committed dashboard. Each goal drives the
 // fit verdict, the recommended next run, and the week plan.
 
-export type GoalKey = "c25k" | "marathon" | "zone2" | "efficient";
+type GoalKey = "c25k" | "marathon" | "zone2" | "efficient";
 export type ZoneKey = "z1" | "z2" | "z3" | "z4" | "z5";
 
-export const ZONE_COLOR: Record<ZoneKey, string> = {
-  z1: "#9CA3AF",
-  z2: "#2536d8",
-  z3: "#06B6D4",
-  z4: "#F97316",
-  z5: "#EF4444",
-};
-
-export interface NextRun {
+interface NextRun {
   tag: string;
   type: string;
   distance: string;
@@ -130,5 +122,3 @@ export const GOALS: Record<GoalKey, Goal> = {
     week: ["Tempo", "Easy", "Rest", "Intervals", "Rest", "Long", "Recovery"],
   },
 };
-
-export const GOAL_LIST = Object.values(GOALS);

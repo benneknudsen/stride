@@ -38,11 +38,6 @@ export function formatDuration(seconds: number): string {
   return `${hrs}:${mins.toString().padStart(2, "0")}h`;
 }
 
-/** Convert meters to a km string with one decimal place. */
-export function formatDistance(meters: number): string {
-  return (meters / 1000).toFixed(1);
-}
-
 /**
  * Sum distance (meters) for activities falling in a given week offset, where
  * `weeksAgo` of 0 is the current week and 1 is last week.
@@ -78,73 +73,4 @@ export function getWeeklyVolume(
       return start >= startOfWeek && start < endOfWeek;
     })
     .reduce((sum, a) => sum + a.distance, 0);
-}
-
-/** Human label for a week offset, used as the x-axis tick on the volume chart. */
-export function getWeekLabel(weeksAgo: number): string {
-  if (weeksAgo === 0) return "This Week";
-  if (weeksAgo === 1) return "Last Week";
-  const d = getLocalDate();
-  d.setDate(d.getDate() - weeksAgo * 7);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-/**
- * Build the `{ week, km }` series for the weekly-volume chart, oldest week
- * first. Distance is rounded to one decimal kilometre.
- */
-export function getWeeklyVolumeSeries(
-  activities: { startDate: Date; distance: number }[],
-  weeks = 12
-): { week: string; km: number }[] {
-  return Array.from({ length: weeks }, (_, i) => {
-    const weeksAgo = weeks - 1 - i;
-    return {
-      week: getWeekLabel(weeksAgo),
-      km: Math.round(getWeeklyVolume(activities, weeksAgo) / 100) / 10,
-    };
-  });
-}
-
-/** Pace buckets (seconds/km) for the distribution chart. */
-export const PACE_BUCKETS = [
-  { range: "< 4:30", min: 0, max: 270 },
-  { range: "4:30-5:00", min: 270, max: 300 },
-  { range: "5:00-5:30", min: 300, max: 330 },
-  { range: "5:30-6:00", min: 330, max: 360 },
-  { range: "> 6:00", min: 360, max: Number.POSITIVE_INFINITY },
-] as const;
-
-/**
- * Count activities into pace buckets. `averageSpeed` is meters/second
- * (nullable); activities without a recorded speed are dropped.
- */
-export function getPaceDistribution(
-  activities: { averageSpeed: number | null }[]
-): { pace: string; count: number }[] {
-  const paces = activities
-    .map((a) => a.averageSpeed)
-    .filter((s): s is number => s !== null && s > 0)
-    .map((s) => 1000 / s);
-
-  return PACE_BUCKETS.map((b) => ({
-    pace: b.range,
-    count: paces.filter((p) => p >= b.min && p < b.max).length,
-  }));
-}
-
-/** Summary tiles for the dashboard header: weekly volume, 7-day pace, total. */
-export function getSummaryStats(
-  activities: { startDate: Date; distance: number; movingTime: number }[]
-): { thisWeekVolume: number; avgPace: number | null; totalDistance: number } {
-  const thisWeekVolume = getWeeklyVolume(activities, 0);
-
-  const recentRuns = activities.slice(0, 7);
-  const recentDistance = recentRuns.reduce((sum, a) => sum + a.distance, 0);
-  const recentMovingTime = recentRuns.reduce((sum, a) => sum + a.movingTime, 0);
-  const avgPace = recentMovingTime > 0 ? recentDistance / recentMovingTime : null;
-
-  const totalDistance = activities.reduce((sum, a) => sum + a.distance, 0);
-
-  return { thisWeekVolume, avgPace, totalDistance };
 }

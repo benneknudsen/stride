@@ -54,6 +54,3 @@ export type Database = typeof db;
 
 /** The transaction handle passed to `db.transaction(async (tx) => ...)`. */
 export type DbTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-
-/** Accepts either the top-level `db` or a transaction handle — for queries callable both ways. */
-export type DbOrTx = Database | DbTransaction;

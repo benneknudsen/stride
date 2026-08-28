@@ -142,7 +142,7 @@ export function buildVolumeSeries(
 // ── Training-load gauge ─────────────────────────────────────────────────────
 
 /** The gauge's bands: every risk classification plus the no-data fallback. */
-export type LoadRiskBand = LoadRisk | "unknown";
+type LoadRiskBand = LoadRisk | "unknown";
 
 // `satisfies` keeps the value type the exact key set (no widening to a loose
 // index signature) while forcing every band to be present and rejecting stray

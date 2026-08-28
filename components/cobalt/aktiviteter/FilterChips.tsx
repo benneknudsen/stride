@@ -1,5 +1,3 @@
-"use client";
-
 import type { ActivityFilter } from "@/lib/cobalt/aktiviteter";
 import { cn } from "@/lib/utils";
 

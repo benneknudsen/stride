@@ -69,7 +69,7 @@ import { dominantZone, isHardEffort } from "@/lib/training/effort";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
 /** How many recent runs the recommendation reads. */
-export const NEXT_ACTIVITY_SAMPLE = 5;
+const NEXT_ACTIVITY_SAMPLE = 5;
 
 /**
  * A run counts as "long" from this share of the phase's long-run ceiling
@@ -77,7 +77,7 @@ export const NEXT_ACTIVITY_SAMPLE = 5;
  * 8 km in the taper. Phase-relative rather than a fixed number so the bar moves
  * with what the block actually asks for.
  */
-export const LONG_RUN_MIN_FACTOR = 0.8;
+const LONG_RUN_MIN_FACTOR = 0.8;
 
 const HOUR_MS = 3_600_000;
 
@@ -88,10 +88,7 @@ const HOUR_MS = 3_600_000;
  * way: `fartlek`/`intervals` are exactly the types the phase plan's standard
  * easy/tempo/long week never schedules.
  */
-export type NextActivityType = Extract<
-  SessionType,
-  "rest" | "easy" | "long" | "fartlek" | "intervals"
->;
+type NextActivityType = Extract<SessionType, "rest" | "easy" | "long" | "fartlek" | "intervals">;
 
 /** Everything but `rest` — the types that actually prescribe a run. */
 type RunType = Exclude<NextActivityType, "rest">;
@@ -142,7 +139,7 @@ export interface NextActivityView {
   reason: string[];
 }
 
-export interface NextActivityInput {
+interface NextActivityInput {
   /** The runner's history; the newest {@link NEXT_ACTIVITY_SAMPLE} runs are read. */
   activities: CoachActivityInput[];
   /** Current progression snapshot — its training load drives readiness. */

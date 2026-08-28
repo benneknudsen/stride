@@ -65,7 +65,7 @@ export function hrZonesFromSplits(splits: Split[], config: ZoneHrConfig = {}): H
   }));
 }
 
-export function mapStravaActivity(raw: DetailedActivity): Activity {
+function mapStravaActivity(raw: DetailedActivity): Activity {
   return {
     stravaActivityId: raw.id,
     name: raw.name,

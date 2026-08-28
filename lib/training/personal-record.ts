@@ -21,7 +21,7 @@ export interface RecordActivityLike {
   movingTime: number;
 }
 
-export type PersonalRecordKind = "5k" | "10k" | "half" | "longest";
+type PersonalRecordKind = "5k" | "10k" | "half" | "longest";
 
 const HALF_MARATHON_M = 21_097.5;
 

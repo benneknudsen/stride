@@ -3,13 +3,12 @@
  *
  * The model never emits free-form markup. Instead it invokes one of these
  * typed tools, and the analysis panel renders the matching pre-defined
- * component (see `components/ai/analysis-block.tsx`). Each tool's input schema
- * is the single source of truth: it drives the model's structured output, the
- * runtime validation, and the React component props.
+ * component (see `components/cobalt/coach-dashboard/CoachFeed.tsx`). Each tool's
+ * input schema is the single source of truth: it drives the model's structured
+ * output, the runtime validation, and the React component props.
  *
  * Future dashboard cards (#26 Zone Breakdown, etc.) extract from this pattern —
- * add a tool schema here, a component in `components/ai/`, and a branch in the
- * renderer.
+ * add a tool schema here, a renderer branch in `CoachFeed.tsx`, and a card view.
  */
 
 import { z } from "zod";
@@ -18,34 +17,31 @@ import { z } from "zod";
 // Shared enums
 // ---------------------------------------------------------------------------
 
-export const sentimentSchema = z.enum(["positive", "neutral", "caution"]);
-export type Sentiment = z.infer<typeof sentimentSchema>;
+const sentimentSchema = z.enum(["positive", "neutral", "caution"]);
 
-export const trendDirectionSchema = z.enum(["up", "down", "flat"]);
+const trendDirectionSchema = z.enum(["up", "down", "flat"]);
 export type TrendDirection = z.infer<typeof trendDirectionSchema>;
 
-export const coachInsightTypeSchema = z.enum(["insight", "warning", "milestone"]);
-export type CoachInsightType = z.infer<typeof coachInsightTypeSchema>;
+const coachInsightTypeSchema = z.enum(["insight", "warning", "milestone"]);
 
 /** Session risk level (issue #76 B2) — mirrors the engine's `SessionRisk`. */
-export const sessionRiskSchema = z.enum(["low", "medium", "high"]);
+const sessionRiskSchema = z.enum(["low", "medium", "high"]);
 export type SessionRisk = z.infer<typeof sessionRiskSchema>;
 
 /** One progression metric rendered inside a coach insight — a labelled value with a trend arrow. */
-export const progressionPointSchema = z.object({
+const progressionPointSchema = z.object({
   label: z.string().describe("Metric name, e.g. 'Load ratio' or '4-week volume'"),
   value: z.string().describe("The metric's current value with unit, e.g. '1.62' or '104 km'"),
   direction: trendDirectionSchema.describe("Which way the metric is trending"),
   changeLabel: z.string().optional().describe("Optional signed change, e.g. '+38%'"),
 });
-export type ProgressionPoint = z.infer<typeof progressionPointSchema>;
 
 // ---------------------------------------------------------------------------
 // Tool input schemas — one per pre-defined component
 // ---------------------------------------------------------------------------
 
 /** Headline observation grounded in the athlete's data. */
-export const insightCardSchema = z.object({
+const insightCardSchema = z.object({
   title: z.string().describe("Short headline, ≤ 6 words"),
   body: z.string().describe("One or two sentences explaining the insight, grounded in the data"),
   sentiment: sentimentSchema.describe(
@@ -58,7 +54,7 @@ export const insightCardSchema = z.object({
 });
 
 /** A directional trend over recent weeks. */
-export const trendCalloutSchema = z.object({
+const trendCalloutSchema = z.object({
   title: z.string().describe("What is trending, ≤ 6 words, e.g. 'Weekly volume'"),
   direction: trendDirectionSchema.describe("up = increasing, down = decreasing, flat = steady"),
   changeLabel: z.string().describe("Human change label, e.g. '+18%' or '−0:12 /km'"),
@@ -67,7 +63,7 @@ export const trendCalloutSchema = z.object({
 });
 
 /** A concrete next-session recommendation. */
-export const workoutRecommendationSchema = z.object({
+const workoutRecommendationSchema = z.object({
   title: z.string().describe("Workout name, e.g. 'Tempo intervals'"),
   workoutType: z
     .string()
@@ -87,7 +83,7 @@ export const workoutRecommendationSchema = z.object({
 });
 
 /** A head-to-head comparison of one metric across two periods. */
-export const metricComparisonSchema = z.object({
+const metricComparisonSchema = z.object({
   title: z.string().describe("What is being compared, e.g. 'Avg pace: this week vs last'"),
   metric: z.string().describe("Metric name, e.g. 'Average pace'"),
   current: z.string().describe("Current-period value with unit, e.g. '5:12 /km'"),
@@ -129,7 +125,7 @@ export const analysisBlockSchema = z.discriminatedUnion("tool", [
 export type AnalysisBlock = z.infer<typeof analysisBlockSchema>;
 
 /** The tool names the union covers — the persisted `name` discriminant. */
-export type AnalysisToolName = AnalysisBlock["tool"];
+type AnalysisToolName = AnalysisBlock["tool"];
 
 /** Narrow a block to the `insightCard` variant (and friends), for the renderer. */
 export type AnalysisBlockOf<T extends AnalysisToolName> = Extract<AnalysisBlock, { tool: T }>;

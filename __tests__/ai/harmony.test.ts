@@ -10,39 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createHarmonyFilter, stripHarmony } from "@/lib/ai/harmony";
-
-describe("stripHarmony", () => {
-  it("keeps only the final channel and drops thought + control tokens", () => {
-    const raw =
-      "<|channel|>thought<|channel|>internal reasoning<|channel|>final<|channel|>actual answer<|end|>";
-    expect(stripHarmony(raw)).toBe("actual answer");
-  });
-
-  it("leaves text without any markers unchanged", () => {
-    expect(stripHarmony("Hej Benjamin!")).toBe("Hej Benjamin!");
-  });
-
-  it("keeps the content when a thought marker leaks but no final channel follows", () => {
-    // The real #222 leak: a spurious thought header in front of the only answer.
-    // Dropping the whole channel would show the user nothing, so the mis-tagged
-    // content is flushed with its markers stripped.
-    expect(stripHarmony("<|channel|>thought<|channel|>Dit seneste løb blev registreret.")).toBe(
-      "Dit seneste løb blev registreret."
-    );
-  });
-
-  it("handles the full harmony framing with start/message/end tokens", () => {
-    const raw =
-      "<|start|>assistant<|channel|>analysis<|message|>reasoning<|end|>" +
-      "<|start|>assistant<|channel|>final<|message|>Kør et roligt pas.<|end|>";
-    expect(stripHarmony(raw)).toBe("Kør et roligt pas.");
-  });
-
-  it("strips malformed fragments that are missing a pipe", () => {
-    expect(stripHarmony("<channel|>Dit svar.")).toBe("Dit svar.");
-  });
-});
+import { createHarmonyFilter } from "@/lib/ai/harmony";
 
 describe("createHarmonyFilter", () => {
   it("catches a marker split across two chunks", () => {

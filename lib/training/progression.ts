@@ -4,12 +4,11 @@
 // Cobalt view-models — which client components import — can share it without
 // pulling lib/db into the browser bundle) and is re-exported here unchanged:
 // server code keeps importing everything from this module. `getProgression`
-// and `getCurrentProgression` are the thin DB-backed wrappers.
+// is the thin DB-backed wrapper.
 
 import { getActivities } from "@/lib/db/queries";
 import {
   computeProgression,
-  computeSnapshot,
   isRun,
   type ProgressionActivityInput,
   type ProgressionSnapshot,
@@ -37,10 +36,4 @@ async function fetchRuns(userId: string, weeks: number, asOf: Date) {
 export async function getProgression(userId: string, weeks = 12): Promise<ProgressionSnapshot[]> {
   const asOf = new Date();
   return computeProgression(await fetchRuns(userId, weeks, asOf), weeks, asOf);
-}
-
-/** The user's progression right now — a single up-to-date snapshot. */
-export async function getCurrentProgression(userId: string): Promise<ProgressionSnapshot> {
-  const asOf = new Date();
-  return computeSnapshot(await fetchRuns(userId, 0, asOf), asOf);
 }

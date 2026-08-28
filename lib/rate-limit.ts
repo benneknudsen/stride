@@ -23,7 +23,7 @@ const buckets = new Map<string, Bucket>();
  *  within their window are never evicted — the ceiling is rate × window. */
 const MAX_BUCKETS = 10_000;
 
-export type RateLimitResult = {
+type RateLimitResult = {
   /** Whether the request is allowed under the current window. */
   allowed: boolean;
   /** Remaining requests in the current window (0 when blocked). */
@@ -32,7 +32,7 @@ export type RateLimitResult = {
   resetAt: number;
 };
 
-export type RateLimitOptions = {
+type RateLimitOptions = {
   /** Max requests allowed per window. Default 5. */
   max?: number;
   /** Window length in milliseconds. Default 10 minutes. */

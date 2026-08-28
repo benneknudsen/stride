@@ -1,5 +1,3 @@
-"use client";
-
 import { ChevronRight, Footprints, HeartPulse } from "lucide-react";
 import Link from "next/link";
 import { formatDanish } from "@/lib/cobalt/format";

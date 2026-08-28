@@ -54,11 +54,6 @@ export type Activity = Omit<typeof activities.$inferSelect, "splits" | "hrZones"
   hrZones: HrZone[] | null;
 };
 
-/** An activity guaranteed to carry its splits (e.g. on the detail page). */
-export type ActivityWithSplits = Activity & {
-  splits: Split[];
-};
-
 // ---------------------------------------------------------------------------
 // AI analyses
 // ---------------------------------------------------------------------------

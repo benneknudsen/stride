@@ -34,7 +34,7 @@ export type ChatRole = "coach" | "user";
  * stored conversation, replayed into the panel on load (issue #202). Roles are
  * the model's ("assistant"/"user"); the view-model maps "assistant" → "coach".
  */
-export interface ChatHistoryEntry {
+interface ChatHistoryEntry {
   id: string;
   role: "user" | "assistant";
   content: string;
@@ -69,7 +69,7 @@ export interface ChatMessage {
   clientId?: string;
 }
 
-export interface LoadBar {
+interface LoadBar {
   /** Day index 0 (13 days ago) → 13 (today). */
   id: string;
   /** Relative bar height 0–1. */
@@ -85,7 +85,7 @@ export interface LoadBar {
  * MessageBubble can't tell a demo card from a live one — the visitor demo shows
  * real interactive UI, not just prose.
  */
-export interface DemoReply {
+interface DemoReply {
   text: string;
   blocks?: ChatBlock[];
 }
@@ -145,7 +145,7 @@ export interface CoachLoadActivityLike {
 }
 
 /** What the scripted demo transcript reads on top of that — fixtures always carry it. */
-export interface CoachActivityLike extends CoachLoadActivityLike {
+interface CoachActivityLike extends CoachLoadActivityLike {
   averageSpeed: number;
   averageHeartrate: number;
 }
@@ -273,7 +273,7 @@ function acuteChronicRatio(activities: CoachLoadActivityLike[], now: Date): numb
 }
 
 /** Status chip values for the training-load card, mono uppercase. */
-export type LoadStatus = "AFKOBLING" | "OPTIMAL" | "SPÆNDING" | "RISIKO";
+type LoadStatus = "AFKOBLING" | "OPTIMAL" | "SPÆNDING" | "RISIKO";
 
 /**
  * Classify the acute:chronic ratio into the load-status chip (B8 fix — the chip

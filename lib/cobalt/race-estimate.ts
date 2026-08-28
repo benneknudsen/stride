@@ -28,7 +28,7 @@ export interface RaceEstimate {
 }
 
 /** The activity fields the estimator reads — demo fixtures and DB rows both fit. */
-export interface EstimateRunLike {
+interface EstimateRunLike {
   /** Distance in meters. */
   distance: number;
   /** Moving time in seconds. */
