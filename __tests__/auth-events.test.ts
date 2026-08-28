@@ -16,6 +16,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *   - @/lib/db          (db.update(...).set(...).where(...))
  *   - @/lib/strava/sync (syncStravaActivities)
  *   - @/lib/observability (captureError)
+ *
+ * It also covers the #262 adapter wrapper, which strips plaintext
+ * access_token/refresh_token before delegating to the stock `linkAccount`.
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: test fixtures and fluent mocks are partial by design
@@ -28,6 +31,8 @@ const mocks = vi.hoisted(() => {
     upsertStravaTokens: vi.fn(),
     syncStravaActivities: vi.fn(),
     captureError: vi.fn(),
+    // The adapter delegate lib/auth.ts strips tokens before calling (#262).
+    adapterLinkAccount: vi.fn(),
     // db.update(table).set(values).where(cond) — a chainable fluent stub.
     dbWhere: vi.fn(),
     dbSet: vi.fn(),
@@ -44,15 +49,19 @@ vi.mock("next-auth", () => ({
   },
 }));
 
-// The adapter + real DB instance must not be constructed for a unit test.
-vi.mock("@auth/drizzle-adapter", () => ({ DrizzleAdapter: () => ({}) }));
+// The adapter + real DB instance must not be constructed for a unit test. The
+// adapter stub exposes `linkAccount` so the #262 wrapper has a delegate to
+// verify against.
+vi.mock("@auth/drizzle-adapter", () => ({
+  DrizzleAdapter: () => ({ linkAccount: mocks.adapterLinkAccount }),
+}));
 vi.mock("@/lib/db", () => ({
   getDb: () => ({}),
   db: { update: mocks.dbUpdate },
 }));
 vi.mock("@/drizzle/schema", () => ({
   users: { id: "users.id" },
-  accounts: {},
+  accounts: { provider: "accounts.provider", providerAccountId: "accounts.providerAccountId" },
   sessions: {},
   verificationTokens: {},
 }));
@@ -62,10 +71,11 @@ vi.mock("@/lib/db/queries", () => ({ upsertStravaTokens: mocks.upsertStravaToken
 vi.mock("@/lib/strava/sync", () => ({ syncStravaActivities: mocks.syncStravaActivities }));
 vi.mock("@/lib/observability", () => ({ captureError: mocks.captureError }));
 
-// drizzle-orm's eq() is called inside the callback's .where(); a thin passthrough
-// keeps the assertion simple without pulling in the real comparator.
+// drizzle-orm's eq()/and() are called inside the callback's .where(); thin
+// passthroughs keep the assertions simple without pulling in real comparators.
 vi.mock("drizzle-orm", () => ({
   eq: (col: Any, val: Any) => ({ __eq: [col, val] }),
+  and: (...parts: Any[]) => ({ __and: parts }),
 }));
 
 // Importing lib/auth.ts runs NextAuth(config) → populates mocks.capturedConfig.
@@ -206,19 +216,22 @@ describe("events.signIn — token mirroring", () => {
   it("links the Strava athlete id onto the user row", async () => {
     await signIn({ user, account: stravaAccount });
 
-    expect(mocks.dbUpdate).toHaveBeenCalledTimes(1);
+    // First update = the user row (athlete id); second = the #262 accounts cleanup.
+    expect(mocks.dbUpdate).toHaveBeenCalledTimes(2);
     const setValues = mocks.dbSet.mock.calls[0][0];
     expect(setValues.stravaAthleteId).toBe(42);
     expect(setValues.updatedAt).toBeInstanceOf(Date);
-    expect(mocks.dbWhere).toHaveBeenCalledTimes(1);
+    expect(mocks.dbWhere).toHaveBeenCalledTimes(2);
   });
 
   it("skips the athlete link when the providerAccountId is non-numeric", async () => {
     await signIn({ user, account: { ...stravaAccount, providerAccountId: "not-a-number" } });
 
-    // Tokens still mirror; only the numeric athlete-id link is skipped.
+    // Tokens still mirror (and the accounts row is still cleaned up); only the
+    // numeric athlete-id link is skipped. The only update is the #262 cleanup.
     expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
-    expect(mocks.dbUpdate).not.toHaveBeenCalled();
+    const cleanupSetValues = mocks.dbSet.mock.calls[0][0];
+    expect(cleanupSetValues).toEqual({ access_token: null, refresh_token: null });
   });
 
   it("stores tokens before linking the athlete id", async () => {
@@ -234,6 +247,83 @@ describe("events.signIn — token mirroring", () => {
     await signIn({ user, account: stravaAccount });
 
     expect(order).toEqual(["upsert", "update"]);
+  });
+});
+
+// ===========================================================================
+// Adapter linkAccount — plaintext token stripping (#262)
+// ===========================================================================
+
+describe("adapter.linkAccount — token stripping (#262)", () => {
+  const adapter: { linkAccount: (account: Any) => Promise<void> } = mocks.capturedConfig.adapter;
+
+  it("delegates to the stock adapter with access_token/refresh_token removed", async () => {
+    await adapter.linkAccount({ ...stravaAccount, type: "oauth", userId: "user-1" });
+
+    expect(mocks.adapterLinkAccount).toHaveBeenCalledTimes(1);
+    const passed = mocks.adapterLinkAccount.mock.calls[0][0];
+    expect(passed).not.toHaveProperty("access_token");
+    expect(passed).not.toHaveProperty("refresh_token");
+    expect(passed).toMatchObject({
+      provider: "strava",
+      providerAccountId: "42",
+      type: "oauth",
+      userId: "user-1",
+    });
+  });
+});
+
+// ===========================================================================
+// accounts-row cleanup — no plaintext tokens at rest (#262)
+// ===========================================================================
+
+describe("events.signIn — accounts token cleanup (#262)", () => {
+  it("nulls access_token/refresh_token on the accounts row after a successful mirror", async () => {
+    await signIn({ user, account: stravaAccount });
+
+    // Second update (after the athlete-id link) targets the accounts table.
+    expect(mocks.dbUpdate).toHaveBeenCalledTimes(2);
+    expect(mocks.dbSet.mock.calls[1][0]).toEqual({ access_token: null, refresh_token: null });
+    expect(mocks.dbWhere.mock.calls[1][0]).toEqual({
+      __and: [
+        { __eq: ["accounts.provider", "strava"] },
+        { __eq: ["accounts.providerAccountId", "42"] },
+      ],
+    });
+  });
+
+  it("runs the cleanup only after upsertStravaTokens has succeeded", async () => {
+    const order: string[] = [];
+    mocks.upsertStravaTokens.mockImplementationOnce(async () => {
+      order.push("upsert");
+    });
+    mocks.dbUpdate.mockImplementationOnce(() => {
+      order.push("user-update");
+      return { set: mocks.dbSet };
+    });
+    mocks.dbUpdate.mockImplementationOnce(() => {
+      order.push("accounts-update");
+      return { set: mocks.dbSet };
+    });
+
+    await signIn({ user, account: stravaAccount });
+
+    expect(order).toEqual(["upsert", "user-update", "accounts-update"]);
+  });
+
+  it("swallows a cleanup failure and keeps signing in (sync still runs)", async () => {
+    let whereCalls = 0;
+    mocks.dbWhere.mockImplementation(async () => {
+      whereCalls += 1;
+      if (whereCalls === 2) throw new Error("clear failed");
+    });
+
+    await expect(signIn({ user, account: stravaAccount })).resolves.toBeUndefined();
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+    expect(mocks.captureError).toHaveBeenCalledWith(
+      "auth.events.signIn.clearAccountTokens",
+      expect.any(Error)
+    );
   });
 });
 

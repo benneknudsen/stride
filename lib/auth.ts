@@ -1,6 +1,7 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import NextAuth from "next-auth";
+import type { AdapterAccount } from "next-auth/adapters";
 import authConfig from "@/auth.config";
 import { accounts, sessions, users, verificationTokens } from "@/drizzle/schema";
 import { encrypt } from "@/lib/crypto";
@@ -18,12 +19,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // database sessions is a one-line config change. `accountsTable` is still used
   // for OAuth account linking; `verificationTokensTable` stays wired for the
   // adapter contract.
-  adapter: DrizzleAdapter(getDb(), {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
+  adapter: (() => {
+    // getDb() returns the real Drizzle instance. The exported `db` is a lazy
+    // Proxy, which breaks the adapter's `instanceof` dialect detection.
+    // Session strategy is JWT (see auth.config.ts), so the adapter never reads or
+    // writes `sessionsTable` — it stays wired here only so switching back to
+    // database sessions is a one-line config change. `accountsTable` is still used
+    // for OAuth account linking; `verificationTokensTable` stays wired for the
+    // adapter contract.
+    const drizzleAdapter = DrizzleAdapter(getDb(), {
+      usersTable: users,
+      accountsTable: accounts,
+      sessionsTable: sessions,
+      verificationTokensTable: verificationTokens,
+    });
+
+    // Issue #262: the stock adapter would persist the Strava `access_token`/
+    // `refresh_token` in plaintext on `accounts`, so they are stripped before
+    // delegation — the encrypted `strava_tokens` mirror is the only at-rest copy.
+    return {
+      ...drizzleAdapter,
+      linkAccount: async (account: AdapterAccount) => {
+        const {
+          access_token: _accessToken,
+          refresh_token: _refreshToken,
+          ...withoutTokens
+        } = account;
+        await drizzleAdapter.linkAccount?.(withoutTokens);
+      },
+    };
+  })(),
   providers: [...authConfig.providers],
   events: {
     /**
@@ -88,6 +113,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .update(users)
             .set({ stravaAthleteId: athleteId, updatedAt: new Date() })
             .where(eq(users.id, userId));
+        }
+
+        // Issue #262: the stock DrizzleAdapter only strips plaintext tokens when
+        // it *creates* the `accounts` row (first login per provider account) — a
+        // row written before that fix keeps its `access_token`/`refresh_token`
+        // forever. Null them out on every sign-in so pre-existing rows are
+        // cleaned up as users log back in.
+        try {
+          await db
+            .update(accounts)
+            .set({ access_token: null, refresh_token: null })
+            .where(
+              and(
+                eq(accounts.provider, "strava"),
+                eq(accounts.providerAccountId, account.providerAccountId)
+              )
+            );
+        } catch (err) {
+          // Clearing a legacy row is best-effort hygiene, not auth-critical —
+          // never fail the sign-in over it.
+          captureError("auth.events.signIn.clearAccountTokens", err);
         }
 
         // Best-effort initial sync so the dashboard has real data immediately.
