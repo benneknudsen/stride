@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { z } from "zod";
 import type { RefreshTokenResponse, StravaTokensResponse } from "./types";
 
 const STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize";
@@ -57,6 +58,21 @@ export async function exchangeCodeForTokens(
   return response.json() as Promise<StravaTokensResponse>;
 }
 
+/**
+ * Strava can answer a refresh with a 200 body that is not a token response
+ * (HTML error page, missing fields). A body without `refresh_token` would
+ * stringify `undefined` into the re-encrypted blob the consumer persists, so
+ * the *next* refresh would send `undefined` and 400 forever — bricking the
+ * connection with no signal (issue #271). Validate before anything persists.
+ */
+const refreshTokenResponseSchema = z.object({
+  token_type: z.string(),
+  access_token: z.string().min(1),
+  expires_at: z.number(),
+  expires_in: z.number(),
+  refresh_token: z.string().min(1),
+});
+
 /** Refresh an expired access token using the stored refresh token. */
 export async function refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
   const response = await fetch(STRAVA_TOKEN_URL, {
@@ -75,5 +91,13 @@ export async function refreshAccessToken(refreshToken: string): Promise<RefreshT
     throw new Error(`Strava token refresh failed (${response.status}): ${text}`);
   }
 
-  return response.json() as Promise<RefreshTokenResponse>;
+  const body: unknown = await response.json();
+  const parsed = refreshTokenResponseSchema.safeParse(body);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`strava_refresh_invalid_response: ${issues}`);
+  }
+  return parsed.data;
 }

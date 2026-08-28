@@ -380,3 +380,79 @@ describe("refreshAccessToken", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+// ===========================================================================
+// refreshAccessToken — response validation (issue #271)
+//
+// A 200 body without refresh_token/expires_at used to flow straight into
+// withTokenRefresh, which re-encrypted `undefined` over the stored refresh
+// token and bricked the connection. The schema must reject such bodies before
+// the consumer ever gets a value — since refreshAccessToken now throws, the
+// existing client-level guarantee ("propagates a refresh failure and skips
+// the write-back") covers the never-encrypt/never-persist property.
+// ===========================================================================
+
+describe("refreshAccessToken — response validation (issue #271)", () => {
+  it("returns the parsed tokens for a well-formed 200 body (regression)", async () => {
+    fetchMock.mockResolvedValueOnce(okJson(refreshFixture));
+
+    const refreshed = await refreshAccessToken("refresh-token-abc");
+
+    expect(refreshed).toEqual(refreshFixture);
+    expect(refreshed.refresh_token).toBe("fresh-refresh");
+  });
+
+  it("throws a clear error when the 200 body is missing refresh_token", async () => {
+    fetchMock.mockResolvedValueOnce(
+      okJson({
+        token_type: "Bearer",
+        access_token: "fresh-access",
+        expires_at: 4_100_000_000,
+        expires_in: 21_600,
+      })
+    );
+
+    await expect(refreshAccessToken("refresh-token-abc")).rejects.toThrow(
+      "strava_refresh_invalid_response"
+    );
+  });
+
+  it("throws when refresh_token comes back undefined", async () => {
+    fetchMock.mockResolvedValueOnce(okJson({ ...refreshFixture, refresh_token: undefined }));
+
+    await expect(refreshAccessToken("refresh-token-abc")).rejects.toThrow(
+      "strava_refresh_invalid_response"
+    );
+  });
+
+  it("throws when the 200 body has no expires_at", async () => {
+    fetchMock.mockResolvedValueOnce(
+      okJson({
+        token_type: "Bearer",
+        access_token: "fresh-access",
+        expires_in: 21_600,
+        refresh_token: "fresh-refresh",
+      })
+    );
+
+    await expect(refreshAccessToken("refresh-token-abc")).rejects.toThrow(
+      "strava_refresh_invalid_response"
+    );
+  });
+
+  it("throws when access_token comes back empty", async () => {
+    fetchMock.mockResolvedValueOnce(okJson({ ...refreshFixture, access_token: "" }));
+
+    await expect(refreshAccessToken("refresh-token-abc")).rejects.toThrow(
+      "strava_refresh_invalid_response"
+    );
+  });
+
+  it("throws when the 200 body is not a token object at all (e.g. an HTML error page)", async () => {
+    fetchMock.mockResolvedValueOnce(okJson("Unexpected token < in HTML"));
+
+    await expect(refreshAccessToken("refresh-token-abc")).rejects.toThrow(
+      "strava_refresh_invalid_response"
+    );
+  });
+});
