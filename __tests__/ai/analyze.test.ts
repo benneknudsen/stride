@@ -5,6 +5,9 @@
  * DB at import time), the DB queries are stubbed, and `ai`'s `streamObject` is
  * mocked so no provider is ever called — everything else (zod validation, rate
  * limiting, the #209 gating, the NDJSON stream plumbing) runs for real.
+ *
+ * Also unit-tests `clientIp` (#264): the pre-auth rate-limit key must prefer
+ * trustworthy headers over the client-controlled first XFF hop.
  */
 
 import type { NextRequest } from "next/server";
@@ -28,7 +31,7 @@ vi.mock("ai", async (importOriginal) => {
   return { ...actual, streamObject: streamObjectMock };
 });
 
-import { POST } from "@/app/api/ai/analyze/route";
+import { clientIp, POST } from "@/app/api/ai/analyze/route";
 
 interface RequestActivity {
   startDate: string;
@@ -48,6 +51,23 @@ function analyzeRequest(body: unknown = { activities: ACTIVITIES }): NextRequest
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   }) as unknown as NextRequest;
+}
+
+/** A POST request carrying arbitrary headers — for `clientIp` unit tests. */
+function ipRequest(headers: Record<string, string>): NextRequest {
+  return new Request("http://localhost/api/ai/analyze", {
+    method: "POST",
+    headers,
+  }) as unknown as NextRequest;
+}
+
+/** N minimal 1 km activities on consecutive days, for payload-cap tests. */
+function manyActivities(count: number): RequestActivity[] {
+  return Array.from({ length: count }, (_, i) => ({
+    startDate: new Date(Date.UTC(2026, 0, 1 + i, 6)).toISOString(),
+    distance: 1000,
+    movingTime: 300,
+  }));
 }
 
 /** Parse an NDJSON response body into analysis-block objects. */
@@ -148,11 +168,50 @@ describe("POST /api/ai/analyze", () => {
     expect(retryAfter).toBeLessThanOrEqual(60);
   });
 
+  it("caps the anonymous activity payload before heuristic compute (#264)", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    authMock.mockResolvedValue(null);
+
+    // 150 client-supplied activities arrive, but the heuristic must only ever
+    // see MAX_ANON_ACTIVITIES (100) — defense-in-depth against a rotated
+    // pre-auth rate-limit key on self-hosted deployments.
+    const res = await POST(analyzeRequest({ activities: manyActivities(150) }));
+
+    expect(res.status).toBe(200);
+    const blocks = await readBlocks(res);
+    const insight = blocks.find((b) => (b as { tool?: string }).tool === "insightCard") as {
+      body: string;
+    };
+    // heuristicBlocks reports the reduced totals: "På ${totalRuns} ture har du
+    // løbet ${totalDistanceKm} km, …" — 100 runs × 1 km, not 150.
+    expect(insight.body).toMatch(/^På 100 ture har du løbet 100 km/);
+    expect(streamObjectMock).not.toHaveBeenCalled();
+  });
+
   it("rejects an empty activity list", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
 
     const res = await POST(analyzeRequest({ activities: [] }));
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe("clientIp (#264)", () => {
+  it("prefers x-real-ip over the client-controlled first XFF hop", () => {
+    const req = ipRequest({
+      "x-real-ip": "203.0.113.7",
+      "x-forwarded-for": "198.51.100.9, 10.0.0.1, 10.0.0.2",
+    });
+    expect(clientIp(req)).toBe("203.0.113.7");
+  });
+
+  it("uses the LAST x-forwarded-for hop when x-real-ip is missing", () => {
+    const req = ipRequest({ "x-forwarded-for": "a, b, c" });
+    expect(clientIp(req)).toBe("c");
+  });
+
+  it("falls back to the shared unknown bucket when no IP headers are present", () => {
+    expect(clientIp(ipRequest({}))).toBe("unknown");
   });
 });

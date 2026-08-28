@@ -71,14 +71,24 @@ const RATE_LIMIT_MAX = 15;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
- * Per-IP guard on the heuristic path. The heuristic reduces up to 500
- * client-supplied activities *before* auth, so on the keyless demo deploy it is
- * an unauthenticated compute sink. This caps how often one IP can trigger that
+ * Per-IP guard on the heuristic path. The heuristic reduces client-supplied
+ * activities *before* auth, so on the keyless demo deploy it is an
+ * unauthenticated compute sink. This caps how often one IP can trigger that
  * work: 30 requests per 60 seconds — generous for a real visitor, cheap to
  * abuse-proof. The live-AI path keeps its own (stricter) per-user limit below.
  */
 const HEURISTIC_RATE_LIMIT_MAX = 30;
 const HEURISTIC_RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * Cap on the client-supplied activity payload served to unauthenticated
+ * visitors (issue #264). The pre-auth rate-limit key is IP-based, and on
+ * self-hosted deployments a client can rotate that IP per request, minting a
+ * fresh bucket every time — so the payload itself is capped as
+ * defense-in-depth on this unauthenticated compute sink. The authed path keeps
+ * the request schema's full 500-activity maximum.
+ */
+const MAX_ANON_ACTIVITIES = 100;
 
 /**
  * Per-candidate stream timeout (issue #71 E3). If a model accepts the request
@@ -125,16 +135,23 @@ export async function POST(req: NextRequest) {
   }
 
   const { scope, activities: rawActivities } = parsed.data;
-  const activities: AnalysisActivity[] = rawActivities.map((a) => ({
+
+  // Best-effort auth — the demo has no session, and that's fine.
+  const userId = await currentUserId();
+
+  // Issue #264: the pre-auth rate-limit key can be rotated by a client-
+  // controlled XFF hop on self-hosted deployments, so the anonymous payload is
+  // capped before any heuristic compute. The authed path keeps the schema's
+  // full 500-activity maximum.
+  const activities: AnalysisActivity[] = (
+    userId ? rawActivities : rawActivities.slice(0, MAX_ANON_ACTIVITIES)
+  ).map((a) => ({
     ...a,
     startDate: new Date(a.startDate),
   }));
 
   const input = buildAnalysisInput(activities, scope, new Date());
   const inputHash = analysisInputHash(input);
-
-  // Best-effort auth — the demo has no session, and that's fine.
-  const userId = await currentUserId();
 
   // Cache lookup (inputHash dedup). Safe no-op without a DB / session.
   if (userId) {
@@ -152,8 +169,9 @@ export async function POST(req: NextRequest) {
   // fills in instead of hitting a 401. With a session, take the live-AI path
   // when configured, otherwise fall back to the same heuristic.
   if (!userId) {
-    // Per-IP guard: this path reduces up to 500 client-supplied activities
-    // before auth, so on the demo deploy it is an unauthenticated compute sink.
+    // Per-IP guard: this path reduces client-supplied activities (capped to
+    // MAX_ANON_ACTIVITIES) before auth, so on the demo deploy it is an
+    // unauthenticated compute sink.
     const ip = clientIp(req);
     const limit = await rateLimit(`ai-heuristic:${ip}`, {
       max: HEURISTIC_RATE_LIMIT_MAX,
@@ -261,18 +279,34 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Best-effort client IP for the pre-auth rate-limit key. Prefers the first hop
- * of `x-forwarded-for` (the real client on Vercel's proxy), falling back to
- * `x-real-ip` and finally a shared bucket so a missing header still rate-limits
- * rather than opening the path up.
+ * Best-effort client IP for the pre-auth rate-limit key, in priority order:
+ *
+ * 1. `x-real-ip` — set by Vercel's edge proxy (and well-configured reverse
+ *    proxies) to the actual connecting address; client-supplied values are
+ *    overwritten, so it is trustworthy.
+ * 2. The LAST hop of `x-forwarded-for` — the address the nearest append-proxy
+ *    observed, matching the `$proxy_add_x_forwarded_for` convention. The FIRST
+ *    hop is deliberately ignored: behind append-style proxies it is client-
+ *    controlled, so an attacker can rotate it per request and mint a fresh
+ *    rate-limit bucket on self-hosted deployments (`trustHost: true` is a
+ *    supported config) — a full bypass of the pre-auth guard (issue #264).
+ *    Vercel overwrites the header, so first-hop keying only ever looked
+ *    correct there.
+ * 3. `"unknown"` — a single shared bucket, so a missing header still
+ *    rate-limits rather than opening the path up (fail-closed).
  */
-function clientIp(req: NextRequest): string {
+export function clientIp(req: NextRequest): string {
+  const real = req.headers.get("x-real-ip")?.trim();
+  if (real) return real;
+
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
+    const hops = forwarded.split(",");
+    const last = hops[hops.length - 1]?.trim();
+    if (last) return last;
   }
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
+
+  return "unknown";
 }
 
 /** Resolve the signed-in user id, or null (demo / unauthenticated). */
