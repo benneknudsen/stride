@@ -222,6 +222,52 @@ describe("connectStrava", () => {
 });
 
 // ===========================================================================
+// connectStrava — authentication (issue #269)
+// ===========================================================================
+
+describe("connectStrava — authentication", () => {
+  it("throws authentication_required when there is no session", async () => {
+    mocks.auth.mockResolvedValueOnce(null);
+
+    await expect(connectStrava()).rejects.toThrow("authentication_required");
+  });
+
+  it("throws authentication_required when the session has no user", async () => {
+    mocks.auth.mockResolvedValueOnce({});
+
+    await expect(connectStrava()).rejects.toThrow("authentication_required");
+  });
+
+  it("throws authentication_required when the session user has no id", async () => {
+    mocks.auth.mockResolvedValueOnce({ user: { email: "x@y.z" } });
+
+    await expect(connectStrava()).rejects.toThrow("authentication_required");
+  });
+
+  it("writes NO cookie for an unauthenticated caller", async () => {
+    mocks.auth.mockResolvedValueOnce(null);
+
+    await expect(connectStrava()).rejects.toThrow("authentication_required");
+    expect(mocks.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it("does no work at all for an unauthenticated caller (no PKCE, no URL)", async () => {
+    mocks.auth.mockResolvedValueOnce(null);
+
+    await expect(connectStrava()).rejects.toThrow();
+    expect(mocks.generatePkce).not.toHaveBeenCalled();
+    expect(mocks.getAuthorizationUrl).not.toHaveBeenCalled();
+  });
+
+  it("still returns the url and stores the cookie for an authenticated caller (regression)", async () => {
+    const result = await connectStrava();
+
+    expect(result).toEqual({ url: "https://www.strava.com/oauth/authorize?x=1" });
+    expect(mocks.cookieSet).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ===========================================================================
 // handleStravaCallback — auth gate
 // ===========================================================================
 

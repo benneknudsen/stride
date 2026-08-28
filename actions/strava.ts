@@ -15,6 +15,15 @@ const STRAVA_COOKIE = "strava_oauth";
 const COOKIE_MAX_AGE = 600; // 10 minutes
 
 export async function connectStrava(): Promise<{ url: string }> {
+  // Derive the user from the session — never trust a client-supplied id. This
+  // function is a server action and therefore a callable RPC endpoint, and an
+  // anonymous caller must not stomp the strava_oauth cookie a legitimate
+  // connect is about to rely on (issue #269). Checked before any state is
+  // written so a rejected call has zero side effects.
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error("authentication_required");
+
   const { codeVerifier, codeChallenge } = generatePkce();
   // Generate a CSRF state (not the PKCE verifier) and store the verifier
   // in an httpOnly cookie so it never touches the browser URL.
