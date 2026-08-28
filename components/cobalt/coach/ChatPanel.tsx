@@ -49,6 +49,20 @@ function isNearBottom(el: HTMLElement): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD_PX;
 }
 
+/** Shallow equality for flat style objects: same key set, identical values.
+ *  Gates panel-style state updates so a recomputed-but-unchanged style keeps
+ *  the previous object and React bails out of the re-render (issue #266). */
+function shallowEqual(a: CSSProperties, b: CSSProperties): boolean {
+  const aKeys = Object.keys(a) as Array<keyof CSSProperties>;
+  const bKeys = Object.keys(b) as Array<keyof CSSProperties>;
+  return aKeys.length === bKeys.length && aKeys.every((key) => a[key] === b[key]);
+}
+
+/** Keyboard-closed fallback: the empty inline style hands the height back to
+ *  the CSS `dvh` clamp. Module-scoped constant so re-assigning it never
+ *  allocates a fresh object. */
+const EMPTY_STYLE: CSSProperties = {};
+
 // Left column: the chat UI. Owns its own transcript, draft and streaming state.
 // Sending a message (typed, or via a quick-prompt chip) appends the user
 // bubble, shows the 3-dot typing indicator and streams the coach's answer from
@@ -146,35 +160,43 @@ export function ChatPanel({
   // the composer settles just above the keyboard; keep the latest message in view
   // if the user was already at the bottom. Desktop (lg+) keeps the CSS clamp, and
   // with the keyboard closed the empty inline style hands the clamp back too.
+  // Style updates shallow-compare against the current style and keep `prev` when
+  // the content is unchanged, so the visual-viewport scroll/resize stream iOS
+  // fires under keyboard animation doesn't re-render the panel per event
+  // (issue #266). The one-shot scroll frame is cancelled on cleanup so a stale
+  // frame can never write `scrollTop` and mask a real user scroll (issue #266).
   useEffect(() => {
+    let rafId: number | undefined;
     const el = wrapperRef.current;
     if (!el || !keyboardOpen || viewportHeight == null) {
-      setPanelStyle({});
-      return;
+      setPanelStyle((prev) => (shallowEqual(prev, EMPTY_STYLE) ? prev : EMPTY_STYLE));
+    } else if (window.matchMedia?.(DESKTOP_MEDIA_QUERY).matches) {
+      setPanelStyle((prev) => (shallowEqual(prev, EMPTY_STYLE) ? prev : EMPTY_STYLE));
+    } else {
+      // Distance from the panel's top down to the bottom of the visible region.
+      const top = el.getBoundingClientRect().top;
+      const available = Math.max(
+        viewportOffsetTop + viewportHeight - top - KEYBOARD_BOTTOM_GAP_PX,
+        0
+      );
+      const next: CSSProperties = {
+        maxHeight: `${available}px`,
+        minHeight: `${Math.min(PANEL_MIN_HEIGHT_PX, available)}px`,
+      };
+      setPanelStyle((prev) => (shallowEqual(prev, next) ? prev : next));
+      if (stickToBottomRef.current) {
+        rafId = requestAnimationFrame(() => {
+          const s = scrollRef.current;
+          if (s) {
+            programmaticScrollRef.current = true;
+            s.scrollTop = s.scrollHeight;
+          }
+        });
+      }
     }
-    if (window.matchMedia?.(DESKTOP_MEDIA_QUERY).matches) {
-      setPanelStyle({});
-      return;
-    }
-    // Distance from the panel's top down to the bottom of the visible region.
-    const top = el.getBoundingClientRect().top;
-    const available = Math.max(
-      viewportOffsetTop + viewportHeight - top - KEYBOARD_BOTTOM_GAP_PX,
-      0
-    );
-    setPanelStyle({
-      maxHeight: `${available}px`,
-      minHeight: `${Math.min(PANEL_MIN_HEIGHT_PX, available)}px`,
-    });
-    if (stickToBottomRef.current) {
-      requestAnimationFrame(() => {
-        const s = scrollRef.current;
-        if (s) {
-          programmaticScrollRef.current = true;
-          s.scrollTop = s.scrollHeight;
-        }
-      });
-    }
+    return () => {
+      if (rafId !== undefined) cancelAnimationFrame(rafId);
+    };
   }, [keyboardOpen, viewportHeight, viewportOffsetTop]);
 
   // Visitor autoplay (issue #235): the demo chat is otherwise silent until a chip
