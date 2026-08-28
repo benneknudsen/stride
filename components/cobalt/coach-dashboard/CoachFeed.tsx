@@ -142,10 +142,16 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
   const [status, setStatus] = useState<Status>("streaming");
   const [blocks, setBlocks] = useState<AnalysisBlock[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>(DEFAULT_ERROR_MESSAGE);
-  // Guard against StrictMode's double-invoke firing two concurrent streams.
-  const startedRef = useRef(false);
+  // The run that currently owns the feed — only it may touch state (issue #265).
+  const abortRef = useRef<AbortController | null>(null);
 
   const runFeed = useCallback(async () => {
+    // Abort any in-flight stream before starting a new one (regenerate and a
+    // StrictMode remount included), so two runs can never race (issue #265).
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setStatus("streaming");
     setBlocks([]);
     try {
@@ -153,7 +159,9 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildCoachFeedRequest(activities)),
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
       if (res.status === 401) throw new Error("authentication_required");
       if (res.status === 429) throw new Error("rate_limited");
       if (!res.ok || !res.body) throw new Error(`network_error:${res.status}`);
@@ -162,11 +170,13 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
       const decoder = new TextDecoder();
       let buffer = "";
       const push = (line: string) => {
+        if (controller.signal.aborted) return;
         const block = parseFeedLine(line);
         if (block) setBlocks((prev) => [...prev, block]);
       };
 
       while (true) {
+        if (controller.signal.aborted) return;
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -178,8 +188,12 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
         }
       }
       push(buffer);
+      if (controller.signal.aborted) return;
       setStatus("done");
     } catch (error) {
+      // Abort (unmount, or superseded by a newer run) is not an error — stay
+      // silent and never touch state afterwards (issue #265).
+      if (controller.signal.aborted || abortRef.current !== controller) return;
       const reason = error instanceof Error ? error.message : "";
       if (reason === "authentication_required") {
         setErrorMessage("Log ind for at se coach-indsigter.");
@@ -192,10 +206,14 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
     }
   }, [activities]);
 
+  // Start the feed on mount and abort the in-flight stream on unmount (issue
+  // #265). This abort/re-run cycle replaces the old startedRef guard: under
+  // StrictMode the first mount's stream is aborted by the cleanup and the
+  // second runs fresh, leaving exactly one surviving stream — a startedRef
+  // flag would instead block the re-run and leave dev with a dead feed.
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
     void runFeed();
+    return () => abortRef.current?.abort();
   }, [runFeed]);
 
   const regenerate = useCallback(() => {
