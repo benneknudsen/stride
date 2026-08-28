@@ -10,6 +10,7 @@ import { getUserByStravaAthleteId, revalidateDashboardActivities } from "@/lib/d
 import { captureError } from "@/lib/observability";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaToDb } from "@/lib/strava/mappers";
+import { timingSafeStringEqual } from "@/lib/timing-safe";
 
 /**
  * Shape of a Strava webhook event payload. A signed but malformed/unexpected
@@ -62,18 +63,6 @@ function verifySignature(rawBody: string, header: string | null): boolean {
   if (providedBuf.length !== expectedBuf.length) return false;
 
   return timingSafeEqual(providedBuf, expectedBuf);
-}
-
-/**
- * Constant-time string equality via timingSafeEqual. Buffers must be equal
- * length for timingSafeEqual, so the length check short-circuits early — same
- * pattern as the webhook signature comparison above.
- */
-function timingSafeStringEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a, "utf8");
-  const bBuf = Buffer.from(b, "utf8");
-  if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
 }
 
 // Strava webhook subscription validation

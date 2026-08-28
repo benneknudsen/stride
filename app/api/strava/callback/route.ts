@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleStravaCallback } from "@/actions/strava";
+import { timingSafeStringEqual } from "@/lib/timing-safe";
 
 // Strava redirects here with ?code and ?state after the user authorizes.
 // The PKCE codeVerifier is stored in an httpOnly cookie (set by connectStrava)
@@ -28,8 +29,10 @@ export async function GET(req: NextRequest) {
   let codeVerifier: string;
   try {
     const payload = JSON.parse(cookie.value) as { v: string; s: string };
-    // Verify the returned state matches what we sent — CSRF protection.
-    if (payload.s !== state) {
+    // Verify the returned state matches what we sent — CSRF protection. The
+    // compare is timing-safe (#272), matching how every other secret in the
+    // repo (webhook verify token, HMAC, CRON secret) is compared.
+    if (!timingSafeStringEqual(payload.s, state)) {
       base.searchParams.set("strava_error", "true");
       const response = NextResponse.redirect(base);
       response.cookies.set("strava_oauth", "", { maxAge: 0, path: "/" });

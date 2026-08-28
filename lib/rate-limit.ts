@@ -14,6 +14,8 @@
 
 import { Redis } from "@upstash/redis";
 
+import { captureError } from "@/lib/observability";
+
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
@@ -72,9 +74,11 @@ export async function rateLimit(
   try {
     return await redisRateLimit(client, key, max, windowMs, now);
   } catch (err) {
-    // Redis unreachable — a per-instance limit beats no limit at all. Upstash
-    // errors carry no credentials, so the raw error is safe to log.
-    console.error("[rate-limit] Redis failed, falling back to in-memory:", err);
+    // Redis unreachable — a per-instance limit beats no limit at all. captureError
+    // is the repo's single logging choke point: only serialisable name/message/
+    // cause fields leave the boundary, so the raw thrown value (which could
+    // carry connection data) never reaches the logs (#135, #143, #272).
+    captureError("rate-limit.redis", err);
     return memoryRateLimit(key, max, windowMs, now);
   }
 }

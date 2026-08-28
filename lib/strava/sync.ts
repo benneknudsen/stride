@@ -3,6 +3,7 @@ import { activities } from "@/drizzle/schema";
 import { revalidateProgression } from "@/lib/coach/dashboard-data";
 import { db } from "@/lib/db";
 import { revalidateDashboardActivities } from "@/lib/db/queries";
+import { captureError } from "@/lib/observability";
 import { withTokenRefresh } from "@/lib/strava/client";
 import { mapStravaSummaryToDb } from "@/lib/strava/mappers";
 
@@ -25,6 +26,15 @@ import { mapStravaSummaryToDb } from "@/lib/strava/mappers";
  */
 const SYNC_PAGE_SIZE = 100;
 
+/**
+ * Hard ceiling on list-endpoint pages per sync (issue #272). The loop below
+ * otherwise terminates solely on Strava's pagination semantics; a pathological
+ * upstream (e.g. a response that never shrinks) would spin until the function
+ * timeout. 100 pages × 100 activities covers the largest plausible history many
+ * times over — a healthy account pages out long before this.
+ */
+export const MAX_SYNC_PAGES = 100;
+
 export async function syncStravaActivities(userId: string): Promise<number> {
   const client = await withTokenRefresh(userId);
 
@@ -32,6 +42,19 @@ export async function syncStravaActivities(userId: string): Promise<number> {
   let inserted = 0;
 
   while (true) {
+    // Issue #272: bound upstream pathology — stop paging and continue with the
+    // activities already collected (best-effort, matching the per-activity
+    // error tolerance below) instead of looping until the function timeout.
+    if (page > MAX_SYNC_PAGES) {
+      captureError(
+        "strava.sync.paginationCap",
+        new Error(
+          `Strava sync hit the ${MAX_SYNC_PAGES}-page cap for user ${userId}; continuing with collected activities`
+        )
+      );
+      break;
+    }
+
     const batch = await client.getActivities(page, SYNC_PAGE_SIZE);
     if (batch.length === 0) break;
 

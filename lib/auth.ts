@@ -1,5 +1,6 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { and, eq } from "drizzle-orm";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import NextAuth from "next-auth";
 import type { AdapterAccount } from "next-auth/adapters";
 import authConfig from "@/auth.config";
@@ -10,7 +11,12 @@ import { upsertStravaTokens } from "@/lib/db/queries";
 import { captureError } from "@/lib/observability";
 import { syncStravaActivities } from "@/lib/strava/sync";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const {
+  handlers,
+  auth: nodeAuth,
+  signIn,
+  signOut,
+} = NextAuth({
   ...authConfig,
   // getDb() returns the real Drizzle instance. The exported `db` is a lazy
   // Proxy, which breaks the adapter's `instanceof` dialect detection.
@@ -154,3 +160,56 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+/**
+ * Production fail-fast for a missing `AUTH_URL` (issue #272).
+ *
+ * `trustHost: true` (auth.config.ts) makes Auth.js build OAuth callback URLs
+ * from the request's `Host`/`X-Forwarded-Host` header. That is intentional for
+ * deployments behind a known proxy, but a self-hosted production deploy without
+ * `AUTH_URL` would let a spoofed Host header redirect the OAuth flow — so the
+ * deployment must fail loudly until the canonical origin is configured.
+ *
+ * Why a guard at the first `auth()` call rather than a module-scope assert:
+ * `next build` runs with `NODE_ENV=production` and *executes* route modules'
+ * module scope (page-data collection) and probe-renders pages (calling `auth()`
+ * while it resolves static vs dynamic). Neither this workspace's `.env*` files
+ * nor CI set `AUTH_URL`, so an unconditional boot-time throw would break
+ * `next build` itself. The guard therefore evaluates lazily and additionally
+ * exempts the build phase (`PHASE_PRODUCTION_BUILD`) so prerender probing can
+ * never trip it — at real runtime (`next start` / serverless) the very first
+ * `auth()` call throws after reporting via `captureError`.
+ *
+ * Failing closed on every call while misconfigured is deliberate: a deploy
+ * without `AUTH_URL` gets 500s and a captureError per attempt (log-drain /
+ * Sentry noise) instead of silently serving auth from unverified hosts.
+ */
+let authUrlVerified = false;
+
+function assertProductionAuthUrl(): void {
+  if (authUrlVerified) return;
+  if (process.env.NODE_ENV !== "production") return;
+  if (process.env.NEXT_PHASE === PHASE_PRODUCTION_BUILD) return;
+  if (process.env.AUTH_URL) {
+    authUrlVerified = true;
+    return;
+  }
+  const err = new Error(
+    "AUTH_URL is not set: refusing to serve auth in production — set it to the canonical origin so OAuth callback URLs cannot be spoofed via the Host header (issue #272)"
+  );
+  captureError("auth.boot.authUrl", err);
+  throw err;
+}
+
+// Forward through a loosened signature: NextAuth's `auth` is an intersection of
+// five overloads, and only the exported binding below needs to keep that exact
+// surface (call sites are all bare `await auth()` in the Node runtime — the
+// edge proxy builds its own instance from auth.config.ts).
+const forwardAuth = nodeAuth as unknown as (...args: unknown[]) => unknown;
+
+export const auth = ((...args: unknown[]) => {
+  assertProductionAuthUrl();
+  return forwardAuth(...args);
+}) as typeof nodeAuth;
+
+export { handlers, signIn, signOut };

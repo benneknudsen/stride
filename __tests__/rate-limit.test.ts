@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 
-const { redisMock } = vi.hoisted(() => ({
+const { captureErrorMock, redisMock } = vi.hoisted(() => ({
+  captureErrorMock: vi.fn(),
   redisMock: {
     multi: vi.fn(),
   },
@@ -14,6 +15,8 @@ vi.mock("@upstash/redis", () => ({
     }
   },
 }));
+
+vi.mock("@/lib/observability", () => ({ captureError: captureErrorMock }));
 
 describe("rateLimit (in-memory fallback)", () => {
   beforeEach(() => {
@@ -122,7 +125,7 @@ describe("rateLimit (Upstash Redis)", () => {
   });
 
   it("falls back to the in-memory limiter when Redis fails", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     redisMock.multi.mockReturnValue({
       incr: vi.fn(),
       pexpire: vi.fn(),
@@ -133,11 +136,12 @@ describe("rateLimit (Upstash Redis)", () => {
     const now = 0;
     expect((await rateLimit("degraded", { now, max: 1 })).allowed).toBe(true);
     expect((await rateLimit("degraded", { now, max: 1 })).allowed).toBe(false);
-    expect(error).toHaveBeenCalledWith(
-      "[rate-limit] Redis failed, falling back to in-memory:",
-      expect.any(Error)
-    );
+    // Repo policy (#135/#143/#272): the raw thrown value is never logged — it
+    // goes through captureError's sanitising choke point instead.
+    expect(captureErrorMock).toHaveBeenCalledTimes(2);
+    expect(captureErrorMock).toHaveBeenCalledWith("rate-limit.redis", expect.any(Error));
+    expect(consoleError).not.toHaveBeenCalled();
 
-    error.mockRestore();
+    consoleError.mockRestore();
   });
 });
