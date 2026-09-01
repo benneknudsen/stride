@@ -49,6 +49,16 @@ export const BAND_NOTES: Record<ReadinessBand, string> = {
 /** The neutral readiness shown before a chronic base exists (<4 weeks of history). */
 const NO_RATIO_PCT = 72;
 
+/**
+ * The line that replaces the ready band's claims when the runner's latest run
+ * sits inside the 24 h recovery window (issue #273). A rolig Zone 1–2 tur leaves
+ * no trace in `hoursSinceHardEffort`, so the load-derived readiness still reads
+ * "ready" — but the Hjem hero and the coach opener must not promise "Klar til
+ * hårdt pas" hours after the runner was actually out. They name the run and put
+ * restitution first instead; the #259 cap and the readiness number stay put.
+ */
+export const SAME_DAY_RUN_NOTE = "Du har lige løbet i dag — restitution kommer før intensitet.";
+
 // Readiness percentage bounds — an estimate, so never a flat 0 or 100.
 const FULL_PCT = 95;
 const FLOOR_PCT = 55;

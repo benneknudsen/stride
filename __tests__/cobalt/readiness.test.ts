@@ -7,10 +7,11 @@ import {
   RECOVERY_CAP_PCT,
   readinessFromRatio,
   readinessWithRecovery,
+  SAME_DAY_RUN_NOTE,
 } from "@/lib/cobalt/readiness";
 import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
 import { demoActivities } from "@/lib/demo/data";
-import { hoursSinceHardEffort } from "@/lib/training/effort";
+import { hoursSinceHardEffort, hoursSinceLastRun } from "@/lib/training/effort";
 import { computeSnapshot, type ProgressionActivityInput } from "@/lib/training/progression-core";
 import { zoneForHeartRate as trainingZone } from "@/lib/training/zones";
 
@@ -164,10 +165,12 @@ describe("readinessWithRecovery", () => {
 /** Minimal CoachDashboardData carrying only what buildLiveCoachView reads. */
 function dashboard(
   ratio: number | null,
-  recentHardHours: number | null = null
+  recentHardHours: number | null = null,
+  sinceLastRun: number | null = null
 ): CoachDashboardData {
   return {
     hoursSinceHardEffort: recentHardHours,
+    hoursSinceLastRun: sinceLastRun,
     workout: {
       type: "tempo",
       distanceKm: 10,
@@ -278,6 +281,69 @@ describe("Hjem and Coach show the same readiness (issue #127)", () => {
       NOW
     );
     expect(strained.readinessPct).toBe(calm.readinessPct);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Same-day run surfaces agree (issue #273)
+// ---------------------------------------------------------------------------
+
+// A rolig tur this morning never trips the #259 hard-effort cap, so the load
+// read stays "ready" — but the hero and the coach opener must name the run
+// instead of promising "Klar til hårdt pas" / "Kroppen er klar i dag.", the
+// same story the rest-day cards tell.
+describe("same-day run surfaces agree (issue #273)", () => {
+  /** The saturated 28-run base, newest run this morning (07:30, NOW 09:00). */
+  function morningHistory(): HomeActivityLike[] {
+    return liveHistory(28);
+  }
+
+  it("hero and opener name the run today instead of claiming ready", () => {
+    const activities = morningHistory();
+    const ratio = computeSnapshot(
+      activities.map((a) => ({ ...a, hrZones: null })),
+      NOW
+    ).trainingLoad.ratio;
+    const sinceLastRun = hoursSinceLastRun(activities, NOW);
+    // The fixture must produce exactly the reported situation: load-only read
+    // "ready", newest run deep inside the 24 h window, no hard effort in sight.
+    expect(ratio).not.toBeNull();
+    expect(readinessFromRatio(ratio).band).toBe("ready");
+    expect(sinceLastRun ?? 99).toBeLessThan(24);
+    expect(hoursSinceHardEffort(activities, NOW)).toBeNull();
+
+    const home = buildHomeView(activities, NOW);
+    const coach = buildLiveCoachView(dashboard(ratio, null, sinceLastRun), activities, NOW);
+
+    expect(home.heroNote).toBe(SAME_DAY_RUN_NOTE);
+    expect(coach.initialMessages[0].text).toContain(SAME_DAY_RUN_NOTE);
+    expect(coach.initialMessages[0].text).not.toContain("klar til hårdt pas");
+    // The readiness card itself keeps the load-derived read — the override is
+    // hero/opener copy only; the #259 cap stays a hard-effort mechanism.
+    expect(home.readinessNote).toBe(BAND_NOTES.ready);
+    expect(coach.form.note).toBe(BAND_NOTES.ready);
+  });
+
+  it("keeps the ready-band hero once the newest run is outside the 24 h window", () => {
+    // Drop this morning's run: the newest is three days old, so nothing
+    // overrides the band's own hero note.
+    const activities = morningHistory().slice(1);
+    const ratio = computeSnapshot(
+      activities.map((a) => ({ ...a, hrZones: null })),
+      NOW
+    ).trainingLoad.ratio;
+    const sinceLastRun = hoursSinceLastRun(activities, NOW);
+    expect(ratio).not.toBeNull();
+    expect(readinessFromRatio(ratio).band).toBe("ready");
+    expect(sinceLastRun ?? 0).toBeGreaterThan(24);
+
+    const home = buildHomeView(activities, NOW);
+    const coach = buildLiveCoachView(dashboard(ratio, null, sinceLastRun), activities, NOW);
+
+    expect(home.heroNote).toBe("Kroppen er klar i dag.");
+    // The opener lowercases the band note.
+    expect(coach.initialMessages[0].text).toContain("klar til hårdt pas");
+    expect(coach.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
   });
 });
 

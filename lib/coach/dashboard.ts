@@ -15,7 +15,7 @@ import {
   weekToDateDistanceKm,
 } from "@/lib/coach/recommender";
 import { ensureDate } from "@/lib/db/calendar-date";
-import { hoursSinceHardEffort } from "@/lib/training/effort";
+import { hoursSinceHardEffort, hoursSinceLastRun } from "@/lib/training/effort";
 import { GOALS } from "@/lib/training/goals";
 import type {
   LoadRisk,
@@ -200,6 +200,13 @@ export interface CoachDashboardData {
    * changes by the hour, so it must never land in the cached charts path.
    */
   hoursSinceHardEffort: number | null;
+  /**
+   * Hours since the runner's newest run of any intensity, or null with no runs
+   * (issue #273). Where {@link hoursSinceHardEffort} sees only Zone 4–5 work, a
+   * rolig tur this morning is invisible to it — this lets the coach opener and
+   * the Hjem hero name the same-day run instead of claiming the body is ready.
+   */
+  hoursSinceLastRun: number | null;
 }
 
 /**
@@ -272,5 +279,8 @@ export function buildCoachDashboard(
     // everything else here does, so the card, the recommender and the variation
     // all answer "how long since the last hard pas" identically.
     hoursSinceHardEffort: hoursSinceHardEffort(runs, now),
+    // …and the same read without the intensity filter (#273): a rolig tur today
+    // never trips the hard-effort cap, so the opener/hero learn about it here.
+    hoursSinceLastRun: hoursSinceLastRun(runs, now),
   };
 }

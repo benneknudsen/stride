@@ -89,3 +89,25 @@ export function hoursSinceHardEffort(runs: ActivityInput[], now: Date): number |
   }
   return null;
 }
+
+/**
+ * Hours since the runner's most recent run of any intensity, or null when there
+ * is none (including the cold start: no runs at all). Where
+ * {@link hoursSinceHardEffort} answers "how long since the body went hard",
+ * this answers "how long since the runner was out at all" — the 24 h question
+ * behind issue #273, where a rolig Zone 1–2 tur leaves no hard-effort trace but
+ * still owes the runner a recovery day and surfaces that name it. Runs in the
+ * future — a fixture set read against an earlier clock — are ignored rather
+ * than counted as negative hours.
+ *
+ * Callers pass runs only; this makes no judgement about activity type and
+ * applies no lookback cap — the recovery window is the caller's to enforce.
+ */
+export function hoursSinceLastRun(runs: ActivityInput[], now: Date): number | null {
+  const newestFirst = runs
+    .filter((run) => ensureDate(run.startDate).getTime() <= now.getTime())
+    .sort((a, b) => ensureDate(b.startDate).getTime() - ensureDate(a.startDate).getTime());
+  const newest = newestFirst[0];
+  if (!newest) return null;
+  return Math.max(0, (now.getTime() - ensureDate(newest.startDate).getTime()) / HOUR_MS);
+}
