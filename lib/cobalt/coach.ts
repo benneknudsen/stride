@@ -15,9 +15,13 @@
 // (the ChatPanel owns that flow).
 
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
-import { DEFAULT_RACE_DATE } from "@/lib/coach/engine";
+import { DEFAULT_RACE_DATE, EASY_MIN_RECOVERY_HOURS } from "@/lib/coach/engine";
 import { TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
-import { readinessFromRatio, readinessWithRecovery } from "@/lib/cobalt/readiness";
+import {
+  readinessFromRatio,
+  readinessWithRecovery,
+  SAME_DAY_RUN_NOTE,
+} from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { type DemoActivity, demoActivities } from "@/lib/demo/data";
 import { formatPace, getWeeklyVolume } from "@/lib/metrics";
@@ -478,7 +482,7 @@ export function buildLiveCoachView(
   // (moving minutes, no intensity weighting) is blind to. The `?? null` keeps
   // partial dashboards — fixtures, older cached payloads — on the uncapped path
   // rather than throwing.
-  const { pct, note } = readinessWithRecovery(
+  const { pct, note, band } = readinessWithRecovery(
     readinessFromRatio(ratio),
     dashboard.hoursSinceHardEffort ?? null
   );
@@ -498,6 +502,19 @@ export function buildLiveCoachView(
       ? `Du har endnu ikke fire ugers historik, så belastningsbilledet er foreløbigt. ${LOAD_NOTES[status]}`
       : `Din akut/kronisk-ratio er ${ratio.toFixed(2)} — status ${status}. ${LOAD_NOTES[status]}`;
 
+  // The opener's readiness line (#273): inside the 24 h recovery window after
+  // ANY run, the ready band's "Klar til hårdt pas" is replaced with a line that
+  // names the run — a rolig Zone 1–2 tur never trips the #259 hard-effort cap,
+  // so without this the opener promised a hard pas hours after the runner was
+  // actually out, contradicting both cards' hviledag. The readiness percentage
+  // and the cap itself are unchanged.
+  const ranRecently =
+    dashboard.hoursSinceLastRun != null && dashboard.hoursSinceLastRun < EASY_MIN_RECOVERY_HOURS;
+  const readinessLine =
+    ranRecently && band === "ready"
+      ? SAME_DAY_RUN_NOTE
+      : `Din readiness er ${pct}% — ${note.toLowerCase()}.`;
+
   // The persisted conversation is replayed first (issue #202) so a returning
   // user sees and can continue their history. A fresh coach opening bubble is
   // only shown when there is no history (issue #205) — otherwise every page load
@@ -506,7 +523,7 @@ export function buildLiveCoachView(
     id: "m1",
     role: "coach",
     synthetic: true,
-    text: `${greeting(userName)} Din readiness er ${pct}% — ${note.toLowerCase()}. ${loadAnswer} Ugens anbefaling: ${focusQuote}`,
+    text: `${greeting(userName)} ${readinessLine} ${loadAnswer} Ugens anbefaling: ${focusQuote}`,
   };
   const initialMessages: ChatMessage[] = history.length > 0 ? historyMessages(history) : [opener];
 

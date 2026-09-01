@@ -306,6 +306,32 @@ describe("buildNextActivity", () => {
   });
 });
 
+// Issue #273: a run earlier today must be named, not folded into a generic
+// "kun N timer" hvile note — the card has to tell the same story the coach
+// opener and the Hjem hero tell about the same-day run.
+describe("buildNextActivity — same-day run in the rest reason (issue #273)", () => {
+  it("names the same-day run when the 24 h buffer is broken by a run earlier today", () => {
+    // 10 h before the 12:00 anchor — the same local calendar day as `now`.
+    const activities = [run(SHARPEN, 10), ...fiveEasyRuns(SHARPEN)];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("rest");
+    expect(next.reason.join(" ")).toContain("Du har løbet i dag — hviledag for restitution");
+    expect(next.reason.join(" ")).toContain("Kun 10 timer siden turen");
+  });
+
+  it("keeps the generic note when the newest run was yesterday, still inside 24 h", () => {
+    // 20 h before the 12:00 anchor — yesterday afternoon, a different calendar
+    // day, so "i dag" would be wrong even though the buffer still blocks.
+    const activities = [run(SHARPEN, 20), ...fiveEasyRuns(SHARPEN)];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("rest");
+    expect(next.reason.join(" ")).toContain("Kun 20 timer siden sidste tur");
+    expect(next.reason.join(" ")).not.toContain("Du har løbet i dag");
+  });
+});
+
 // Issue #255: the variation must never name the session today's "Næste pas"
 // already prescribes. The two vocabularies overlap on `easy` and `long` only,
 // so those are the only collisions these tests can provoke.

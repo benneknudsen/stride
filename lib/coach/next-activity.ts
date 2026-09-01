@@ -328,14 +328,23 @@ export function buildNextActivity({
   const reason: string[] = [];
 
   // 2. Recovery buffer against the newest run. Under 24 h no run is safe, so
-  // this wins over everything the mix might argue for.
+  // this wins over everything the mix might argue for. When that run happened
+  // earlier today, the card says so (issue #273) — a generic "kun N timer" note
+  // is the unexplained hviledag the issue reports. Same local-calendar read the
+  // phase above uses.
   const gapHours = Math.max(
     0,
     (now.getTime() - ensureDate(recent[0].startDate).getTime()) / HOUR_MS
   );
   if (gapHours < EASY_MIN_RECOVERY_HOURS) {
+    const ranToday =
+      getLocalDate(ensureDate(recent[0].startDate)).getTime() === getLocalDate(now).getTime();
     reason.push(
-      `Kun ${Math.round(gapHours)} timer siden sidste tur — under de ${EASY_MIN_RECOVERY_HOURS} timers restitution en ny løbetur kræver.`
+      ranToday
+        ? `Du har løbet i dag — hviledag for restitution. Kun ${Math.round(
+            gapHours
+          )} timer siden turen, under de ${EASY_MIN_RECOVERY_HOURS} timers restitution en ny løbetur kræver.`
+        : `Kun ${Math.round(gapHours)} timer siden sidste tur — under de ${EASY_MIN_RECOVERY_HOURS} timers restitution en ny løbetur kræver.`
     );
     return restCard(basis, reason);
   }

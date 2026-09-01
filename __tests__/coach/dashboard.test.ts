@@ -206,6 +206,27 @@ describe("buildCoachDashboard", () => {
     expect(dashboard.workout.type).toBe("rest");
   });
 
+  it("exposes hoursSinceLastRun from the newest run of any intensity (#273)", () => {
+    const asOf = BURN_WEDNESDAY;
+    // steadyHistory's newest run is 2 days old at an easy 145 bpm (Z3) — the
+    // hard-effort read never sees it, the last-run read must.
+    const dashboard = buildCoachDashboard(
+      steadyHistory(asOf),
+      asOf,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+    expect(dashboard.hoursSinceLastRun).toBeCloseTo(48);
+    expect(dashboard.hoursSinceHardEffort).toBeNull();
+  });
+
+  it("reads a run 12 h ago as inside the same-day window (#273)", () => {
+    const asOf = BURN_WEDNESDAY;
+    const activities = [...steadyHistory(asOf), run(asOf, 0.5)];
+    const dashboard = buildCoachDashboard(activities, asOf, DASHBOARD_WEEKS, TEST_RACE_DATE);
+    expect(dashboard.hoursSinceLastRun).toBeCloseTo(12);
+  });
+
   it("never lets the variation prescribe the same run type as today's pas (#255)", () => {
     // Two weeks of consecutive days in each of the two phases: whatever the plan
     // slots in, the variation must name a different session — hvile on both

@@ -9,7 +9,12 @@
 // (issue #99): the server page passes the user's own race date/name, and the
 // defaults keep visitors on the engine's demo race.
 
-import { DEFAULT_RACE_DATE, DEFAULT_RACE_NAME, planTotalWeeks } from "@/lib/coach/engine";
+import {
+  DEFAULT_RACE_DATE,
+  DEFAULT_RACE_NAME,
+  EASY_MIN_RECOVERY_HOURS,
+  planTotalWeeks,
+} from "@/lib/coach/engine";
 import { decodePolyline } from "@/lib/cobalt/polyline";
 import {
   estimateRaceTime,
@@ -18,12 +23,16 @@ import {
   inferRaceDistanceKm,
   type RaceEstimate,
 } from "@/lib/cobalt/race-estimate";
-import { readinessFromRatio, readinessWithRecovery } from "@/lib/cobalt/readiness";
+import {
+  readinessFromRatio,
+  readinessWithRecovery,
+  SAME_DAY_RUN_NOTE,
+} from "@/lib/cobalt/readiness";
 import { zoneBadgeForHeartRate } from "@/lib/cobalt/zones";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { demoActivities } from "@/lib/demo/data";
 import { formatDuration, formatPace, getWeeklyVolume } from "@/lib/metrics";
-import { hoursSinceHardEffort } from "@/lib/training/effort";
+import { hoursSinceHardEffort, hoursSinceLastRun } from "@/lib/training/effort";
 import { detectPersonalRecord } from "@/lib/training/personal-record";
 import { computeSnapshot } from "@/lib/training/progression-core";
 import type { ZoneHrConfig } from "@/lib/training/zones";
@@ -427,11 +436,20 @@ export function buildHomeView(
     readinessFromRatio(ratio),
     hoursSinceHardEffort(runs, now)
   );
-  const heroNote = {
-    ready: "Kroppen er klar i dag.",
-    easy: "Hold tempoet roligt i dag.",
-    rest: "Kroppen har brug for hvile.",
-  }[readiness.band];
+  // #273: a rolig tur the load signal cannot see leaves the readiness mapping
+  // "ready" — but within the 24 h recovery window the hero must not claim
+  // "Kroppen er klar i dag."; it names the run instead, the same line the coach
+  // opener uses, so both surfaces tell the same same-day story. The #259
+  // hard-effort cap above and the readiness number stay untouched.
+  const sinceLastRun = hoursSinceLastRun(runs, now);
+  const heroNote =
+    readiness.band === "ready" && sinceLastRun !== null && sinceLastRun < EASY_MIN_RECOVERY_HOURS
+      ? SAME_DAY_RUN_NOTE
+      : {
+          ready: "Kroppen er klar i dag.",
+          easy: "Hold tempoet roligt i dag.",
+          rest: "Kroppen har brug for hvile.",
+        }[readiness.band];
 
   // The latest run owns its own card, so the list starts at the second run —
   // unless that's the only run there is, in which case show it here rather than

@@ -6,6 +6,7 @@ import {
   type CoachLoadActivityLike,
   loadStatusFromRatio,
 } from "@/lib/cobalt/coach";
+import { SAME_DAY_RUN_NOTE } from "@/lib/cobalt/readiness";
 import { demoActivities } from "@/lib/demo/data";
 
 /**
@@ -160,6 +161,7 @@ describe("buildCoachView", () => {
 function dashboard(over: {
   ratio: number | null;
   workout?: Partial<CoachDashboardData["workout"]>;
+  hoursSinceLastRun?: number | null;
 }): CoachDashboardData {
   const workout = {
     type: "tempo",
@@ -177,6 +179,7 @@ function dashboard(over: {
     zoneSeries: [],
     volumeSeries: [],
     loadGauge: { ratio: over.ratio, fraction: 0.5, risk: null, label: "" },
+    hoursSinceLastRun: over.hoursSinceLastRun ?? null,
     // biome-ignore lint/suspicious/noExplicitAny: partial view-model fixture
   } as any;
 }
@@ -251,6 +254,59 @@ describe("buildLiveCoachView", () => {
     expect(view.initialMessages[0].role).toBe("coach");
     expect(view.initialMessages[0].synthetic).toBe(true);
     expect(view.initialMessages.some((m) => m.role === "user")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildLiveCoachView — same-day run in the opener (issue #273)
+// ---------------------------------------------------------------------------
+
+// A rolig Zone 1–2 tur never trips the #259 hard-effort cap, so the load read
+// alone still says "Klar til hårdt pas" hours after the runner was out. When
+// the newest run sits inside the 24 h recovery window the opener must name the
+// run instead — the same story the cards and the Hjem hero tell.
+describe("buildLiveCoachView — same-day run in the opener (issue #273)", () => {
+  it("replaces the ready-band claim with the same-day line when the newest run is inside 24 h", () => {
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.0, hoursSinceLastRun: 4 }),
+      liveActivities,
+      NOW
+    );
+    expect(view.initialMessages[0].text).toContain(SAME_DAY_RUN_NOTE);
+    expect(view.initialMessages[0].text).not.toContain("klar til hårdt pas");
+  });
+
+  it("keeps the readiness line once the newest run is past the 24 h window", () => {
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.0, hoursSinceLastRun: 30 }),
+      liveActivities,
+      NOW
+    );
+    expect(view.initialMessages[0].text).toContain("Din readiness er 95%");
+    expect(view.initialMessages[0].text).toContain("klar til hårdt pas");
+    expect(view.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
+  });
+
+  it("keeps the readiness line when there is no run at all (null)", () => {
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.0, hoursSinceLastRun: null }),
+      liveActivities,
+      NOW
+    );
+    expect(view.initialMessages[0].text).toContain("klar til hårdt pas");
+    expect(view.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
+  });
+
+  it("leaves the easy band's opener alone — only the ready claim is replaced", () => {
+    // Ratio 1.5 → readinessFromRatio lands in the easy band, whose note never
+    // promised a hard pas — the same-day line has nothing to override there.
+    const view = buildLiveCoachView(
+      dashboard({ ratio: 1.5, hoursSinceLastRun: 4 }),
+      liveActivities,
+      NOW
+    );
+    expect(view.initialMessages[0].text).toContain("let træning anbefalet");
+    expect(view.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
   });
 });
 

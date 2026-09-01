@@ -4,6 +4,7 @@ import {
   dominantZone,
   HARD_EFFORT_LOOKBACK_HOURS,
   hoursSinceHardEffort,
+  hoursSinceLastRun,
   isHardEffort,
 } from "@/lib/training/effort";
 
@@ -132,5 +133,41 @@ describe("hoursSinceHardEffort", () => {
   it("is deterministic — same input, same answer", () => {
     const runs = [run(3, 174), run(20, 140)];
     expect(hoursSinceHardEffort(runs, NOW)).toBe(hoursSinceHardEffort(runs, NOW));
+  });
+});
+
+describe("hoursSinceLastRun", () => {
+  it("reads an empty history as null (cold start)", () => {
+    expect(hoursSinceLastRun([], NOW)).toBeNull();
+  });
+
+  it("counts a rolig tur too — intensity is irrelevant (issue #273)", () => {
+    // The whole point: a Zone 1–2 run leaves no hard-effort trace, but it is
+    // still a run, and the surfaces must know how long ago it was.
+    expect(hoursSinceLastRun([run(4, 125)], NOW)).toBeCloseTo(4);
+    expect(hoursSinceLastRun([run(4, null)], NOW)).toBeCloseTo(4);
+  });
+
+  it("returns the newest run, not the first one it meets in input order", () => {
+    const runs = [run(70, 140), run(30, 125), run(5, 132), run(50, 128)];
+    expect(hoursSinceLastRun(runs, NOW)).toBeCloseTo(5);
+  });
+
+  it("ignores runs in the future rather than returning negative hours", () => {
+    expect(hoursSinceLastRun([run(-5, 140)], NOW)).toBeNull();
+    expect(hoursSinceLastRun([run(-5, 140), run(9, 125)], NOW)).toBeCloseTo(9);
+  });
+
+  it("has no lookback cap — hours since an old run stay numeric", () => {
+    expect(hoursSinceLastRun([run(HARD_EFFORT_LOOKBACK_HOURS + 1, 125)], NOW)).toBeCloseTo(
+      HARD_EFFORT_LOOKBACK_HOURS + 1
+    );
+  });
+
+  it("accepts the ISO-string startDate the Neon driver returns (issue #194)", () => {
+    const iso = new Date(NOW.getTime() - 12 * 3_600_000).toISOString();
+    expect(
+      hoursSinceLastRun([{ startDate: iso, averageHeartrate: 125, movingTime: 2_400 }], NOW)
+    ).toBeCloseTo(12);
   });
 });
