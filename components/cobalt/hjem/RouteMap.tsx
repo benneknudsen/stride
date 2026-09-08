@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 
-// Non-interactive route map: Leaflet + OpenStreetMap standard tiles (no API key).
-// CARTO's light_all raster tiles started watermarking "API KEY REQUIRED" in Aug
-// 2026 (their raster basemaps are being retired), so we fall back to the OSM
-// tile server instead. Keep per-tile usage low: OSM's policy bans heavy apps.
+// Non-interactive route map: MapLibre GL + OpenFreeMap's keyless Positron style
+// (issue #275 — CARTO raster tiles started watermarking without an API key).
 // Every interaction handler is disabled — this is a view, not a map UI. The
-// route is a red glow polyline under a thin red stroke, with a cobalt start dot
-// and a red finish dot. Leaflet is imported dynamically so it never touches SSR.
+// route is a GeoJSON line: a red glow stroke under a thin red stroke, with a
+// cobalt start dot and a red finish dot. MapLibre is imported dynamically so it
+// never touches SSR.
+//
+// The v6 ESM build spawns `dist/maplibre-gl-worker.mjs` relative to its module
+// URL, which no bundler serves, so a same-origin copy of the worker (+ its
+// `maplibre-gl-shared.mjs` import) lives in `public/` and is pointed to here.
 export function RouteMap({
   coords,
   label,
@@ -22,56 +25,88 @@ export function RouteMap({
 
   useEffect(() => {
     let cancelled = false;
-    let map: import("leaflet").Map | undefined;
+    let map: import("maplibre-gl").Map | undefined;
     const el = ref.current;
 
-    // A route with no points has nothing to draw, and Leaflet needs a view set
-    // before it will take a layer — so don't build a map at all. Both callers
-    // render a placeholder instead of this component in that case.
+    // A route with no points has nothing to draw — both callers render a
+    // placeholder instead of this component in that case.
     if (coords.length === 0) return;
 
     (async () => {
-      const L = (await import("leaflet")).default;
+      const maplibregl = await import("maplibre-gl");
       if (cancelled || !el || el.dataset.cgInit) return;
       el.dataset.cgInit = "1";
+      maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
-      map = L.map(el, {
-        zoomControl: false,
-        attributionControl: false,
-        dragging: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-        boxZoom: false,
-        keyboard: false,
-        touchZoom: false,
+      map = new maplibregl.Map({
+        container: el,
+        style: "https://tiles.openfreemap.org/styles/positron",
+        interactive: false,
+        // OpenFreeMap/OSM attribution is a license requirement — compact keeps
+        // it discreet but one click away.
+        attributionControl: { compact: true },
       });
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        // OSM's tile-usage policy requires visible attribution when serving
-        // tiles to end users — even on a non-interactive view.
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(map);
+      // GeoJSON is [lng, lat]; our props are [lat, lng].
+      const positions = coords.map(([lat, lng]) => [lng, lat] as [number, number]);
 
-      const latlngs = coords.map(([lat, lng]) => L.latLng(lat, lng));
-      L.polyline(latlngs, { color: "#ee2418", weight: 9, opacity: 0.22 }).addTo(map);
-      L.polyline(latlngs, { color: "#ee2418", weight: 3.5, opacity: 1 }).addTo(map);
-      L.circleMarker(latlngs[0], {
-        radius: 5,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: "#1b29c0",
-        fillOpacity: 1,
-      }).addTo(map);
-      L.circleMarker(latlngs[latlngs.length - 1], {
-        radius: 5,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: "#ee2418",
-        fillOpacity: 1,
-      }).addTo(map);
+      map.on("load", () => {
+        if (cancelled || !map) return;
+        map.addSource("route", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "LineString", coordinates: positions },
+              },
+              {
+                type: "Feature",
+                properties: { kind: "start" },
+                geometry: { type: "Point", coordinates: positions[0] },
+              },
+              {
+                type: "Feature",
+                properties: { kind: "end" },
+                geometry: { type: "Point", coordinates: positions[positions.length - 1] },
+              },
+            ],
+          },
+        });
+        map.addLayer({
+          id: "route-glow",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#ee2418", "line-opacity": 0.22, "line-width": 9 },
+        });
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#ee2418", "line-opacity": 1, "line-width": 3.5 },
+        });
+        map.addLayer({
+          id: "route-dots",
+          type: "circle",
+          source: "route",
+          paint: {
+            "circle-color": ["match", ["get", "kind"], "start", "#1b29c0", "#ee2418"],
+            "circle-radius": 5,
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 2,
+          },
+        });
 
-      map.fitBounds(L.latLngBounds(latlngs), { padding: [22, 22] });
+        const bounds = positions.reduce(
+          (b, c) => b.extend(c),
+          new maplibregl.LngLatBounds(positions[0], positions[0])
+        );
+        map.fitBounds(bounds, { padding: { top: 22, bottom: 22, left: 22, right: 22 } });
+      });
     })();
 
     return () => {

@@ -12,9 +12,9 @@
  * `'strict-dynamic'`/a nonce, so neither is listed; `'self'` remains only as the
  * `default-src` baseline for the other resource types.
  *
- * `style-src` deliberately keeps `'unsafe-inline'`: Tailwind, Recharts and Leaflet
- * emit un-nonce-able inline styles, so nonce-ing styles would break the UI. Styles
- * are a far lower XSS risk than scripts.
+ * `style-src` deliberately keeps `'unsafe-inline'`: Tailwind, Recharts and
+ * MapLibre emit un-nonce-able inline styles, so nonce-ing styles would break the
+ * UI. Styles are a far lower XSS risk than scripts.
  *
  * Dev additionally needs `'unsafe-eval'` (React Refresh) and a websocket (HMR).
  */
@@ -26,10 +26,12 @@ export function buildCsp(nonce: string, isDev: boolean): string {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     // `connect-src` must allowlist the external origins the browser may reach:
-    // the Strava API/OAuth host and the Vercel AI Gateway (AI SDK streaming).
-    // Without these, `'self'` alone blocks those fetch/XHR/stream connections
-    // (issue #62). Dev additionally needs a websocket for HMR.
-    `connect-src 'self' https://www.strava.com https://ai-gateway.vercel.sh${isDev ? " ws:" : ""}`,
+    // the Strava API/OAuth host, the Vercel AI Gateway (AI SDK streaming), and
+    // OpenFreeMap's tile server (RouteMap fetches its style, glyphs and vector
+    // tiles via fetch/XHR — issue #275). Without these, `'self'` alone blocks
+    // those fetch/XHR/stream connections (issue #62). Dev additionally needs a
+    // websocket for HMR.
+    `connect-src 'self' https://www.strava.com https://ai-gateway.vercel.sh https://tiles.openfreemap.org${isDev ? " ws:" : ""}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
