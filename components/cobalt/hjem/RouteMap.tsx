@@ -3,7 +3,10 @@
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 
-// Non-interactive route map: Leaflet + free CARTO light_all tiles (no API key).
+// Non-interactive route map: Leaflet + OpenStreetMap standard tiles (no API key).
+// CARTO's light_all raster tiles started watermarking "API KEY REQUIRED" in Aug
+// 2026 (their raster basemaps are being retired), so we fall back to the OSM
+// tile server instead. Keep per-tile usage low: OSM's policy bans heavy apps.
 // Every interaction handler is disabled — this is a view, not a map UI. The
 // route is a red glow polyline under a thin red stroke, with a cobalt start dot
 // and a red finish dot. Leaflet is imported dynamically so it never touches SSR.
@@ -43,8 +46,11 @@ export function RouteMap({
         touchZoom: false,
       });
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
+        // OSM's tile-usage policy requires visible attribution when serving
+        // tiles to end users — even on a non-interactive view.
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(map);
 
       const latlngs = coords.map(([lat, lng]) => L.latLng(lat, lng));
