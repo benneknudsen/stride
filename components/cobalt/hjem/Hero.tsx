@@ -43,7 +43,11 @@ export function Hero({
         decimals={1}
         label="km · denne uge"
         run={started}
-        className="items-end text-right text-[64px] text-cobalt sm:text-[80px]"
+        // Right-aligned only while it sits at the row's right edge (sm+). Below
+        // that the header wraps and the block stands alone — right-aligning a
+        // short number ("3,0") against the wide label left it floating off the
+        // page's left margin.
+        className="items-start text-left text-[64px] text-cobalt sm:items-end sm:text-right sm:text-[80px]"
       />
     </header>
   );
