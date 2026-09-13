@@ -93,6 +93,11 @@ export function RouteMap({
           id: "route-dots",
           type: "circle",
           source: "route",
+          // #279: the source mixes a LineString with the two Point features, and
+          // a circle layer without a filter draws on *every* vertex of every
+          // geometry — a dot per GPS point. Only the start/end Points should get
+          // dots, so filter by geometry type.
+          filter: ["==", ["geometry-type"], "Point"],
           paint: {
             "circle-color": ["match", ["get", "kind"], "start", "#1b29c0", "#ee2418"],
             "circle-radius": 5,
