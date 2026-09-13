@@ -116,13 +116,18 @@ export function RouteMap({
     };
   }, [coords]);
 
+  // Positioning must be inline (#276): MapLibre v6 adds an *unlayered*
+  // `.maplibregl-map{position:relative}` to this container, which outranks
+  // Tailwind's layered `.absolute`/`.inset-0` and collapses the box to 0px
+  // (`overflow:hidden` clips the canvas away). Inline styles beat every
+  // non-`!important` stylesheet rule — don't "tidy" this into classes.
   return (
     <div
       ref={ref}
       role="img"
       aria-label={label}
       className="absolute inset-0"
-      style={{ background: "#e9eae5" }}
+      style={{ position: "absolute", inset: 0, background: "#e9eae5" }}
     />
   );
 }
