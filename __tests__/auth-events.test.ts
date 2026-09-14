@@ -1,3 +1,4 @@
+import type { AdapterAccount } from "next-auth/adapters";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -18,7 +19,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *   - @/lib/observability (captureError)
  *
  * It also covers the #262 adapter wrapper, which strips plaintext
- * access_token/refresh_token before delegating to the stock `linkAccount`.
+ * access_token/refresh_token before delegating to the stock `linkAccount`, and
+ * the #277 `stripAccountTokens` helper it delegates to (which also removes the
+ * Google `id_token`).
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: test fixtures and fluent mocks are partial by design
@@ -79,7 +82,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 // Importing lib/auth.ts runs NextAuth(config) → populates mocks.capturedConfig.
-import "@/lib/auth";
+import { stripAccountTokens } from "@/lib/auth";
 
 // The real callback under test.
 type SignInEvent = (args: Any) => Promise<void>;
@@ -254,21 +257,83 @@ describe("events.signIn — token mirroring", () => {
 // Adapter linkAccount — plaintext token stripping (#262)
 // ===========================================================================
 
-describe("adapter.linkAccount — token stripping (#262)", () => {
+describe("adapter.linkAccount — token stripping (#262/#277)", () => {
   const adapter: { linkAccount: (account: Any) => Promise<void> } = mocks.capturedConfig.adapter;
 
-  it("delegates to the stock adapter with access_token/refresh_token removed", async () => {
-    await adapter.linkAccount({ ...stravaAccount, type: "oauth", userId: "user-1" });
+  it("delegates to the stock adapter with access_token/refresh_token/id_token removed", async () => {
+    await adapter.linkAccount({
+      ...stravaAccount,
+      id_token: "id-token-jwt",
+      type: "oauth",
+      userId: "user-1",
+    });
 
     expect(mocks.adapterLinkAccount).toHaveBeenCalledTimes(1);
     const passed = mocks.adapterLinkAccount.mock.calls[0][0];
     expect(passed).not.toHaveProperty("access_token");
     expect(passed).not.toHaveProperty("refresh_token");
+    expect(passed).not.toHaveProperty("id_token");
     expect(passed).toMatchObject({
       provider: "strava",
       providerAccountId: "42",
       type: "oauth",
       userId: "user-1",
+      expires_at: 4_000_000_000,
+      scope: "read,activity:read_all",
+    });
+  });
+});
+
+// ===========================================================================
+// stripAccountTokens — pure token scrub (#262/#277)
+// ===========================================================================
+
+describe("stripAccountTokens — token removal (#262/#277)", () => {
+  // A Google OIDC account carries all three token fields; Strava carries no
+  // id_token. Both shapes must come out token-free.
+  const googleAccount: AdapterAccount = {
+    userId: "user-1",
+    type: "oidc",
+    provider: "google",
+    providerAccountId: "google-42",
+    access_token: "access-token-xyz",
+    refresh_token: "refresh-token-abc",
+    id_token: "id-token-jwt",
+    expires_at: 4_000_000_000,
+    token_type: "bearer",
+    scope: "openid email profile",
+    session_state: "session-state",
+  };
+
+  it("removes access_token, refresh_token and id_token", () => {
+    const stripped = stripAccountTokens(googleAccount);
+
+    for (const tokenField of ["access_token", "refresh_token", "id_token"]) {
+      expect(Object.keys(stripped)).not.toContain(tokenField);
+    }
+  });
+
+  it("preserves every non-secret field untouched", () => {
+    expect(stripAccountTokens(googleAccount)).toEqual({
+      userId: "user-1",
+      type: "oidc",
+      provider: "google",
+      providerAccountId: "google-42",
+      expires_at: 4_000_000_000,
+      token_type: "bearer",
+      scope: "openid email profile",
+      session_state: "session-state",
+    });
+  });
+
+  it("keeps an account without id_token working (Strava shape)", () => {
+    expect(stripAccountTokens({ ...stravaAccount, userId: "user-1", type: "oauth" })).toEqual({
+      provider: "strava",
+      providerAccountId: "42",
+      userId: "user-1",
+      type: "oauth",
+      expires_at: 4_000_000_000,
+      scope: "read,activity:read_all",
     });
   });
 });
