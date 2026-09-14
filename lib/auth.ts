@@ -11,6 +11,29 @@ import { upsertStravaTokens } from "@/lib/db/queries";
 import { captureError } from "@/lib/observability";
 import { syncStravaActivities } from "@/lib/strava/sync";
 
+/**
+ * Strips OAuth token fields before the Auth.js adapter persists an account row
+ * (issue #262, extended in #277). The stock adapter's `linkAccount` is the only
+ * write path into `accounts` (a plain `insert(...).values(data)`), so the tokens
+ * must be removed here: `access_token`/`refresh_token` (Strava) and `id_token`
+ * (Google OIDC) would otherwise sit in plaintext. The encrypted `strava_tokens`
+ * mirror is the only token copy that should exist at rest.
+ *
+ * Exported as a pure function so it can be unit-tested without booting NextAuth.
+ * Every other field (`type`, `provider`, `providerAccountId`, `expires_at`,
+ * `token_type`, `scope`, `session_state`, …) is preserved — the adapter and
+ * later session callbacks may rely on them.
+ */
+export function stripAccountTokens(account: AdapterAccount): AdapterAccount {
+  const {
+    access_token: _accessToken,
+    refresh_token: _refreshToken,
+    id_token: _idToken,
+    ...withoutTokens
+  } = account;
+  return withoutTokens;
+}
+
 const {
   handlers,
   auth: nodeAuth,
@@ -40,18 +63,14 @@ const {
       verificationTokensTable: verificationTokens,
     });
 
-    // Issue #262: the stock adapter would persist the Strava `access_token`/
-    // `refresh_token` in plaintext on `accounts`, so they are stripped before
-    // delegation — the encrypted `strava_tokens` mirror is the only at-rest copy.
+    // Issue #262/#277: the stock adapter would persist the Strava `access_token`/
+    // `refresh_token` and the Google `id_token` in plaintext on `accounts`, so
+    // they are stripped before delegation — the encrypted `strava_tokens` mirror
+    // is the only at-rest copy.
     return {
       ...drizzleAdapter,
       linkAccount: async (account: AdapterAccount) => {
-        const {
-          access_token: _accessToken,
-          refresh_token: _refreshToken,
-          ...withoutTokens
-        } = account;
-        await drizzleAdapter.linkAccount?.(withoutTokens);
+        await drizzleAdapter.linkAccount?.(stripAccountTokens(account));
       },
     };
   })(),
