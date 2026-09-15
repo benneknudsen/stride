@@ -8,17 +8,25 @@ import { MOBILE_VIEWPORT, waitForContent } from "./helpers";
 // is phone-sized because the BottomTabBar is `md:hidden`.
 //
 // The front page itself now greets a visitor with the Velkommen landing page;
-// the demo dashboard lives one click behind it on "/?demo=1" (DEMO_HOME_ROUTE).
+// the demo dashboard lives at the clean "/demo" (DEMO_HOME_ROUTE), which
+// next.config.ts rewrites to the front page reading "?demo=1".
 test.use({
   storageState: { cookies: [], origins: [] },
   viewport: MOBILE_VIEWPORT,
 });
 
 test.describe("browsing without a session", () => {
-  test("the old /demo route redirects to the front page", async ({ page }) => {
+  test("the old /demo URL serves the demo dashboard in place (rewrite, not redirect)", async ({
+    page,
+  }) => {
     await page.goto("/demo");
-    // The trailing $ matters — every other app path is prefixed by "/".
-    await expect(page).toHaveURL(/localhost:6969\/$/);
+    // next.config.ts rewrites /demo → /?demo=1, so the browser keeps the pretty
+    // URL; a redirect would have bounced it to "/" instead.
+    await expect(page).toHaveURL(/localhost:6969\/demo$/);
+    await waitForContent(page);
+    // The rewrite has to deliver the dashboard itself — the URL would still be
+    // right if the front page regressed to a login wall or a blank render.
+    await expect(page.getByText(/^Uge \d+ · Silkeborg Halvmarathon$/)).toBeVisible();
   });
 
   test("the front page is the Velkommen landing, with a way into the demo", async ({ page }) => {
@@ -30,9 +38,10 @@ test.describe("browsing without a session", () => {
     // the landing brings its own header with a login link instead.
     await expect(page.getByRole("navigation", { name: "Primær navigation" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Log ind" }).first()).toBeVisible();
-    // Two demo CTAs (hero + footer band) — following one lands in the demo dashboard.
+    // Two demo CTAs (hero + footer band) — following one lands in the demo
+    // dashboard at the clean "/demo", which stays in the URL (rewrite).
     await page.getByRole("link", { name: "Udforsk demoen" }).first().click();
-    await expect(page).toHaveURL(/\/\?demo=1$/);
+    await expect(page).toHaveURL(/\/demo$/);
     await waitForContent(page);
     await expect(page.getByText(/^Uge \d+ · Silkeborg Halvmarathon$/)).toBeVisible();
     // …where the chrome is back, so the visitor can browse the demo (#100).
@@ -70,6 +79,29 @@ test.describe("browsing without a session", () => {
     // These two head their card with an <h2> instead.
     await expect(page.getByRole("heading", { name: "Seneste ture" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Datakilder" })).toBeVisible();
+  });
+
+  test("the Rute card's map is actually painted on the demo", async ({ page }) => {
+    await page.goto("/demo");
+    await waitForContent(page);
+
+    // RouteMap marks its container with data-cg-init once MapLibre is up (#276).
+    // The "Rute" header stays visible through both the 0-height bug and the
+    // dot-per-vertex bug, so assert the geometry and the painted canvas instead.
+    const map = page.locator("[data-cg-init]");
+    await expect(map).toBeVisible();
+
+    const box = await map.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThan(0);
+
+    const canvas = map.locator("canvas");
+    await expect(canvas).toHaveCount(1);
+    const painted = await canvas.evaluate((el) => ({
+      width: (el as HTMLCanvasElement).width,
+      height: (el as HTMLCanvasElement).height,
+    }));
+    expect(painted.width).toBeGreaterThan(0);
+    expect(painted.height).toBeGreaterThan(0);
   });
 
   test("Aktiviteter, Coach and Plan are reachable too", async ({ page }) => {

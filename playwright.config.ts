@@ -33,15 +33,18 @@ export default defineConfig({
     },
   ],
 
-  // `npm run dev`, not `npm start`. proxy.ts auth-gates every route except /demo
-  // and /login, and the only way to sign in without a live Google OAuth app or a
-  // mail round-trip is the Credentials provider in auth.config.ts — which is
-  // compiled out unless NODE_ENV is "development". Against a production server
-  // three of the four suites would sit on the login screen.
+  // `npm run dev`, not `npm start`. proxy.ts no longer auth-gates any app route
+  // (#100) — signed-out visitors get the demo fallbacks (#84) — but the suites
+  // that sign in still need a server that accepts a login, and the only way in
+  // without a live Google OAuth app or a mail round-trip is the Credentials
+  // provider in auth.config.ts, which is compiled out unless NODE_ENV is
+  // "development". Against a production server those suites would sit on the
+  // login screen.
   webServer: {
     command: "npm run dev",
-    // Health-check the one public page: "/" answers 307 → /login when signed out.
-    url: `${BASE_URL}/demo`,
+    // Health-check /login — a real page, unlike /demo, which next.config.ts only
+    // rewrites to "/?demo=1". A 200 here proves the dev server is serving pages.
+    url: `${BASE_URL}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
