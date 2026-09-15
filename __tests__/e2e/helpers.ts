@@ -13,5 +13,10 @@ export const MOBILE_VIEWPORT = { width: 390, height: 844 };
  * swallows clicks aimed at anything beneath it, so settle before asserting.
  */
 export async function waitForContent(page: Page) {
-  await expect(page.getByRole("status")).toBeHidden();
+  // Scope to the RunnerLoader: it is the only role="status" carrying an explicit
+  // aria-live, and Hjem also mounts the transient PR celebration toast
+  // (role="status", no aria-live). Pages can mount several loaders at once, so
+  // count the visible ones down to zero instead of asserting on one locator —
+  // `toBeHidden` would hit Playwright's strict mode as soon as two exist (#282).
+  await expect(page.locator('[role="status"][aria-live="polite"]:visible')).toHaveCount(0);
 }
