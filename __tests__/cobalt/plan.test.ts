@@ -285,14 +285,14 @@ describe("buildPlanView — data-driven suggestions (issue #115)", () => {
 
   it("derives the race card from the prediction, with the goal just above the estimate", () => {
     const view = live();
-    expect(view.race.aiEstimate).not.toBe("3:41"); // the template's number
+    expect(view.race.estimate).not.toBe("3:41"); // the template's number
     expect(view.race.racePace).not.toBe("5:20");
     expect(view.goalLabel).toBe(`Mål under ${view.race.goalTime}`);
     const minutes = (time: string) => {
       const [h, m] = time.split(":").map(Number);
       return h * 60 + m;
     };
-    expect(minutes(view.race.goalTime)).toBeGreaterThanOrEqual(minutes(view.race.aiEstimate));
+    expect(minutes(view.race.goalTime)).toBeGreaterThanOrEqual(minutes(view.race.estimate));
   });
 
   it("derives the upcoming weeks from the engine rather than a fixed 52/56/38", () => {
@@ -312,7 +312,7 @@ describe("buildPlanView — data-driven suggestions (issue #115)", () => {
   it("keeps the demo template for visitors — same call, live off", () => {
     const view = buildPlanView(RUNS, NOW, RACE, RACE_NAME);
     expect(view.dataDriven).toBe(false);
-    expect(view.race.aiEstimate).toBe("3:41");
+    expect(view.race.estimate).toBe("3:41");
     expect(view.race.lock).toBeNull();
   });
 
@@ -387,7 +387,7 @@ describe("buildPlanView — locked race card (issue #117)", () => {
     const view = buildPlanView([liveRun(3, 10, 270)], NOW, RACE, RACE_NAME, true);
     expect(view.dataDriven).toBe(true);
     expect(view.race.lock).toBeNull();
-    expect(view.race.aiEstimate).not.toBe("3:41");
+    expect(view.race.estimate).not.toBe("3:41");
   });
 });
 
@@ -529,7 +529,7 @@ describe("buildPlanView — race distance + goal (issue #238)", () => {
   it("targets the chosen distance, not the half-marathon default", () => {
     const tenK = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10);
     const half = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 21.0975);
-    expect(seconds(tenK.race.aiEstimate)).toBeLessThan(seconds(half.race.aiEstimate));
+    expect(seconds(tenK.race.estimate)).toBeLessThan(seconds(half.race.estimate));
     expect(tenK.race.distanceKm).toBe(10);
   });
 
@@ -540,7 +540,7 @@ describe("buildPlanView — race distance + goal (issue #238)", () => {
     expect(view.goalLabel).toBe("Mål under 40:00");
     expect(view.race.goalTimeSeconds).toBe(2400);
     expect(view.race.distanceKm).toBe(10);
-    expect(view.race.aiEstimate).not.toBe(view.race.goalTime);
+    expect(view.race.estimate).not.toBe(view.race.goalTime);
   });
 
   it("anchors the quality suggestion on goal pace when a goal is set", () => {
@@ -572,7 +572,7 @@ describe("buildPlanView — race distance + goal (issue #238)", () => {
     const view = buildPlanView(undefined, NOW, RACE, RACE_NAME);
     expect(view.race.goalTime).toBe("3:45");
     expect(view.race.racePace).toBe("5:20");
-    expect(view.race.aiEstimate).toBe("3:41");
+    expect(view.race.estimate).toBe("3:41");
     expect(view.race.distanceKm).toBeNull();
     expect(view.race.goalTimeSeconds).toBeNull();
   });

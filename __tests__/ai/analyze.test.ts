@@ -2,34 +2,25 @@
  * Integration tests for POST /api/ai/analyze.
  *
  * `@/lib/auth` is mocked (the real module builds a NextAuth adapter against the
- * DB at import time), the DB queries are stubbed, and `ai`'s `streamObject` is
- * mocked so no provider is ever called — everything else (zod validation, rate
- * limiting, the #209 gating, the NDJSON stream plumbing) runs for real.
+ * DB at import time). Everything else runs for real: zod validation, the
+ * per-IP rate limit, the anonymous payload cap and the NDJSON stream plumbing.
+ * There is no provider to stub — the route's only source of blocks is
+ * `heuristicBlocks`, so every response is derived from the submitted activities.
  *
  * Also unit-tests `clientIp` (#264): the pre-auth rate-limit key must prefer
  * trustworthy headers over the client-controlled first XFF hop.
  */
 
 import type { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { analysisBlockSchema } from "@/lib/ai/tools";
 import { resetRateLimit } from "@/lib/rate-limit";
 
-const { authMock, streamObjectMock } = vi.hoisted(() => ({
+const { authMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
-  streamObjectMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
-
-vi.mock("@/lib/db/queries", () => ({
-  getCachedAnalysis: vi.fn().mockResolvedValue(null),
-  insertAnalysis: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai")>();
-  return { ...actual, streamObject: streamObjectMock };
-});
 
 import { clientIp, POST } from "@/app/api/ai/analyze/route";
 
@@ -71,7 +62,7 @@ function manyActivities(count: number): RequestActivity[] {
 }
 
 /** Parse an NDJSON response body into analysis-block objects. */
-async function readBlocks(res: Response): Promise<unknown[]> {
+async function readBlocks(res: Response): Promise<Record<string, unknown>[]> {
   const text = await res.text();
   return text
     .split("\n")
@@ -83,77 +74,37 @@ beforeEach(() => {
   resetRateLimit();
   authMock.mockReset();
   authMock.mockResolvedValue(null);
-  streamObjectMock.mockReset();
-});
-
-afterEach(() => {
-  vi.unstubAllEnvs();
 });
 
 describe("POST /api/ai/analyze", () => {
-  it("serves heuristic blocks to a visitor even with an AI key configured (#209)", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
-    authMock.mockResolvedValue(null); // visitor: no session
+  it("streams the same grounded blocks to a visitor and to a signed-in runner", async () => {
+    const visitor = await POST(analyzeRequest());
+    expect(visitor.status).toBe(200);
+    expect(visitor.headers.get("Content-Type")).toBe("application/x-ndjson; charset=utf-8");
+    const visitorBlocks = await readBlocks(visitor);
+    expect(visitorBlocks.length).toBeGreaterThan(0);
 
-    const res = await POST(analyzeRequest());
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Content-Type")).toBe("application/x-ndjson; charset=utf-8");
-    const blocks = await readBlocks(res);
-    expect(blocks.length).toBeGreaterThan(0);
-    // The live-AI path is never touched for an unauthenticated visitor.
-    expect(streamObjectMock).not.toHaveBeenCalled();
-  });
-
-  it("serves heuristic blocks to a visitor when no AI key is configured", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "");
-    authMock.mockResolvedValue(null);
-
-    const res = await POST(analyzeRequest());
-
-    expect(res.status).toBe(200);
-    const blocks = await readBlocks(res);
-    expect(blocks.length).toBeGreaterThan(0);
-    expect(streamObjectMock).not.toHaveBeenCalled();
-  });
-
-  it("serves heuristic blocks to a signed-in user when no AI key is configured", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "");
     authMock.mockResolvedValue({ user: { id: "user-1" } });
+    const member = await POST(analyzeRequest());
+    expect(member.status).toBe(200);
+    const memberBlocks = await readBlocks(member);
 
+    // No provider, no session gating: the blocks depend only on the activities.
+    expect(memberBlocks).toEqual(visitorBlocks);
+  });
+
+  it("only ever emits schema-valid blocks", async () => {
     const res = await POST(analyzeRequest());
 
     expect(res.status).toBe(200);
     const blocks = await readBlocks(res);
     expect(blocks.length).toBeGreaterThan(0);
-    expect(streamObjectMock).not.toHaveBeenCalled();
+    for (const block of blocks) {
+      expect(analysisBlockSchema.safeParse(block).success).toBe(true);
+    }
   });
 
-  it("takes the live-AI path for a signed-in user when configured", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
-    authMock.mockResolvedValue({ user: { id: "user-1" } });
-    streamObjectMock.mockImplementation(() => ({
-      elementStream: (async function* () {
-        yield {
-          tool: "insightCard",
-          title: "Stærk uge",
-          body: "Du løb mere end sidste uge.",
-          metric: "24 km",
-          sentiment: "positive",
-        };
-      })(),
-    }));
-
-    const res = await POST(analyzeRequest());
-
-    expect(res.status).toBe(200);
-    const blocks = await readBlocks(res);
-    expect(blocks.length).toBeGreaterThan(0);
-    expect(streamObjectMock).toHaveBeenCalled();
-  });
-
-  it("rate limits a visitor after the per-IP heuristic window is full", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+  it("rate limits a visitor after the per-IP window is full", async () => {
     authMock.mockResolvedValue(null);
 
     for (let i = 0; i < 30; i++) {
@@ -168,32 +119,49 @@ describe("POST /api/ai/analyze", () => {
     expect(retryAfter).toBeLessThanOrEqual(60);
   });
 
-  it("caps the anonymous activity payload before heuristic compute (#264)", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+  it("caps the anonymous activity payload before any compute (#264)", async () => {
     authMock.mockResolvedValue(null);
 
-    // 150 client-supplied activities arrive, but the heuristic must only ever
-    // see MAX_ANON_ACTIVITIES (100) — defense-in-depth against a rotated
+    // 150 client-supplied activities arrive, but the blocks must only ever
+    // summarise MAX_ANON_ACTIVITIES (100) — defense-in-depth against a rotated
     // pre-auth rate-limit key on self-hosted deployments.
     const res = await POST(analyzeRequest({ activities: manyActivities(150) }));
 
     expect(res.status).toBe(200);
     const blocks = await readBlocks(res);
-    const insight = blocks.find((b) => (b as { tool?: string }).tool === "insightCard") as {
-      body: string;
-    };
+    const insight = blocks.find((b) => b.tool === "insightCard") as { body: string };
     // heuristicBlocks reports the reduced totals: "På ${totalRuns} ture har du
     // løbet ${totalDistanceKm} km, …" — 100 runs × 1 km, not 150.
     expect(insight.body).toMatch(/^På 100 ture har du løbet 100 km/);
-    expect(streamObjectMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the full payload for a signed-in runner", async () => {
+    authMock.mockResolvedValue({ user: { id: "user-1" } });
+
+    const res = await POST(analyzeRequest({ activities: manyActivities(150) }));
+
+    expect(res.status).toBe(200);
+    const blocks = await readBlocks(res);
+    const insight = blocks.find((b) => b.tool === "insightCard") as { body: string };
+    expect(insight.body).toMatch(/^På 150 ture har du løbet 150 km/);
   });
 
   it("rejects an empty activity list", async () => {
-    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
-
     const res = await POST(analyzeRequest({ activities: [] }));
 
     expect(res.status).toBe(400);
+  });
+
+  it("rejects a malformed body", async () => {
+    const res = (await new Request("http://localhost/api/ai/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not json",
+    })) as unknown as NextRequest;
+
+    const result = await POST(res);
+    expect(result.status).toBe(400);
+    expect(await result.json()).toEqual({ error: "invalid_json" });
   });
 });
 

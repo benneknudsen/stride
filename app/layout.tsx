@@ -17,8 +17,8 @@ const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Stride — AI-Powered Running Dashboard",
-  description: "Visualize your running data with AI-powered insights",
+  title: "Stride — Running Coach",
+  description: "Visualize your running data and follow a plan built from it",
   icons: {
     icon: "/app-icon.svg",
   },
@@ -29,12 +29,12 @@ export const metadata: Metadata = {
     siteName: "Stride",
     locale: "da_DK",
     url: "/",
-    title: "Stride — AI-Powered Running Dashboard",
+    title: "Stride — Running Coach",
     description: "Al din løbedata. Én coach, der forstår den.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Stride — AI-Powered Running Dashboard",
+    title: "Stride — Running Coach",
     description: "Al din løbedata. Én coach, der forstår den.",
   },
 };

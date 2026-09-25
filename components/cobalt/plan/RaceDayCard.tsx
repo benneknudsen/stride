@@ -12,7 +12,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 // Race day card — the red goal card. Race name + date, a live days-to-race
-// countdown, and the three target numbers (goal time, race pace, AI estimate).
+// countdown, and the three target numbers (goal time, race pace, estimate).
 // `onEdit` (signed-in users, issue #99) adds the "Skift race" affordance that
 // opens the RaceDateDialog.
 //
@@ -70,7 +70,7 @@ export function RaceDayCard({
         <div className="mt-[18px] flex flex-wrap gap-[26px]">
           <Stat value={race.goalTime} label="Måltid" />
           <Stat value={race.racePace} label="Race-pace /km" />
-          <Stat value={race.aiEstimate} label="AI-estimat" />
+          <Stat value={race.estimate} label="Prognose" />
         </div>
       )}
     </GlassCard>

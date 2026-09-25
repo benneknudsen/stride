@@ -4,7 +4,7 @@
  * The Map-based limiter this replaces (#88) was process-local: on Vercel every
  * function instance kept its own counters, so the real limit was N× the
  * configured one and reset on every cold start — worst on exactly the endpoints
- * it guards (AI chat/analyze, provider syncs).
+ * it guards (the block-analyze endpoint, provider syncs).
  *
  * Redis is used whenever UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are
  * set (Vercel Marketplace provisions both). Without them — local dev, tests —

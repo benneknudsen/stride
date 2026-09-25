@@ -8,7 +8,6 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/db/queries", () => ({
   getDashboardActivities: vi.fn().mockResolvedValue([]),
   getRacePlan: vi.fn().mockResolvedValue(null),
-  getChatHistory: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/lib/coach/dashboard-data", async (importOriginal) => {

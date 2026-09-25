@@ -18,9 +18,9 @@ const SILVER = "#e9eae5";
 const SILVER_DARK = "#dde0ec";
 const INK = "#5560a8";
 
-const KICKER = "AI-DREVET LØBETRÆNING";
+const KICKER = "DATADRIVEN LØBETRÆNING";
 const TAGLINE = ["Al din løbedata.", "Én coach, der forstår den."];
-const FOOTER = "NEXT.JS · TYPESCRIPT · DRIZZLE · VERCEL AI SDK";
+const FOOTER = "NEXT.JS · TYPESCRIPT · DRIZZLE";
 
 // next/font can't run inside an OG route, so the fonts are fetched from the
 // Google Fonts css2 API instead — the `text=` param subsets each file to the

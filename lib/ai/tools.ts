@@ -1,14 +1,14 @@
 /**
- * Typed generative-UI tools — the contract between the model and the UI.
+ * Typed blocks — the contract between the analysis engine and the UI.
  *
- * The model never emits free-form markup. Instead it invokes one of these
- * typed tools, and the analysis panel renders the matching pre-defined
- * component (see `components/cobalt/coach-dashboard/CoachFeed.tsx`). Each tool's
- * input schema is the single source of truth: it drives the model's structured
- * output, the runtime validation, and the React component props.
+ * The analysis never renders free-form markup. It emits one of these typed
+ * blocks and the feed renders the matching pre-defined component (see
+ * `components/cobalt/coach-dashboard/CoachFeed.tsx`). Each tool's input schema
+ * is the single source of truth: it drives the runtime validation and the React
+ * component props, so a block that does not validate is simply not rendered.
  *
  * Future dashboard cards (#26 Zone Breakdown, etc.) extract from this pattern —
- * add a tool schema here, a renderer branch in `CoachFeed.tsx`, and a card view.
+ * add a block schema here, a renderer branch in `CoachFeed.tsx`, and a card view.
  */
 
 import { z } from "zod";
@@ -112,7 +112,7 @@ export const coachInsightSchema = z.object({
 /**
  * One rendered block in the analysis stream. The `tool` discriminant selects
  * the component; the remaining fields are that tool's validated input. The
- * analysis endpoint streams an array of these, one element at a time.
+ * analyze endpoint streams an array of these, one element at a time.
  */
 export const analysisBlockSchema = z.discriminatedUnion("tool", [
   insightCardSchema.extend({ tool: z.literal("insightCard") }),
@@ -131,8 +131,8 @@ type AnalysisToolName = AnalysisBlock["tool"];
 export type AnalysisBlockOf<T extends AnalysisToolName> = Extract<AnalysisBlock, { tool: T }>;
 
 /**
- * Convert a streamed block into the persisted `{ name, args }` shape stored in
- * `ai_analyses.toolCalls` (see types/domain.ts `AnalysisToolCall`).
+ * Convert a rendered block into a flat `{ name, args }` pair — the shape an
+ * out-of-process consumer (a cache, a webhook payload) can carry.
  */
 export function blockToToolCall(block: AnalysisBlock): {
   name: AnalysisToolName;
@@ -142,7 +142,7 @@ export function blockToToolCall(block: AnalysisBlock): {
   return { name, args };
 }
 
-/** Reverse of {@link blockToToolCall} — rebuild a block from a persisted tool call. */
+/** Reverse of {@link blockToToolCall} — rebuild a block from a `{ name, args }` pair. */
 export function toolCallToBlock(call: {
   name: string;
   args: Record<string, unknown>;

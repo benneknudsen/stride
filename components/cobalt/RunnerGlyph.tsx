@@ -1,5 +1,5 @@
 // The Stride runner glyph: red circle head + one continuous body/leg stroke +
-// two arms at 55% opacity. Shared by the Logo tile, the AI Coach widget and the
+// two arms at 55% opacity. Shared by the Logo tile, the Coach widget and the
 // RunnerLoader. Colours are props so the same mark works on silver, cobalt and
 // red surfaces. Decorative by default (aria-hidden); pass `title` to label it.
 export function RunnerGlyph({

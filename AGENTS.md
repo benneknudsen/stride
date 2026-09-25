@@ -15,7 +15,7 @@ Repo: `benneknudsen/stride` — AI-powered running training dashboard (Next.js 1
 ## Stack (exact)
 - Next.js 16, App Router, TypeScript strict
 - Tailwind CSS + shadcn/ui (new-york style, zinc base)
-- Vercel AI SDK (`streamText` / `streamObject`, OpenRouter provider routing in `lib/ai/provider.ts`)
+- No model in the loop (#292) — the coach is a deterministic rule engine; Strava's API Policy 2026 §5.3 forbids Strava data in any AI application
 - Drizzle ORM + Neon Postgres (`@neondatabase/serverless`, pooled WebSocket) — migrations in `drizzle/`, applied by `scripts/migrate.mjs`
 - NextAuth.js v5 (JWT session, per-login `sid` rotation; email magic link + Google; dev Credentials in development)
 - Recharts 3.x
@@ -40,7 +40,7 @@ Linter/formatter is **Biome 2.5** (not ESLint). Config: `biome.json` — 2-space
 - TypeScript strict — no `any` without explicit justification.
 - Server Components by default; `'use client'` only when needed.
 - Server Actions live ONLY in `actions/` — never in components.
-- AI keys NEVER reach the browser — every AI call goes through `/api/ai/*` (`lib/ai/provider.ts` routes OpenRouter; chat coach via `streamText` + tool calls, activity analysis via `streamObject` with deterministic heuristic fallback when no key is set).
+- No AI keys exist, and no AI call may be reintroduced. User activity data is never sent to a model or any third party (Strava API Policy 2026 §5.3/§5.10/§5.16(b)).
 - OAuth tokens encrypted at rest via `lib/crypto.ts` (AES-256-GCM); `ENCRYPTION_KEY` in env.
 - Component files: PascalCase, one component per file (except shadcn/ui).
 - Imports sorted by Biome (organizeImports). No default exports except Next.js page/layout.
@@ -48,12 +48,12 @@ Linter/formatter is **Biome 2.5** (not ESLint). Config: `biome.json` — 2-space
 
 ## Architecture
 `docs/architecture.md` is the original plan but the codebase has evolved past it — treat as historical, not authoritative.
-- Drizzle over Prisma; NextAuth v5 over Clerk; server-side AI only (cost/GDPR/key security).
+- Drizzle over Prisma; NextAuth v5 over Clerk; no model in the loop (#292 — Strava policy compliance, and it is also cheaper and fully reproducible).
 - Event-driven revalidation over ISR (running data changes on new activity only).
 - **Cobalt Glass** is the standard design: `components/cobalt/` (UI) + `lib/cobalt/` (view-models, Danish: `hjem.ts`, `plan.ts`, `aktiviteter.ts`). Pages are Danish: `/` (hjem), `/aktiviteter`, `/plan`.
 - Coach lives at `/dashboard/coach` only (#86); old `/coach` permanently redirects.
 - Race date is per-user (#99): `actions/race.ts` + `getRacePlan`, engine demo race as fallback.
-- **Plan page** (#244): no longer a Mon–Sun prescribed schedule. Surfaces 3 phase-aware run suggestions (easy/tempo/long) with distance + pace targets. The coach reads the suggestions via `getRunSuggestions` tool (`lib/ai/coach-tools.ts`) and recommends which to do today based on readiness + recovery.
+- **Plan page** (#244): no longer a Mon–Sun prescribed schedule. Surfaces 3 phase-aware run suggestions (easy/tempo/long) with distance + pace targets, from `getPlanSuggestions` in `lib/cobalt/plan.ts`. The user picks which to do today; the engine applies readiness + recovery on top.
 - **Recovery buffer** (#240): the coach enforces recovery (24h before easy/long, 48h before tempo) against the actual last run — the plan page no longer prescribes rest days.
 - **Readiness** (#241): asymmetric mapping in `lib/cobalt/readiness.ts` — full marks plateau at ratio 0.8–1.15, steep penalty only on the overload side, gentle decline when rested. Band thresholds: ≥80 "ready", ≥68 "easy", else "rest".
 - **Race distance/goal** (#238/#239): `RaceDateDialog` lets users pick race distance (10K/Half/Marathon/custom) and goal time/pace. Goal anchors the pace grid via `mergeGoalGrid` (#242) — easy side stays grounded in prediction when no observed easy pace exists.
@@ -88,11 +88,20 @@ A fresh `git worktree add` has **no `node_modules`**. Symlink the main checkout'
 - Typography: Bricolage Grotesque (display), Instrument Sans (UI), Instrument Serif (heroes, italic), Spline Sans Mono (data) — `lib/fonts.ts`.
 - Legacy "Volt" system (`StrideLogo`/`StrideLoader`, Geist/Space Grotesk) has been **removed** — do not reference it.
 
-## AI provider
-OpenRouter (single `OPENROUTER_API_KEY` fronts all models). Preferred primary: `google/gemma-4-26b-a4b-it`, fallback: `openai/gpt-4o-mini` (independent vendor). Config in `lib/ai/provider.ts`, overridable via `AI_PRIMARY`/`AI_FALLBACK` env vars. Chat coach uses `streamText` + typed tools (`lib/ai/coach-tools.ts`); activity analysis uses `streamObject` with deterministic heuristic fallback when no key is set.
+## The coach engine (#292 — no LLM anywhere)
+Strava's API Policy 2026 §5.3 forbids using Strava data — including derived, anonymised or aggregated data — in "any AI Application", explicitly including "ingestion into a context window or working memory". §5.10 forbids passing it to AI providers, and §5.16(b) forbids MCP/agent-mediated interfaces that expose it. So the model-led half of this app is **deleted**, not gated behind a key, and **must not be reintroduced** — no OpenRouter/`ai`-SDK/embeddings/local-ML replacement either.
 
-## Coach tools (`lib/ai/coach-tools.ts`)
-The coach has typed tools it can call during a conversation: `getProgression` (training snapshot), `getRecentActivities` (last N runs), `getRunSuggestions` (the 3 phase-aware suggestions from the plan page — issue #244), and `analyzeActivity` (deep single-run analysis). Tools return structured data; the coach synthesizes it into Danish advice.
+What remains is the deterministic engine, and it is the whole product:
+- `lib/coach/*` — rule engine + recommender (recovery buffer, shoe, volume budget).
+- `lib/training/*` — progression snapshot, acute:chronic load, pace efficiency, zones.
+- `lib/cobalt/readiness.ts` — the one readiness mapping every surface reads.
+- `lib/ai/analysis.ts` — `buildAnalysisInput` (reduce activities to a summary) + `heuristicBlocks` (turn that summary into typed blocks).
+- `lib/ai/tools.ts` — the block contract (zod schemas) used by the heuristic **and** rendered by `CoachFeed`. Not model-facing any more; keep it whole.
+- `app/api/ai/analyze/route.ts` — the only AI-named route left. It is a deterministic NDJSON block stream: no provider, no cache, no session gating. Per-IP rate limit + anonymous payload cap.
+
+Deleted in #292 and not to be referenced: `lib/ai/provider.ts`, `lib/ai/harmony.ts`, `lib/ai/coach-tools.ts`, `app/api/ai/chat/`, `actions/chat.ts`, `components/cobalt/coach/ChatPanel.tsx` (and `MessageBubble`/`ChatMarkdown`/`ActivityCard`), `lib/cobalt/chat-markdown.ts`, `types/chat.ts`, and the `chat_messages` / `ai_analyses` / `activity_embeddings` tables (dropped in `drizzle/migrations/0009_*`).
+
+`scripts/migrate.mjs` still runs `CREATE EXTENSION IF NOT EXISTS vector` — migration 0000 creates a `vector(1536)` column, so a fresh database needs the extension to replay the history even though nothing reads that table any more.
 
 ## Env vars (see `.env.example`)
-`DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID/SECRET`, `RESEND_API_KEY`, `STRAVA_*`, `ENCRYPTION_KEY` (AES-256-GCM), `UPSTASH_REDIS_REST_URL/TOKEN`, `OPENROUTER_API_KEY`, `AI_PRIMARY`/`AI_FALLBACK`.
+`DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID/SECRET`, `RESEND_API_KEY`, `STRAVA_*`, `ENCRYPTION_KEY` (AES-256-GCM), `UPSTASH_REDIS_REST_URL/TOKEN`.

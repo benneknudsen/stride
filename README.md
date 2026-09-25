@@ -4,7 +4,7 @@
 
 <h1 align="center">Stride</h1>
 
-<p align="center">AI-powered running coach — Strava sync, progression analysis, generative UI</p>
+<p align="center">Rule-engine running coach — Strava sync, progression analysis, live insight cards</p>
 
 <p align="center">
   <a href="https://stride-run.club"><strong>Live → stride-run.club</strong></a>
@@ -14,7 +14,7 @@
 
 ## What is Stride?
 
-A Next.js running coach platform that connects to Strava, visualizes training data with rich dashboards, and generates personalized insights via **generative AI** — the AI calls typed tools that render React components, not plain text.
+A Next.js running coach platform that connects to Strava, visualizes training data with rich dashboards, and coaches from a deterministic rule engine. Every insight is arithmetic over the athlete's own runs — no model call, no key, no data leaving the server.
 
 ## Tech Stack
 
@@ -23,20 +23,22 @@ A Next.js running coach platform that connects to Strava, visualizes training da
 | Framework | Next.js 16 (App Router, Turbopack) |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS + shadcn/ui |
-| AI | Vercel AI SDK (streamObject, typed tools) |
+| Coach | Deterministic rule engine + typed block stream |
 | Database | Drizzle ORM + Neon Postgres |
 | Auth | NextAuth.js v5 |
 | Charts | Recharts |
-| Testing | Vitest (887 tests) |
+| Testing | Vitest + Playwright |
 | CI/CD | Vercel (automatic deploys) |
 
 ## Architecture
 
-### Generative UI
+### Typed insight cards
 
-Instead of streaming text, the AI endpoint streams typed tool calls as NDJSON. Each tool maps to a validated React component:
+The analyze endpoint (`/api/ai/analyze`) reduces the athlete's activities to a
+compact summary and streams typed blocks as NDJSON. Each block validates against
+a zod schema and renders as a pre-defined React component:
 
-| Tool | Component | Purpose |
+| Block | Component | Purpose |
 |---|---|---|
 | `insight-card` | `InsightCard` | Severity-dotted observations |
 | `trend-callout` | `TrendCallout` | Directional deltas with sparklines |
@@ -44,22 +46,24 @@ Instead of streaming text, the AI endpoint streams typed tool calls as NDJSON. E
 | `metric-comparison` | `MetricComparison` | Week-over-week stats |
 | `coach-insight` | `CoachInsight` | Personalized coaching messages |
 
-The **coach chat** (`/api/ai/chat`) applies the same idea to a conversation. Each NDJSON line is a discriminated `ChatReply`: a `text` fragment (a token of the streamed answer) or a `block` fragment (a piece of generative UI). When the model calls a tool, the route validates that tool's output with zod and streams it as a block — so a card's numbers come from the rule engine, never the model's free text, and can't be fabricated. Text and blocks interleave in a single answer, and the prose still streams token by token beside the cards.
+The block schemas in `lib/ai/tools.ts` are the single source of truth: they
+drive the runtime validation and the component props, so a block that does not
+validate is simply not rendered. The same contract is what `CoachFeed` renders on
+`/dashboard/coach`.
 
-| Tool | Block → Component | Purpose |
-|---|---|---|
-| `getRecentActivities` | `ActivityCard` | Clickable run card → the activity's detail page (`activityRoute(id)`) |
-| `recommendWorkout` | `WorkoutCard` | The recommended next session as a card, not just prose |
-
-A line with no `type` field is treated as text, so older stream formats keep rendering unchanged.
+Everything the coach says is computed by the engine in `lib/coach/*`,
+`lib/training/*` and `lib/ai/analysis.ts` — the recommender's recovery buffer, the
+progression engine's acute:chronic load ratio, and the readiness mapping in
+`lib/cobalt/readiness.ts`. The cards are prose-free: the numbers come from the
+arithmetic, so a card can never state something the engine did not derive.
 
 ### Design Decisions
 
-- **Generative UI over plain text** — typed tool calls rendered by pre-defined components
-- **Server-side AI only** — API keys never reach the browser
+- **Deterministic coach** — the recommendation is a pure function of the athlete's own activities, so the same data always yields the same advice
+- **No model in the loop** — Strava's API Policy 2026 §5.3 forbids putting Strava data (even derived, anonymised or aggregated) into an AI application, so nothing is sent to one
+- **Typed blocks over plain text** — validated blocks rendered by pre-defined components
 - **Drizzle over Prisma** — SQL-first, edge-compatible
 - **AES-256-GCM encrypted tokens** — per-row IVs for OAuth tokens
-- **Heuristic fallback** — AI analysis works without API key
 
 ### Design System
 

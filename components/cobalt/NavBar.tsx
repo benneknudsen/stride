@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 // Glass-pill navigation. Active route = a raised liquid-glass pill (issue #100,
 // shared with the BottomTabBar) rather than a flat cobalt fill. Coach carries the
-// red AI spark. Sync POSTs to /api/strava/sync and drives the button from the
+// red sync spark. Sync POSTs to /api/strava/sync and drives the button from the
 // response — idle → syncing → synced|error → idle — so it can be run again (#97).
 //
 // For a visitor the Hjem tab points at the demo dashboard (`/demo`) instead of

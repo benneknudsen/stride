@@ -205,7 +205,7 @@ export interface PlanView {
     goalTimeSeconds: number | null;
     goalTime: string;
     racePace: string;
-    aiEstimate: string;
+    estimate: string;
     /**
      * Set when the estimate is locked (issue #117): the goal/pace/estimate above
      * are placeholders the card must not show, and this says what would unlock
@@ -733,15 +733,15 @@ export function buildPlanView(
     1
   );
 
-  // The race card. Live: the predictor's finish time is the AI estimate, and the
-  // goal is the round number just above it — the same relationship the design
+  // The race card. Live: the Riegel predictor's finish time is the estimate, and
+  // the goal is the round number just above it — the same relationship the design
   // shows (an estimate sitting just under the goal), but computed. Demo keeps the
   // designed numbers.
   //
   // When the runner has set their own goal (issue #238), it takes over the goal
   // time and race pace: "Måltid" shows their target, "Race-pace" shows goal pace
-  // (goal time ÷ distance), and "AI-estimat" still shows the model's prediction —
-  // so the card contrasts what they're aiming for with what the model expects.
+  // (goal time ÷ distance), and "Prognose" still shows the predictor's read —
+  // so the card contrasts what they're aiming for with what the history says.
   const prediction = derived?.prediction;
   const hasGoal = goalTimeSeconds != null && goalTimeSeconds > 0;
   const goalDistanceKm =
@@ -751,9 +751,9 @@ export function buildPlanView(
     ? {
         goalTime: hasGoal ? formatGoalClock(goalTimeSeconds) : goalTimeFor(prediction.timeSeconds),
         racePace: goalRacePace ?? formatPaceClock(prediction.paceSecPerKm),
-        aiEstimate: formatRaceTime(prediction.timeSeconds),
+        estimate: formatRaceTime(prediction.timeSeconds),
       }
-    : { goalTime: "3:45", racePace: "5:20", aiEstimate: "3:41" };
+    : { goalTime: "3:45", racePace: "5:20", estimate: "3:41" };
 
   return {
     totalWeeks,

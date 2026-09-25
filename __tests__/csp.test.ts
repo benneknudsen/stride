@@ -53,11 +53,15 @@ describe("buildCsp", () => {
     expect(connectSrc(prod)).not.toContain("ws:");
   });
 
-  it("allowlists Strava and the AI gateway in connect-src (issue #62)", () => {
+  it("allowlists Strava and the map tiles in connect-src (issue #62)", () => {
     const connect = connectSrc(buildCsp("n", false));
     expect(connect).toContain("'self'");
     expect(connect).toContain("https://www.strava.com");
-    expect(connect).toContain("https://ai-gateway.vercel.sh");
+    expect(connect).toContain("https://tiles.openfreemap.org");
+  });
+
+  it("no longer allowlists the AI gateway — the browser streams from no model (#292)", () => {
+    expect(connectSrc(buildCsp("n", false))).not.toContain("ai-gateway.vercel.sh");
   });
 
   it("retains the baseline directives", () => {

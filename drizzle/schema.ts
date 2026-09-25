@@ -6,14 +6,12 @@ import {
   index,
   integer,
   jsonb,
-  pgEnum,
   pgTable,
   primaryKey,
   real,
   text,
   timestamp,
   uniqueIndex,
-  vector,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccount } from "next-auth/adapters";
 
@@ -24,24 +22,9 @@ import type { AdapterAccount } from "next-auth/adapters";
  * - cuid2 primary keys (collision-resistant, URL-safe, sortable-ish)
  * - Strava OAuth tokens are NEVER stored in plaintext — only AES-256-GCM
  *   ciphertext + per-row IV + auth tag (see lib/crypto.ts)
- * - AI analyses are deduplicated via `inputHash` so the model is called
- *   once per dataset, not once per page view
+ * - Nothing is cached server-side: the coach is a pure function of the user's
+ *   own activities, so there is no analysis table to deduplicate against
  */
-
-// ---------------------------------------------------------------------------
-// Enums
-// ---------------------------------------------------------------------------
-
-/** Scope of an AI analysis — what slice of data it reasons over. */
-export const analysisScopeEnum = pgEnum("analysis_scope", [
-  "weekly",
-  "activity",
-  "trend",
-  "overall",
-]);
-
-/** Role of a chat message in a Phase 2 RAG conversation. */
-export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant", "system"]);
 
 // ---------------------------------------------------------------------------
 // users — linked to a Strava athlete
@@ -224,90 +207,5 @@ export const activities = pgTable(
     // Webhook delete/lookup filters by strava_activity_id alone; the composite
     // unique above leads with user_id and can't serve it — see issue #38.
     index("activities_strava_activity_id_idx").on(table.stravaActivityId),
-  ]
-);
-
-// ---------------------------------------------------------------------------
-// ai_analyses — cached AI responses, deduplicated by inputHash
-// ---------------------------------------------------------------------------
-
-export const aiAnalyses = pgTable(
-  "ai_analyses",
-  {
-    id: text("id").primaryKey().$defaultFn(createId),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    scope: analysisScopeEnum("scope").notNull(),
-    /** Content hash of the input dataset — the cache key. */
-    inputHash: text("input_hash").notNull(),
-    /** Streamed prose summary persisted for replay. */
-    summary: text("summary"),
-    /** Generative-UI tool calls (typed component invocations). */
-    toolCalls: jsonb("tool_calls"),
-    /** Model identifier that produced this analysis. */
-    model: text("model"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("ai_analyses_user_scope_input_hash_unique").on(
-      table.userId,
-      table.scope,
-      table.inputHash
-    ),
-  ]
-);
-
-// ---------------------------------------------------------------------------
-// chat_messages — persisted AI coach conversation history (issue #74).
-// One rolling thread per user; the chat route loads the newest N rows as
-// model context and appends each user/assistant turn after streaming.
-// ---------------------------------------------------------------------------
-
-export const chatMessages = pgTable(
-  "chat_messages",
-  {
-    id: text("id").primaryKey().$defaultFn(createId),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    role: chatRoleEnum("role").notNull(),
-    content: text("content").notNull(),
-    /**
-     * Persisted references to generative-UI blocks (issue #228): only activity
-     * ids are stored, then rehydrated from the current activities row on read
-     * so deleted activities never become dead links.
-     */
-    blocks: jsonb("blocks"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [index("chat_messages_user_created_idx").on(table.userId, table.createdAt)]
-);
-
-// ---------------------------------------------------------------------------
-// activity_embeddings — Phase 2 pgvector, HNSW cosine index
-// ---------------------------------------------------------------------------
-
-export const activityEmbeddings = pgTable(
-  "activity_embeddings",
-  {
-    id: text("id").primaryKey().$defaultFn(createId),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    activityId: text("activity_id")
-      .notNull()
-      .references(() => activities.id, { onDelete: "cascade" }),
-    /** Natural-language summary that was embedded. */
-    content: text("content").notNull(),
-    /** OpenAI text-embedding-3-small dimensionality. */
-    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    index("activity_embeddings_embedding_hnsw_idx")
-      .using("hnsw", table.embedding.op("vector_cosine_ops"))
-      .with({ m: 16, ef_construction: 64 }),
-    index("activity_embeddings_user_idx").on(table.userId),
   ]
 );
