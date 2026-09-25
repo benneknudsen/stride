@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Stride — Agent Rules (AGENTS.md)
 
-Repo: `benneknudsen/stride` — AI-powered running training dashboard (Next.js 16 App Router).
+Repo: `benneknudsen/stride` — running training dashboard with a deterministic coach engine (Next.js 16 App Router).
 
 ## Stack (exact)
 - Next.js 16, App Router, TypeScript strict
@@ -69,7 +69,7 @@ Live data is default (#84): authed users get their own synced activities + race 
 ## DB access layer
 - `lib/db/queries.ts` centralizes user-owned reads (consolidated in #137) — prefer these over ad-hoc queries.
 - Writes stay in action modules (`.update(users)`, `.insert().onConflictDoUpdate()` in sync routes).
-- `scripts/migrate.mjs` runs `CREATE EXTENSION IF NOT EXISTS vector;` before migrating (pgvector for `activity_embeddings`).
+- `scripts/migrate.mjs` runs `CREATE EXTENSION IF NOT EXISTS vector;` before migrating (pgvector; only needed to replay migration 0000's `vector(1536)` column for `activity_embeddings`, which #292 dropped).
 
 ## Error handling
 - `lib/observability.ts` exports `captureError` (serializes only `name`/`message`/`cause` — never raw thrown values). Use it in catch blocks; never `console.log(error)` with token/connection data (#135, #143).

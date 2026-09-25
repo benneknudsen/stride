@@ -2,6 +2,21 @@
 
 Each task is a self-contained prompt for Claude Code. Do them in order.
 
+> **SUPERSEDED IN PART (issue #292).** The model-led half of this plan was
+> withdrawn: Strava's API Policy 2026 §5.3 forbids using Strava data — including
+> derived, anonymised or aggregated data — in any AI application, explicitly
+> including "ingestion into a context window or working memory"; §5.10 forbids
+> passing it to AI providers; and §5.16(b) forbids MCP/agent-mediated interfaces
+> that expose it. So the LLM layer was **deleted**, not gated behind a key, and
+> it must not be rebuilt — no OpenRouter / `ai` SDK / embeddings / local-ML
+> substitute either. Tasks 1–7 and 9–11 below are historical but harmless: they
+> describe the deterministic parts of Stride that were built as written. **Task 8
+> ("AI analysis — generative UI") and the "Phase 2: RAG chatbot" line are
+> withdrawn** and must not be built — both are marked inline. Everything that
+> replaced them is the deterministic engine: `heuristicBlocks` in
+> `lib/ai/analysis.ts`, the block contract in `lib/ai/tools.ts`, `lib/coach/*`
+> and `lib/training/*`.
+
 ## Foundation
 
 ### 1. Scaffold project
@@ -59,6 +74,20 @@ claude -p "Scaffold a Next.js 16 project with TypeScript strict, Tailwind, shadc
 - Ownership guard (userId check server-side)
 
 ### 8. AI analysis — generative UI
+
+> **WITHDRAWN (issue #292) — do not build.** The list below is the original
+> plan, kept for history only. None of it may be implemented as written:
+> `lib/ai/provider.ts` and `lib/ai/prompts.ts` are deleted, and no
+> `streamUI`/model call may be reintroduced. What actually exists today:
+> `/api/ai/analyze` is a deterministic NDJSON block stream — it reduces the
+> athlete's activities with `buildAnalysisInput` and emits typed blocks from
+> `heuristicBlocks` in `lib/ai/analysis.ts`, validated against
+> `analysisBlockSchema` from `lib/ai/tools.ts`. There is no provider, no cache
+> and no `actions/analysis.ts` cache path; `inputHash` deduplication is gone
+> with the `ai_analyses` table. The insights are arithmetic over the athlete's
+> own numbers, not generated text.
+
+Historical plan:
 - `lib/ai/provider.ts` (provider router)
 - `lib/ai/tools.ts` (insight-card, trend-callout, workout-recommendation, metric-comparison)
 - `lib/ai/prompts.ts` (system prompt templates)
@@ -78,26 +107,37 @@ claude -p "Scaffold a Next.js 16 project with TypeScript strict, Tailwind, shadc
 ### 10. Error, empty, loading states
 - Every page: loading skeleton, error boundary, empty state
 - "No Strava connected" CTA
-- AI analysis: streaming skeleton, error fallback, cached result display
+- Analysis: block-stream skeleton, error fallback (no cached result — the `ai_analyses` cache was dropped in `drizzle/migrations/0009_*`)
 
 ### 11. Deploy + README
 - Vercel deployment
 - Environment variables configured
 - README.md with architecture overview, demo link, tech decisions
-- "AI-first workflow" section explaining Claude Code + Hermes orchestrator
+- "Dev workflow" section explaining Claude Code + Hermes orchestrator (was framed as "AI-first workflow" before #292; the README no longer makes AI claims, so don't restore that framing)
 
-## Phase 2 (future)
-- RAG chatbot (`/api/ai/chat`, pgvector, `activity_embeddings`)
-- Training suggestions
+## Phase 2
+- ~~RAG chatbot (`/api/ai/chat`, pgvector, `activity_embeddings`)~~ — **permanently
+  dropped (issue #292), not deferred.** Strava's API Policy 2026 §5.3 forbids Strava
+  data — derived data included — in any AI application, and §5.16(b) forbids
+  MCP/agent-mediated interfaces exposing it, so chat/RAG/pgvector/embeddings can
+  never ship. Do not open this as backlog again. (`/api/ai/chat`, `chat_messages`
+  and `activity_embeddings` are deleted; `lib/ai/analysis.ts` and `lib/coach/*`
+  replace the intended coaching surface.)
+- Training suggestions — **done** (`/plan` phase-aware suggestions from
+  `getPlanSuggestions` in `lib/cobalt/plan.ts`, with readiness and the recovery
+  buffer applied by the engine)
 - Performance benchmarking (Lighthouse 95+)
-- Vitest + Playwright test suite
+- Vitest + Playwright test suite — **done** (59 Vitest files, 4 Playwright specs in
+  `__tests__/e2e/`; `npm test` and `npm run test:e2e`)
 
 > **Hermes: read `docs/handoff-2026-07-07-coach-review.md` before planning the
 > next tasks.** It contains the 2026-07-07 coach/AI review outcome (4 bugs
-> fixed in commit `13ab63b`), the remaining findings backlog (B1–B10), the
-> Benjamin-approved roadmap for the live AI coach chat (T1–T5 supersede the
-> "RAG chatbot" line above — RAG is deferred), and a recorded product
-> decision: sleep data is removed and must not be reintroduced.
+> fixed in commit `13ab63b`), the remaining findings backlog (B1–B10), and a
+> recorded product decision: sleep data is removed and must not be reintroduced.
+> Its T1–T5 "live AI coach chat" roadmap was superseded by issue #292 — RAG and
+> the chat route are permanently dropped, not deferred, so do not resurrect T1 or
+> anything downstream of it. The engine findings (B1–B10) and the
+> accounts/env/domain items still stand.
 
 ---
 
