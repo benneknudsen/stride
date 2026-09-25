@@ -64,7 +64,7 @@ Ordered by suggested priority. Each is small unless noted.
 
 | # | Finding | Where | Notes |
 |---|---------|-------|-------|
-| B1 | No rate limiting on `/api/ai/analyze` (and any future AI route) | `app/api/ai/analyze/route.ts` | `lib/rate-limit.ts` exists but is in-memory → per-instance on Vercel. For token-burning routes use a durable store (Upstash/Redis) or accept the per-instance limit consciously. Must land before the app is shared publicly with an AI key set. |
+| B1 | No rate limiting on `/api/ai/analyze` | `app/api/ai/analyze/route.ts` | `lib/rate-limit.ts` exists but is in-memory → per-instance on Vercel. The route is deterministic and stays that way: use a durable store (Upstash/Redis) or accept the per-instance limit consciously, and land this before the app is shared publicly. **Corrected in #292** — the original text read: ~~"No rate limiting on `/api/ai/analyze` (and any future AI route) … For token-burning routes use a durable store … Must land before the app is shared publicly with an AI key set."~~ There will be no future AI route, and no AI key is ever set. |
 | B2 | Recommender ignores `trainingLoad.risk` | `lib/coach/recommender.ts` | `elevated`/`high` acute:chronic ratio changes nothing today; only `optimal` is used (via `readyToIncrease`). High risk should at minimum block tempo and/or shorten distance. `zone2Percent` is computed but unused too. |
 | B3 | `recommendWorkout` never runs `validateWorkout` | `lib/coach/recommender.ts` | The constraint engine is not applied to its own recommendation (e.g. the 10% weekly-progression rule). Running the card through validation would catch future rule conflicts automatically and give free UI warnings. |
 | B4 | No taper/race week | `lib/coach/engine.ts` | Peak ends 14 Sep, race is 20 Sep; `getCurrentPhase` holds at peak, so race week would get tempo + 18 km long run. Needs a 5th `taper` phase or race-week special case. |
@@ -133,8 +133,15 @@ What already exists and should be REUSED, not rebuilt:
    `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REDIRECT_URI` (exact
    match), `STRAVA_VERIFY_TOKEN` (self-chosen). Connect account, run
    `/api/strava/sync`, register the webhook subscription (one curl).
-4. **AI key:** `AI_GATEWAY_API_KEY` (Vercel AI Gateway). Analyze/coach-feed
-   switch from heuristic to real model with zero code changes.
+4. **AI key:** ~~`AI_GATEWAY_API_KEY` (Vercel AI Gateway). Analyze/coach-feed
+   switch from heuristic to real model with zero code changes.~~
+   **CANCELLED (#292 — there is no AI key and no provider to configure, and
+   none may be added).** The original text read: `AI_GATEWAY_API_KEY` (Vercel
+   AI Gateway), with the analyze/coach-feed switching from heuristic to a real
+   model with zero code changes. `AI_GATEWAY_API_KEY` must never be set in any
+   environment. The coach feed and `/api/ai/analyze` are deterministic and stay
+   that way, and setting a key would not change their behaviour — "zero code
+   changes" was not merely outdated, it was wrong.
 5. **Domain:** optional, any time; only blocks magic-link email + branding.
 
 ### Claude Code tasks (for you to prompt, in order)
@@ -175,7 +182,8 @@ not already done inside T1).
 - Engine stays the single source of truth: chat/recommender modules decide,
   `lib/coach/engine.ts` defines rules. No rule duplication in prompts.
 - Pure functions with the clock as a parameter; tests pin dates.
-- AI keys never reach the browser; all model calls under `/api/ai/*`.
+- There are no AI keys and no model calls, and introducing either is not
+  permitted; `/api/ai/analyze` is a deterministic route, not a model call.
 - User-facing coach text is Danish; code/comments/docs English.
 - No sleep data (see §1 product decision).
 - `npm test` + `npx tsc --noEmit` green before commit; note that
