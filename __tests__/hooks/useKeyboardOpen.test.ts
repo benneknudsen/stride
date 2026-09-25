@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { useKeyboardOpen } from "@/hooks/useVisualViewport";
+import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 
 // Issue #226: the mobile keyboard shrinks the visible viewport and the fixed tab
 // bar overlaps whatever is at the bottom. This pins the tab-bar fold trigger

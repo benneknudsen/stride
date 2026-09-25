@@ -15,8 +15,7 @@ import { cn } from "@/lib/utils";
 // progression context to /api/ai/analyze and renders the streamed coach cards
 // (#33) the instant each NDJSON line lands — so insight appears progressively.
 // Unauthenticated visitors always receive a deterministic, data-grounded
-// deterministic analysis, so the feed always
-// fills in the public demo (#209).
+// analysis, so the feed always fills in the public demo (#209).
 
 type Status = "streaming" | "done" | "error";
 
