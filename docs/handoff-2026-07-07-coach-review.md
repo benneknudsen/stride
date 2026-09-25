@@ -1,4 +1,4 @@
-# Handoff: Coach/AI code review + fixes → next phase (AI coach chat)
+# Handoff: Coach/AI code review + fixes (2026-07-07)
 
 **To:** Hermes (orchestrator)
 **From:** Claude Code review session, 2026-07-07
@@ -64,7 +64,7 @@ Ordered by suggested priority. Each is small unless noted.
 
 | # | Finding | Where | Notes |
 |---|---------|-------|-------|
-| B1 | No rate limiting on `/api/ai/analyze` (and any future AI route) | `app/api/ai/analyze/route.ts` | `lib/rate-limit.ts` exists but is in-memory → per-instance on Vercel. For token-burning routes use a durable store (Upstash/Redis) or accept the per-instance limit consciously. Must land before the app is shared publicly with an AI key set. |
+| B1 | No rate limiting on `/api/ai/analyze` | `app/api/ai/analyze/route.ts` | `lib/rate-limit.ts` exists but is in-memory → per-instance on Vercel. The route is deterministic and stays that way: use a durable store (Upstash/Redis) or accept the per-instance limit consciously, and land this before the app is shared publicly. **Corrected in #292** — the original text read: ~~"No rate limiting on `/api/ai/analyze` (and any future AI route) … For token-burning routes use a durable store … Must land before the app is shared publicly with an AI key set."~~ There will be no future AI route, and no AI key is ever set. |
 | B2 | Recommender ignores `trainingLoad.risk` | `lib/coach/recommender.ts` | `elevated`/`high` acute:chronic ratio changes nothing today; only `optimal` is used (via `readyToIncrease`). High risk should at minimum block tempo and/or shorten distance. `zone2Percent` is computed but unused too. |
 | B3 | `recommendWorkout` never runs `validateWorkout` | `lib/coach/recommender.ts` | The constraint engine is not applied to its own recommendation (e.g. the 10% weekly-progression rule). Running the card through validation would catch future rule conflicts automatically and give free UI warnings. |
 | B4 | No taper/race week | `lib/coach/engine.ts` | Peak ends 14 Sep, race is 20 Sep; `getCurrentPhase` holds at peak, so race week would get tempo + 18 km long run. Needs a 5th `taper` phase or race-week special case. |
@@ -92,17 +92,32 @@ What already exists and should be REUSED, not rebuilt:
   JSON-friendly, and `engine.ts` explicitly describes itself as "the constraint
   set the AI coach must respect". The agent should CALL these as tools, not
   have the model guess training advice.
-- `/api/ai/analyze/route.ts` is the template for the chat route: zod-validated
+- ~~`/api/ai/analyze/route.ts` is the template for the chat route: zod-validated
   request, auth gate when a key is set, streaming, provider fallback,
-  deterministic no-key fallback. Chat was to be the same skeleton with
-  `streamText` + tools instead of `streamObject` — **do not build it, #292
-  removed the whole path.** What survives of the route is its zod-validated
-  request, its per-IP rate limit and its deterministic block stream.
-- The scripted replies remain the sensible no-key demo fallback.
-- Architecture docs already plan `/api/ai/chat`, `chat_messages`, and Phase 2
-  RAG (`activity_embeddings`, pgvector). **Recommendation: skip RAG for now** —
-  a 4-week snapshot + ~30 recent runs fits directly in the prompt; revisit
-  embeddings only when history reaches hundreds of runs.
+  deterministic no-key fallback.~~ **Withdrawn in #292** — that described an
+  auth/provider path that does not exist. Read the route as it is today, which
+  is the whole of it: a zod-validated request, a per-IP rate limit, and a
+  deterministic NDJSON block stream. There is no key, no provider and no auth
+  gate; the session is read best-effort and only to size the anonymous payload
+  cap. The chat route this was once a template for must not be built.
+- ~~The scripted replies remain the sensible no-key demo fallback.~~ **Withdrawn in #292** — those replies lived in `ChatPanel.tsx`, which is deleted; nothing scripted remains. There is no key and no fallback path: `/api/ai/analyze` is only the deterministic block stream, and guests get the same heuristics as signed-in users (#209).
+- Architecture docs plan `/api/ai/chat`, `chat_messages`, and RAG
+  (`activity_embeddings`, pgvector).
+
+  > **WITHDRAWN (issue #292) — permanently forbidden, not deferred.** The
+  > original text read: ~~"**Recommendation: skip RAG for now** — a 4-week
+  > snapshot + ~30 recent runs fits directly in the prompt; revisit embeddings
+  > only when history reaches hundreds of runs."~~ Both halves of that are void.
+  > "Fits directly in the prompt" presupposes the very context window §5.3
+  > forbids, and "revisit embeddings when history reaches hundreds of runs" was
+  > a reopening condition rather than a deferral — history size is not a
+  > trigger anyone gets to evaluate, and the prohibition does not scale with
+  > volume. Chat, RAG, pgvector and embeddings are closed for good: no
+  > threshold, phase, milestone or "next phase" reopens them, and a later issue
+  > proposing any of them should be closed on this section rather than
+  > scheduled. `chat_messages` and `activity_embeddings` are dropped
+  > (`drizzle/migrations/0009_milky_vampiro.sql`); `lib/ai/provider.ts`,
+  > `lib/ai/harmony.ts` and `lib/ai/coach-tools.ts` are deleted.
 
 ## 4. Agreed roadmap (Benjamin approved this order, 2026-07-07)
 
@@ -118,8 +133,15 @@ What already exists and should be REUSED, not rebuilt:
    `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REDIRECT_URI` (exact
    match), `STRAVA_VERIFY_TOKEN` (self-chosen). Connect account, run
    `/api/strava/sync`, register the webhook subscription (one curl).
-4. **AI key:** `AI_GATEWAY_API_KEY` (Vercel AI Gateway). Analyze/coach-feed
-   switch from heuristic to real model with zero code changes.
+4. **AI key:** ~~`AI_GATEWAY_API_KEY` (Vercel AI Gateway). Analyze/coach-feed
+   switch from heuristic to real model with zero code changes.~~
+   **CANCELLED (#292 — there is no AI key and no provider to configure, and
+   none may be added).** The original text read: `AI_GATEWAY_API_KEY` (Vercel
+   AI Gateway), with the analyze/coach-feed switching from heuristic to a real
+   model with zero code changes. `AI_GATEWAY_API_KEY` must never be set in any
+   environment. The coach feed and `/api/ai/analyze` are deterministic and stay
+   that way, and setting a key would not change their behaviour — "zero code
+   changes" was not merely outdated, it was wrong.
 5. **Domain:** optional, any time; only blocks magic-link email + branding.
 
 ### Claude Code tasks (for you to prompt, in order)
@@ -160,7 +182,8 @@ not already done inside T1).
 - Engine stays the single source of truth: chat/recommender modules decide,
   `lib/coach/engine.ts` defines rules. No rule duplication in prompts.
 - Pure functions with the clock as a parameter; tests pin dates.
-- AI keys never reach the browser; all model calls under `/api/ai/*`.
+- There are no AI keys and no model calls, and introducing either is not
+  permitted; `/api/ai/analyze` is a deterministic route, not a model call.
 - User-facing coach text is Danish; code/comments/docs English.
 - No sleep data (see §1 product decision).
 - `npm test` + `npx tsc --noEmit` green before commit; note that
