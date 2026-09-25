@@ -18,7 +18,7 @@ const RACE: PlanView["race"] = {
   goalTimeSeconds: null,
   goalTime: "1:40",
   racePace: "4:45",
-  aiEstimate: "1:38",
+  estimate: "1:38",
   lock: null,
 };
 
@@ -29,7 +29,7 @@ describe("RaceDayCard — unlocked", () => {
     for (const value of ["1:40", "4:45", "1:38"]) {
       expect(screen.getByText(value)).toBeDefined();
     }
-    for (const label of ["Måltid", "Race-pace /km", "AI-estimat"]) {
+    for (const label of ["Måltid", "Race-pace /km", "Prognose"]) {
       expect(screen.getByText(label)).toBeDefined();
     }
     expect(screen.queryByTestId("race-estimate-lock")).toBeNull();
@@ -81,7 +81,7 @@ describe("RaceDayCard — locked estimate (issue #117)", () => {
 
     // The view-model still carries goal/pace/estimate; a locked card must not
     // render them, nor the labels that would frame them as the runner's own.
-    for (const placeholder of ["1:40", "4:45", "1:38", "Måltid", "AI-estimat"]) {
+    for (const placeholder of ["1:40", "4:45", "1:38", "Måltid", "Prognose"]) {
       expect(screen.queryByText(placeholder)).toBeNull();
     }
     // The race it counts down to is still the runner's own, though.

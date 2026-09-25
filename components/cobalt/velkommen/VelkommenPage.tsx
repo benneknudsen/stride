@@ -46,7 +46,7 @@ export function VelkommenPage() {
       <section className="px-3 pt-14 pb-12 text-center md:pt-20 md:pb-16">
         <Reveal delay={0}>
           <div className="mb-4 cg-label text-[11px] tracking-[0.22em] text-red">
-            AI-drevet løbetræning
+            Datadriven løbetræning
           </div>
         </Reveal>
         <Reveal delay={0.08}>
@@ -58,8 +58,8 @@ export function VelkommenPage() {
         </Reveal>
         <Reveal delay={0.16}>
           <p className="mx-auto mt-6 max-w-[560px] text-[15.5px] leading-relaxed text-ink">
-            Stride samler dine ture fra Strava, analyserer hver eneste af dem med AI og bygger en
-            ugeplan, der peger mod dit næste race.
+            Stride samler dine ture fra Strava, regner på hver eneste af dem og bygger en ugeplan,
+            der peger mod dit næste race.
           </p>
         </Reveal>
         <Reveal delay={0.24}>
@@ -100,19 +100,19 @@ export function VelkommenPage() {
 
       {/* ── Features ── */}
       <section className="mt-16" aria-label="Funktioner">
-        <SectionHeading index="02" title="Hvad Stride kan" hint="AI hele vejen rundt" />
+        <SectionHeading index="02" title="Hvad Stride kan" hint="Din egen data hele vejen" />
         <div className="grid grid-cols-12 gap-4">
           <FeatureCard
             delay={0.05}
             icon={<SparkIcon />}
-            title="AI-analyse af hver tur"
-            body="Hver aktivitet får sin egen gennemgang — pacing, pulszoner, effort og konkrete råd, streamet live mens du kigger."
+            title="Analyse af hver tur"
+            body="Hver aktivitet bliver gennemgået — pacing, pulszoner, effort og konkrete råd, beregnet på dine egne tal mens du kigger."
           />
           <FeatureCard
             delay={0.12}
-            icon={<ChatIcon />}
-            title="En coach, du kan spørge"
-            body="Chatcoachen slår op i dine egne tal. Spørg til din uge, dit race eller din restitution — svaret bygger på dine ture, ikke på gæt."
+            icon={<CoachIcon />}
+            title="En coach der læser din uge"
+            body="Coachen slår op i dine egne tal hver gang den sidder. Den ser din uge, dit race og din restitution — og svarer ud fra dine ture, ikke på gæt."
           />
           <FeatureCard
             delay={0.19}
@@ -152,7 +152,7 @@ export function VelkommenPage() {
             delay={0.12}
             step="02"
             title="Få analysen"
-            body="AI'en gennemgår hver tur og samler ugen: volumen, snit-pace, restitution og zoner."
+            body="Coachen gennemgår hver tur og samler ugen: volumen, snit-pace, restitution og zoner."
           />
           <StepCard
             delay={0.19}
@@ -163,7 +163,7 @@ export function VelkommenPage() {
         </div>
       </section>
 
-      {/* ── AI-øjeblik: coachens analyse som typewriter-replay ── */}
+      {/* ── Coach-øjeblik: coachens analyse som typewriter-replay ── */}
       <Reveal delay={0.05} as="section" ariaLabel="Eksempel på coachens analyse" className="mt-16">
         <SectionHeading index="04" title="Coachen i aktion" hint="Replay på demoens data" />
         <CoachTeaser />
@@ -195,7 +195,7 @@ export function VelkommenPage() {
           </div>
         </GlassCard>
         <p className="mt-8 text-center cg-label tracking-[0.18em] text-ink/60">
-          Bygget med Next.js · TypeScript · Drizzle · Vercel AI SDK
+          Bygget med Next.js · TypeScript · Drizzle
         </p>
       </section>
     </main>
@@ -295,7 +295,7 @@ function SparkIcon() {
   );
 }
 
-function ChatIcon() {
+function CoachIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path

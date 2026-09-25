@@ -3,10 +3,10 @@ import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { ROUTES } from "@/lib/routes";
 
-// "AI Coach" widget (5/12, cobalt variant): the runner glyph + mono label, a
-// serif-italic coaching quote in guillemets, and the "Spørg coach" pill. The
-// "Ugens plan" pill is gone with the weekly schedule it pointed at — the coach
-// recommends the next activity from the last five runs instead.
+// "Coach" widget (5/12, cobalt variant): the runner glyph + mono label, a
+// serif-italic coaching quote in guillemets, and a pill into the coach route.
+// The "Ugens plan" pill is gone with the weekly schedule it pointed at — the
+// coach recommends the next activity from the last five runs instead.
 export function AiCoachCard({ quote }: { quote: string }) {
   return (
     <GlassCard
@@ -15,7 +15,7 @@ export function AiCoachCard({ quote }: { quote: string }) {
     >
       <div className="flex items-center gap-2.5">
         <RunnerGlyph size={22} stroke="var(--color-silver)" head="var(--color-red)" />
-        <span className="cg-label tracking-[0.2em] text-silver/90">AI Coach</span>
+        <span className="cg-label tracking-[0.2em] text-silver/90">Coach</span>
       </div>
 
       <p className="m-0 font-cg-serif text-[22px] italic leading-[1.28] text-silver">»{quote}«</p>
@@ -25,7 +25,7 @@ export function AiCoachCard({ quote }: { quote: string }) {
           href={ROUTES.COACH}
           className="cg-interactive rounded-pill bg-silver px-[18px] py-[9px] text-[12.5px] font-semibold text-cobalt transition-colors hover:bg-white"
         >
-          Spørg coach
+          Åbn coach
         </Link>
       </div>
     </GlassCard>

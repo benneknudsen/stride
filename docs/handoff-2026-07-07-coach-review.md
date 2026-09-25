@@ -6,6 +6,17 @@
 **Purpose:** Everything you need to (a) understand what changed and why, (b) turn
 the remaining findings and the agreed roadmap into tasks, in the right order.
 
+> **SUPERSEDED IN PART (issue #292).** The model-led half of this plan was
+> withdrawn: Strava's API Policy 2026 §5.3 forbids using Strava data — including
+> derived, anonymised or aggregated data — in any AI application, and §5.16(b)
+> forbids MCP/agent-mediated interfaces that expose it. So `/api/ai/chat`,
+> `lib/ai/provider.ts`, `lib/ai/harmony.ts`, `lib/ai/coach-tools.ts`,
+> `chat_messages`, `ai_analyses` and `activity_embeddings` are all **deleted**, and
+> `/api/ai/analyze` is now a purely deterministic block stream. Every roadmap item
+> below that says to wire the chat route to a model (T1 and anything after it that
+> depends on it) must not be built. The engine findings (B1–B10) and the
+> accounts/env/domain items are unaffected and still stand.
+
 ---
 
 ## 1. What this session did (already committed — do not re-task)
@@ -73,8 +84,9 @@ timer, and the page's loading overlay is a plain 2 s `setTimeout`. There is no
 
 What already exists and should be REUSED, not rebuilt:
 
-- `lib/ai/provider.ts` — gateway router (primary/fallback models,
-  `isAIConfigured()`), server-only. Ready to be called from a chat route.
+- ~~`lib/ai/provider.ts` — gateway router (primary/fallback models,
+  `isAIConfigured()`), server-only. Ready to be called from a chat route.~~
+  **Deleted in #292** — there is no model call anywhere in the app.
 - The domain engine as agent tools: `recommendWorkout()`, `validateWorkout()`,
   `computeSnapshot()`/`getProgression()`, `getWeekPlan()` are pure,
   JSON-friendly, and `engine.ts` explicitly describes itself as "the constraint
@@ -82,8 +94,10 @@ What already exists and should be REUSED, not rebuilt:
   have the model guess training advice.
 - `/api/ai/analyze/route.ts` is the template for the chat route: zod-validated
   request, auth gate when a key is set, streaming, provider fallback,
-  deterministic no-key fallback. Chat is the same skeleton with `streamText` +
-  tools instead of `streamObject`.
+  deterministic no-key fallback. Chat was to be the same skeleton with
+  `streamText` + tools instead of `streamObject` — **do not build it, #292
+  removed the whole path.** What survives of the route is its zod-validated
+  request, its per-IP rate limit and its deterministic block stream.
 - The scripted replies remain the sensible no-key demo fallback.
 - Architecture docs already plan `/api/ai/chat`, `chat_messages`, and Phase 2
   RAG (`activity_embeddings`, pgvector). **Recommendation: skip RAG for now** —
@@ -110,9 +124,11 @@ What already exists and should be REUSED, not rebuilt:
 
 ### Claude Code tasks (for you to prompt, in order)
 
-**T1 — AI coach chat route + agent tools.** New `/api/ai/chat`: `streamText`
+**T1 — AI coach chat route + agent tools.** ~~New `/api/ai/chat`: `streamText`
 with a running-coach system prompt (Danish output), grounded in the user's
-progression snapshot + week plan + recent activities, exposing
+progression snapshot + week plan + recent activities, exposing~~ **CANCELLED
+(#292 — Strava's policy forbids putting this data in a model context).**
+The original text read: exposing
 `recommendWorkout`/`validateWorkout`/`getProgression`/`getWeekPlan` as tools.
 Auth-gated when AI is configured; deterministic scripted fallback without a
 key (mirror the analyze route's structure). Include rate limiting from day one

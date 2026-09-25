@@ -1,77 +1,33 @@
 // Cobalt Glass — Coach view-model.
 // Pure derivation (no React) from activity data, mirroring lib/cobalt/hjem.ts
-// and lib/cobalt/aktiviteter.ts, so the same presentational chat + dashboards
-// render demo and live data. Day-granular bucketing keeps the server render
-// and client hydration in agreement.
+// and lib/cobalt/aktiviteter.ts, so the same presentational cards render demo
+// and live data. Day-granular bucketing keeps the server render and client
+// hydration in agreement.
 //
 // Two builders share the CoachView shape:
-//   - buildCoachView()      — the demo fallback: scripted transcript + fixture
-//                             numbers for unauthenticated visitors.
-//   - buildLiveCoachView()  — the authenticated path: focus, form and load are
-//                             derived from the coach dashboard (recommender +
-//                             progression engine) instead of scripted copy.
+//   - buildCoachView()      — the demo fallback: fixture numbers for visitors.
+//   - buildLiveCoachView()  — the authenticated path: form and load are derived
+//                             from the coach dashboard (recommender +
+//                             progression engine) instead of fixtures.
 //
-// The chat opens with welcome messages; live answers stream from /api/ai/chat
-// (the ChatPanel owns that flow).
+// The coach is a deterministic engine, not a conversation: it states what the
+// athlete's own numbers say and never asks anything back.
 
 import type { CoachDashboardData } from "@/lib/coach/dashboard";
-import { DEFAULT_RACE_DATE, EASY_MIN_RECOVERY_HOURS } from "@/lib/coach/engine";
-import { TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
+import { EASY_MIN_RECOVERY_HOURS } from "@/lib/coach/engine";
 import {
+  type Readiness,
   readinessFromRatio,
   readinessWithRecovery,
   SAME_DAY_RUN_NOTE,
 } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
-import { type DemoActivity, demoActivities } from "@/lib/demo/data";
-import { formatPace, getWeeklyVolume } from "@/lib/metrics";
-import { hoursSinceHardEffort } from "@/lib/training/effort";
+import { demoActivities } from "@/lib/demo/data";
+import { getWeeklyVolume } from "@/lib/metrics";
+import { hoursSinceHardEffort, hoursSinceLastRun } from "@/lib/training/effort";
 import { computeSnapshot } from "@/lib/training/progression-core";
-import type { ChatBlock } from "@/types/chat";
 
 const DAY_MS = 86_400_000;
-
-export type ChatRole = "coach" | "user";
-
-/**
- * A persisted chat turn as `getChatHistory` returns it — the signed-in user's
- * stored conversation, replayed into the panel on load (issue #202). Roles are
- * the model's ("assistant"/"user"); the view-model maps "assistant" → "coach".
- */
-interface ChatHistoryEntry {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  /** Rehydrated generative-UI blocks for assistant turns (issue #228). */
-  blocks?: ChatBlock[];
-}
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  text: string;
-  /**
-   * Generative-UI blocks streamed alongside the text of a coach turn (issue
-   * #221): clickable activity cards and workout cards, built server-side from
-   * tool output. Absent on user turns and the synthetic opener; replayed
-   * history carries persisted activity references rehydrated on read (issue
-   * #228), while workout blocks are intentionally omitted because they go stale.
-   */
-  blocks?: ChatBlock[];
-  /**
-   * The scripted opening bubble is `synthetic: true`: it is shown so the panel
-   * never starts empty, but the ChatPanel strips synthetic turns before POSTing
-   * to /api/ai/chat so the coach's own greeting never becomes model context and
-   * no fabricated user turn is ever sent as if the visitor wrote it (issue #201).
-   */
-  synthetic?: boolean;
-  /**
-   * Idempotency key for user turns (issue #205). The client generates a fresh
-   * id per message; retry sends the same id so the route can deduplicate. For
-   * replayed history it is the persisted row id; synthetic turns omit it.
-   */
-  clientId?: string;
-}
 
 interface LoadBar {
   /** Day index 0 (13 days ago) → 13 (today). */
@@ -82,37 +38,9 @@ interface LoadBar {
   accent: boolean;
 }
 
-/**
- * A scripted visitor reply (issue #235): the answer text plus optional
- * generative-UI blocks (clickable activity cards / workout cards) built from the
- * same fixtures. The blocks render through the shared {@link ChatBlock} path, so
- * MessageBubble can't tell a demo card from a live one — the visitor demo shows
- * real interactive UI, not just prose.
- */
-interface DemoReply {
-  text: string;
-  blocks?: ChatBlock[];
-}
-
 export interface CoachView {
-  /** Header count — "AI COACH · BASERET PÅ N TURE". */
+  /** Header count — "COACH · BASERET PÅ N TURE". */
   activityCount: number;
-  /**
-   * Opening transcript shown when the page loads: the signed-in user's persisted
-   * history (issue #202), followed by the synthetic coach opener.
-   */
-  initialMessages: ChatMessage[];
-  /** Quick-prompt chips under the chat. */
-  prompts: string[];
-  /**
-   * Scripted coach answers for signed-out visitors, keyed by chip label (issue
-   * #203). The public demo shows the full chat UI, but /api/ai/chat is
-   * session-gated — so a visitor's chip tap renders one of these precomputed
-   * replies (derived from the same fixtures the dashboards read) instead of
-   * firing a request that can only 401. Only `buildCoachView` (the demo
-   * fallback) populates it; the live view leaves it undefined.
-   */
-  demoReplies?: Record<string, DemoReply>;
   /** "Ugens fokus" — the week's headline recommendation (serif quote). */
   focusQuote: string;
   form: {
@@ -120,6 +48,14 @@ export interface CoachView {
     pct: number;
     /** Plain-language note, e.g. "Klar til hårdt pas". */
     note: string;
+    /**
+     * The #273 same-day override: set when the newest run sits inside the 24 h
+     * recovery window *and* the load-derived read is in the ready band. The
+     * gauge above keeps its load-derived number and band note — this line sits
+     * under them so the card can't promise "Klar til hårdt pas" hours after the
+     * runner was actually out.
+     */
+    sameDayNote?: string;
     /** Trend chip, mono uppercase: "STIGENDE" / "STABIL" / "FALDENDE". */
     trend: string;
     /** Red when falling, else cobalt. */
@@ -148,15 +84,6 @@ export interface CoachLoadActivityLike {
   distance: number;
 }
 
-/** What the scripted demo transcript reads on top of that — fixtures always carry it. */
-interface CoachActivityLike extends CoachLoadActivityLike {
-  averageSpeed: number;
-  averageHeartrate: number;
-}
-
-/** The three quick-prompt chips under the chat — same in demo and live. */
-const COACH_PROMPTS = ["Analysér min uge", "Foreslå næste pas", "Er jeg klar til halvmarathon?"];
-
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
@@ -174,70 +101,6 @@ function dailyKm(activities: CoachLoadActivityLike[], now: Date, daysAgo: number
     if (startOfDay(ensureDate(a.startDate)) === target) km += a.distance / 1000;
   }
   return km;
-}
-
-/** Average heart rate across runs in the day-window (from, to] days ago, or null. */
-function windowAvgHr(
-  activities: CoachActivityLike[],
-  now: Date,
-  fromDaysAgo: number,
-  toDaysAgo: number
-): number | null {
-  const start = now.getTime() - toDaysAgo * DAY_MS;
-  const end = now.getTime() - fromDaysAgo * DAY_MS;
-  const samples = activities
-    .filter((a) => {
-      const t = ensureDate(a.startDate).getTime();
-      return t > start && t <= end;
-    })
-    .map((a) => a.averageHeartrate)
-    .filter((hr) => hr > 0);
-  if (samples.length === 0) return null;
-  return Math.round(samples.reduce((sum, hr) => sum + hr, 0) / samples.length);
-}
-
-/** Whole weeks until the goal race (never negative). Demo default per #99. */
-function weeksToRace(now: Date, raceDate: Date = DEFAULT_RACE_DATE): number {
-  return Math.max(0, Math.round((raceDate.getTime() - now.getTime()) / (7 * DAY_MS)));
-}
-
-/** Longest run within the last `days`, or null when the window is empty.
- *  Generic so it preserves the caller's row type — passed `demoActivities` it
- *  returns a full {@link DemoActivity} whose `id`/`type`/`movingTime` the chat
- *  ActivityCard block needs (issue #235). */
-function longestInWindow<T extends CoachLoadActivityLike>(
-  activities: T[],
-  now: Date,
-  days: number
-): T | null {
-  const from = now.getTime() - days * DAY_MS;
-  let best: T | null = null;
-  for (const a of activities) {
-    if (ensureDate(a.startDate).getTime() < from) continue;
-    if (!best || a.distance > best.distance) best = a;
-  }
-  return best;
-}
-
-/**
- * A demo fixture as a clickable chat ActivityCard block (issue #235). The
- * `ChatActivity` shape is exactly what the live `/api/ai/chat` route emits from
- * `getRecentActivities`, so the same MessageBubble/ActivityCard renders it and
- * the card links to the activity's detail page — every number comes off the
- * fixture, never hardcoded.
- */
-function activityBlock(activity: DemoActivity): ChatBlock {
-  return {
-    kind: "activity",
-    activity: {
-      id: activity.id,
-      type: activity.type,
-      startDate: activity.startDate.toISOString(),
-      distance: activity.distance,
-      movingTime: activity.movingTime,
-      averageHeartrate: activity.averageHeartrate,
-    },
-  };
 }
 
 // ── Training load (shared by demo + live) ───────────────────────────────────
@@ -299,64 +162,33 @@ const LOAD_NOTES: Record<LoadStatus, string> = {
   RISIKO: "Akut belastning langt over din base — skru ned og prioritér restitution.",
 };
 
-/** "Godmorgen Nadia!" with a name, plain "Godmorgen!" without one. */
-function greeting(userName?: string): string {
-  return userName ? `Godmorgen ${userName}!` : "Godmorgen!";
+/**
+ * Trend chip + tone for the form card from a rise/fall ratio. Both builders
+ * read the same bands off a different ratio: the demo view compares this week's
+ * volume with last week's, the live view the acute:chronic load ratio. `1` (no
+ * movement, or no ratio yet) reads STABIL.
+ */
+function formTrend(ratio: number): { trend: string; trendTone: "cobalt" | "red" } {
+  if (ratio > 1.05) return { trend: "STIGENDE", trendTone: "cobalt" };
+  if (ratio < 0.9) return { trend: "FALDENDE", trendTone: "red" };
+  return { trend: "STABIL", trendTone: "cobalt" };
 }
 
 /**
- * The user's persisted conversation as panel bubbles (issue #202): mapped to the
- * panel's roles ("assistant" → "coach") and left non-synthetic, so they render
- * as real turns and — unlike the scripted opener — are kept as the route's
- * fallback context when the DB history read fails (app/api/ai/chat/route.ts).
+ * The #273 same-day override for the form card (issue #273). A rolig Zone 1–2
+ * tur leaves no trace in `hoursSinceHardEffort`, so the load-derived readiness
+ * still reads "ready" hours after the runner was out — while the recommender
+ * already calls today a hviledag. Only the ready band needs the override: the
+ * easy and rest bands never promise intensity, and the readiness number and
+ * band note stay exactly as load derived them.
  */
-function historyMessages(history: ChatHistoryEntry[]): ChatMessage[] {
-  return history.map((entry, i) => ({
-    id: `h${i}`,
-    clientId: entry.id,
-    role: entry.role === "assistant" ? "coach" : "user",
-    text: entry.content,
-    blocks: entry.blocks,
-  }));
+function sameDayNote(readiness: Readiness, hoursSinceRun: number | null): string | undefined {
+  const ranToday = hoursSinceRun !== null && hoursSinceRun < EASY_MIN_RECOVERY_HOURS;
+  return ranToday && readiness.band === "ready" ? SAME_DAY_RUN_NOTE : undefined;
 }
 
-export function buildCoachView(now: Date = new Date(), userName?: string): CoachView {
-  const latest = demoActivities[0];
-
-  // Long run → message 3, derived from the real fixture so the numbers are live.
-  const longRun = longestInWindow(demoActivities, now, 7) ?? latest;
-  const longRunKm = (longRun.distance / 1000).toFixed(1).replace(".", ",");
-  const longRunPace = formatPace(longRun.averageSpeed);
-  const longRunHr = longRun.averageHeartrate;
-
-  // Every numeric claim in the transcript is derived from the fixtures — a
-  // scripted chat must never assert data the surrounding dashboards contradict.
-  const avgHrLast7 = windowAvgHr(demoActivities, now, 0, 7);
-  const avgHrPrev7 = windowAvgHr(demoActivities, now, 7, 14);
-  const raceWeeks = weeksToRace(now);
-
-  const hrTrendLine =
-    avgHrLast7 !== null && avgHrPrev7 !== null
-      ? avgHrLast7 < avgHrPrev7
-        ? `Din aerobe form udvikler sig — gennemsnitspulsen er faldet fra ${avgHrPrev7} til ${avgHrLast7} den seneste uge.`
-        : avgHrLast7 > avgHrPrev7
-          ? `Din puls ligger lidt højere end ugen før (${avgHrPrev7} → ${avgHrLast7}), så mærk efter undervejs.`
-          : `Din puls ligger stabilt på ${avgHrLast7} — god konsistens.`
-      : "Din træning ser konsistent ud.";
-
-  // A single coach opening bubble (issue #201): greeting, the aerobic-trend
-  // read, the long-run summary (was m3) and the week's recommendation, folded
-  // into one turn so the panel never opens with a fabricated user question.
-  const initialMessages: ChatMessage[] = [
-    {
-      id: "m1",
-      role: "coach",
-      synthetic: true,
-      text: `${greeting(userName)} ${hrTrendLine} Din lange tur i søndags var stærk: ${longRunKm} km i snit ${longRunPace} /km med stabil puls på ${longRunHr} — præcis den udvikling vi vil se ${raceWeeks} uger før race. Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25.`,
-    },
-  ];
-
-  const prompts = COACH_PROMPTS;
+export function buildCoachView(now: Date = new Date()): CoachView {
+  const runs = demoActivities.filter(isRunActivity);
 
   // Form (readiness): the shared readinessFromRatio over the same progression
   // snapshot the Hjem readiness card reads (issue #127), so the two pages show
@@ -368,71 +200,31 @@ export function buildCoachView(now: Date = new Date(), userName?: string): Coach
   // …capped by the recovery buffer (#259): load alone carries no intensity, so
   // without this the fixtures' hard parkrun this morning would still read "Klar
   // til hårdt pas". Same cap the Hjem card applies over the same fixtures.
-  const { pct, note } = readinessWithRecovery(
+  const readiness = readinessWithRecovery(
     readinessFromRatio(snapshotRatio),
-    hoursSinceHardEffort(demoActivities.filter(isRunActivity), now)
+    hoursSinceHardEffort(runs, now)
   );
+  const { pct, note } = readiness;
 
   // Form trend: this week's volume vs. last week's.
   const thisWeek = getWeeklyVolume(demoActivities, 0);
   const lastWeek = getWeeklyVolume(demoActivities, 1);
   const trendRatio = lastWeek === 0 ? 1 : thisWeek / lastWeek;
 
-  const [trend, trendTone] =
-    trendRatio > 1.05
-      ? (["STIGENDE", "cobalt"] as const)
-      : trendRatio < 0.9
-        ? (["FALDENDE", "red"] as const)
-        : (["STABIL", "cobalt"] as const);
-
   // Load status from the acute:chronic ratio (B8 fix — no longer hardcoded).
   const ratio = acuteChronicRatio(demoActivities, now);
   const status = loadStatusFromRatio(ratio);
 
-  // Scripted answers for a signed-out visitor's chip taps (issue #203) — each
-  // derived from the same fixtures the opener and dashboards read, so a demo
-  // reply never contradicts what's on screen. Keyed by the exact chip labels.
-  const demoReplies: Record<string, DemoReply> = {
-    // "Analysér min uge" — the week read, plus the actual long run as a clickable
-    // card so the card's numbers reinforce the text instead of just repeating it.
-    [COACH_PROMPTS[0]]: {
-      text: `${hrTrendLine} Din længste tur den seneste uge var ${longRunKm} km i snit ${longRunPace} /km med puls ${longRunHr}. Samlet ser ugen konsistent ud — god balance mellem rolige og hårde pas.`,
-      blocks: [activityBlock(longRun)],
-    },
-    // "Foreslå næste pas" — the same 10 km progressive session the opener and the
-    // focus card name, rendered as the workout card the live route would emit.
-    [COACH_PROMPTS[1]]: {
-      text: "Jeg anbefaler 10 km progressiv torsdag: start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
-      blocks: [
-        {
-          kind: "workout",
-          workout: {
-            type: "tempo",
-            distanceKm: 10,
-            paceRange: { min: "4:25", max: "5:20" },
-            heartRateCap: TEMPO_HR_CAP_BPM,
-            shoe: "adios-pro-4",
-            reason: [
-              "Progressiv 10 km — start 5:20, slut 4:25.",
-              "Bygger tempo-tolerance uden at koste restitutionen.",
-            ],
-          },
-        },
-      ],
-    },
-    [COACH_PROMPTS[2]]: {
-      text: `Din readiness ligger på ${pct}% — ${note.toLowerCase()}. Der er ${raceWeeks} uger til dit race, og formen udvikler sig planmæssigt. Hold fokus på de lange ture, så er du klar.`,
-    },
-  };
-
   return {
     activityCount: demoActivities.length,
-    initialMessages,
-    prompts,
-    demoReplies,
     focusQuote:
       "Progressiv 10 km torsdag — start 5:20, slut 4:25. Det bygger tempo-tolerance uden at koste restitution.",
-    form: { pct, note, trend, trendTone },
+    form: {
+      pct,
+      note,
+      sameDayNote: sameDayNote(readiness, hoursSinceLastRun(runs, now)),
+      ...formTrend(trendRatio),
+    },
     load: {
       bars: buildLoadBars(demoActivities, now),
       status,
@@ -460,16 +252,13 @@ function liveFocusQuote(workout: CoachDashboardData["workout"]): string {
 
 /**
  * The Coach view for an authenticated user: focus, form and load come from the
- * coach dashboard (recommender + progression engine) instead of scripted demo
- * copy. The welcome transcript is generated from the same numbers, so the chat
- * never asserts data the surrounding cards contradict.
+ * coach dashboard (recommender + progression engine) instead of the demo
+ * fixtures.
  */
 export function buildLiveCoachView(
   dashboard: CoachDashboardData,
   activities: CoachLoadActivityLike[],
-  now: Date = new Date(),
-  userName?: string,
-  history: ChatHistoryEntry[] = []
+  now: Date = new Date()
 ): CoachView {
   const { workout, loadGauge } = dashboard;
   const ratio = loadGauge.ratio;
@@ -482,57 +271,23 @@ export function buildLiveCoachView(
   // (moving minutes, no intensity weighting) is blind to. The `?? null` keeps
   // partial dashboards — fixtures, older cached payloads — on the uncapped path
   // rather than throwing.
-  const { pct, note, band } = readinessWithRecovery(
+  const readiness = readinessWithRecovery(
     readinessFromRatio(ratio),
     dashboard.hoursSinceHardEffort ?? null
   );
-
-  const [trend, trendTone] =
-    ratio !== null && ratio > 1.05
-      ? (["STIGENDE", "cobalt"] as const)
-      : ratio !== null && ratio < 0.9
-        ? (["FALDENDE", "red"] as const)
-        : (["STABIL", "cobalt"] as const);
+  const { pct, note } = readiness;
 
   const status = loadStatusFromRatio(ratio);
-  const focusQuote = liveFocusQuote(workout);
-
-  const loadAnswer =
-    ratio === null
-      ? `Du har endnu ikke fire ugers historik, så belastningsbilledet er foreløbigt. ${LOAD_NOTES[status]}`
-      : `Din akut/kronisk-ratio er ${ratio.toFixed(2)} — status ${status}. ${LOAD_NOTES[status]}`;
-
-  // The opener's readiness line (#273): inside the 24 h recovery window after
-  // ANY run, the ready band's "Klar til hårdt pas" is replaced with a line that
-  // names the run — a rolig Zone 1–2 tur never trips the #259 hard-effort cap,
-  // so without this the opener promised a hard pas hours after the runner was
-  // actually out, contradicting both cards' hviledag. The readiness percentage
-  // and the cap itself are unchanged.
-  const ranRecently =
-    dashboard.hoursSinceLastRun != null && dashboard.hoursSinceLastRun < EASY_MIN_RECOVERY_HOURS;
-  const readinessLine =
-    ranRecently && band === "ready"
-      ? SAME_DAY_RUN_NOTE
-      : `Din readiness er ${pct}% — ${note.toLowerCase()}.`;
-
-  // The persisted conversation is replayed first (issue #202) so a returning
-  // user sees and can continue their history. A fresh coach opening bubble is
-  // only shown when there is no history (issue #205) — otherwise every page load
-  // would greet the user with "Godmorgen!" on top of an existing thread.
-  const opener: ChatMessage = {
-    id: "m1",
-    role: "coach",
-    synthetic: true,
-    text: `${greeting(userName)} ${readinessLine} ${loadAnswer} Ugens anbefaling: ${focusQuote}`,
-  };
-  const initialMessages: ChatMessage[] = history.length > 0 ? historyMessages(history) : [opener];
 
   return {
     activityCount: activities.length,
-    initialMessages,
-    prompts: COACH_PROMPTS,
-    focusQuote,
-    form: { pct, note, trend, trendTone },
+    focusQuote: liveFocusQuote(workout),
+    form: {
+      pct,
+      note,
+      sameDayNote: sameDayNote(readiness, dashboard.hoursSinceLastRun ?? null),
+      ...formTrend(ratio ?? 1),
+    },
     load: {
       bars: buildLoadBars(activities, now),
       status,

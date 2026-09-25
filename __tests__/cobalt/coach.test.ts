@@ -15,7 +15,8 @@ import { demoActivities } from "@/lib/demo/data";
  * loadStatusFromRatio is pure. buildCoachView reads the demo fixtures and is
  * deterministic given a fixed `now`. buildLiveCoachView is driven by a minimal
  * hand-built CoachDashboardData so the derivations (form %, trend, focus quote,
- * load status) can be asserted without the full dashboard pipeline.
+ * load status, same-day override) can be asserted without the full dashboard
+ * pipeline.
  */
 
 // The demo fixtures anchor their dates to "today" (startOfToday()); derive
@@ -57,66 +58,6 @@ describe("buildCoachView", () => {
 
   it("counts every demo activity in the header", () => {
     expect(view.activityCount).toBeGreaterThan(0);
-  });
-
-  it("opens with a single synthetic coach bubble — no fabricated user turn (issue #201)", () => {
-    expect(view.initialMessages).toHaveLength(1);
-    expect(view.initialMessages[0].role).toBe("coach");
-    expect(view.initialMessages.every((m) => m.synthetic === true)).toBe(true);
-    expect(view.initialMessages.some((m) => m.role === "user")).toBe(false);
-  });
-
-  it("folds the long-run summary and recommendation into the opening bubble", () => {
-    const opener = view.initialMessages[0].text;
-    expect(opener).toMatch(/km i snit/);
-    expect(opener).toContain("progressiv");
-  });
-
-  it("exposes the three quick-prompt chips", () => {
-    expect(view.prompts).toHaveLength(3);
-    expect(view.prompts).toContain("Analysér min uge");
-  });
-
-  it("scripts a demo answer for every chip so visitors never hit the 401 chat (issue #203)", () => {
-    expect(view.demoReplies).toBeDefined();
-    for (const prompt of view.prompts) {
-      const reply = view.demoReplies?.[prompt];
-      expect(typeof reply?.text).toBe("string");
-      expect((reply?.text ?? "").length).toBeGreaterThan(0);
-    }
-  });
-
-  it("attaches the actual long run as a clickable ActivityCard block, matching the fixture (issue #235)", () => {
-    const from = NOW.getTime() - 7 * DAY_MS;
-    // The same fixture buildCoachView's longest-in-window read selects.
-    const longest = demoActivities
-      .filter((a) => a.startDate.getTime() >= from)
-      .reduce((best, a) => (a.distance > best.distance ? a : best));
-
-    const block = view.demoReplies?.["Analysér min uge"]?.blocks?.find(
-      (b) => b.kind === "activity"
-    );
-    expect(block).toBeDefined();
-    if (block?.kind === "activity") {
-      expect(block.activity.id).toBe(longest.id);
-      expect(block.activity.distance).toBe(longest.distance);
-      expect(block.activity.movingTime).toBe(longest.movingTime);
-      expect(block.activity.averageHeartrate).toBe(longest.averageHeartrate);
-      expect(block.activity.startDate).toBe(longest.startDate.toISOString());
-    }
-  });
-
-  it("attaches a 10 km tempo WorkoutCard block to the next-session reply (issue #235)", () => {
-    const block = view.demoReplies?.["Foreslå næste pas"]?.blocks?.find(
-      (b) => b.kind === "workout"
-    );
-    expect(block).toBeDefined();
-    if (block?.kind === "workout") {
-      expect(block.workout.type).toBe("tempo");
-      expect(block.workout.distanceKm).toBe(10);
-      expect(block.workout.paceRange).toEqual({ min: "4:25", max: "5:20" });
-      expect(block.workout.reason.length).toBeGreaterThan(0);
-    }
   });
 
   it("builds 14 daily load bars with only the last (today) accented", () => {
@@ -161,6 +102,7 @@ describe("buildCoachView", () => {
 function dashboard(over: {
   ratio: number | null;
   workout?: Partial<CoachDashboardData["workout"]>;
+  hoursSinceHardEffort?: number | null;
   hoursSinceLastRun?: number | null;
 }): CoachDashboardData {
   const workout = {
@@ -179,6 +121,7 @@ function dashboard(over: {
     zoneSeries: [],
     volumeSeries: [],
     loadGauge: { ratio: over.ratio, fraction: 0.5, risk: null, label: "" },
+    hoursSinceHardEffort: over.hoursSinceHardEffort ?? null,
     hoursSinceLastRun: over.hoursSinceLastRun ?? null,
     // biome-ignore lint/suspicious/noExplicitAny: partial view-model fixture
   } as any;
@@ -195,11 +138,6 @@ describe("buildLiveCoachView", () => {
   it("counts the passed-in activities, not the demo fixtures", () => {
     const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW);
     expect(view.activityCount).toBe(2);
-  });
-
-  it("leaves demoReplies undefined — a signed-in user gets the live chat, not scripts (issue #203)", () => {
-    const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW);
-    expect(view.demoReplies).toBeUndefined();
   });
 
   it("builds the focus quote from a training workout", () => {
@@ -229,7 +167,6 @@ describe("buildLiveCoachView", () => {
     const view = buildLiveCoachView(dashboard({ ratio: null }), liveActivities, NOW);
     expect(view.form.pct).toBe(72);
     expect(view.load.status).toBe("OPTIMAL");
-    expect(view.initialMessages[0].text).toContain("foreløbigt");
   });
 
   it("marks a rising load as STIGENDE/cobalt and a falling one as FALDENDE/red", () => {
@@ -241,63 +178,62 @@ describe("buildLiveCoachView", () => {
     expect(falling.form.trend).toBe("FALDENDE");
     expect(falling.form.trendTone).toBe("red");
   });
-
-  it("surfaces the acute:chronic ratio in the opening bubble", () => {
-    const view = buildLiveCoachView(dashboard({ ratio: 1.25 }), liveActivities, NOW);
-    expect(view.initialMessages[0].text).toContain("1.25");
-    expect(view.load.status).toBe("OPTIMAL");
-  });
-
-  it("opens with a single synthetic coach bubble — no fabricated user turn (issue #201)", () => {
-    const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW);
-    expect(view.initialMessages).toHaveLength(1);
-    expect(view.initialMessages[0].role).toBe("coach");
-    expect(view.initialMessages[0].synthetic).toBe(true);
-    expect(view.initialMessages.some((m) => m.role === "user")).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
-// buildLiveCoachView — same-day run in the opener (issue #273)
+// buildLiveCoachView — same-day run in the form card (issue #273)
 // ---------------------------------------------------------------------------
 
 // A rolig Zone 1–2 tur never trips the #259 hard-effort cap, so the load read
-// alone still says "Klar til hårdt pas" hours after the runner was out. When
-// the newest run sits inside the 24 h recovery window the opener must name the
-// run instead — the same story the cards and the Hjem hero tell.
-describe("buildLiveCoachView — same-day run in the opener (issue #273)", () => {
+// alone still says "Klar til hårdt pas" hours after the runner was out — while
+// the recommender already calls today a hviledag. When the newest run sits
+// inside the 24 h recovery window the form card must name the run instead — the
+// same story the Hjem hero tells.
+describe("buildLiveCoachView — same-day run in the form card (issue #273)", () => {
   it("replaces the ready-band claim with the same-day line when the newest run is inside 24 h", () => {
     const view = buildLiveCoachView(
       dashboard({ ratio: 1.0, hoursSinceLastRun: 4 }),
       liveActivities,
       NOW
     );
-    expect(view.initialMessages[0].text).toContain(SAME_DAY_RUN_NOTE);
-    expect(view.initialMessages[0].text).not.toContain("klar til hårdt pas");
+    expect(view.form.sameDayNote).toBe(SAME_DAY_RUN_NOTE);
   });
 
-  it("keeps the readiness line once the newest run is past the 24 h window", () => {
+  it("leaves the readiness number and band note untouched — the cap is the only override", () => {
+    const withRun = buildLiveCoachView(
+      dashboard({ ratio: 1.0, hoursSinceLastRun: 4 }),
+      liveActivities,
+      NOW
+    );
+    const withoutRun = buildLiveCoachView(
+      dashboard({ ratio: 1.0, hoursSinceLastRun: 30 }),
+      liveActivities,
+      NOW
+    );
+    expect(withRun.form.pct).toBe(withoutRun.form.pct);
+    expect(withRun.form.note).toBe(withoutRun.form.note);
+    expect(withRun.form.note).toBe("Klar til hårdt pas");
+  });
+
+  it("keeps the ready band once the newest run is past the 24 h window", () => {
     const view = buildLiveCoachView(
       dashboard({ ratio: 1.0, hoursSinceLastRun: 30 }),
       liveActivities,
       NOW
     );
-    expect(view.initialMessages[0].text).toContain("Din readiness er 95%");
-    expect(view.initialMessages[0].text).toContain("klar til hårdt pas");
-    expect(view.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
+    expect(view.form.sameDayNote).toBeUndefined();
   });
 
-  it("keeps the readiness line when there is no run at all (null)", () => {
+  it("sets no override when there is no run at all (null)", () => {
     const view = buildLiveCoachView(
       dashboard({ ratio: 1.0, hoursSinceLastRun: null }),
       liveActivities,
       NOW
     );
-    expect(view.initialMessages[0].text).toContain("klar til hårdt pas");
-    expect(view.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
+    expect(view.form.sameDayNote).toBeUndefined();
   });
 
-  it("leaves the easy band's opener alone — only the ready claim is replaced", () => {
+  it("leaves the easy band alone — only the ready claim is replaced", () => {
     // Ratio 1.5 → readinessFromRatio lands in the easy band, whose note never
     // promised a hard pas — the same-day line has nothing to override there.
     const view = buildLiveCoachView(
@@ -305,115 +241,8 @@ describe("buildLiveCoachView — same-day run in the opener (issue #273)", () =>
       liveActivities,
       NOW
     );
-    expect(view.initialMessages[0].text).toContain("let træning anbefalet");
-    expect(view.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildLiveCoachView — persisted chat history (issue #202)
-// ---------------------------------------------------------------------------
-
-// The signed-in user's stored conversation (getChatHistory shape) must be shown
-// in the panel: prepended to the transcript, before the synthetic opener, as
-// real (non-synthetic) turns so it also serves as the route's fallback context.
-describe("buildLiveCoachView with persisted chat history (issue #202 + #205)", () => {
-  const history = [
-    { id: "h-user-1", role: "user" as const, content: "Hvad skal jeg løbe i dag?" },
-    { id: "h-assistant-1", role: "assistant" as const, content: "En rolig tur på 6 km." },
-  ];
-
-  it("shows the persisted history and skips the synthetic opener (issue #205)", () => {
-    const view = buildLiveCoachView(
-      dashboard({ ratio: 1.0 }),
-      liveActivities,
-      NOW,
-      undefined,
-      history
-    );
-    expect(view.initialMessages).toHaveLength(2);
-    expect(view.initialMessages[0]).toMatchObject({
-      role: "user",
-      text: "Hvad skal jeg løbe i dag?",
-      clientId: "h-user-1",
-    });
-    expect(view.initialMessages[1]).toMatchObject({
-      role: "coach",
-      text: "En rolig tur på 6 km.",
-      clientId: "h-assistant-1",
-    });
-    expect(view.initialMessages.some((m) => m.synthetic)).toBe(false);
-  });
-
-  it("marks history turns as real (non-synthetic) so they persist as fallback context", () => {
-    const view = buildLiveCoachView(
-      dashboard({ ratio: 1.0 }),
-      liveActivities,
-      NOW,
-      undefined,
-      history
-    );
-    expect(view.initialMessages[0].synthetic).toBeUndefined();
-    expect(view.initialMessages[1].synthetic).toBeUndefined();
-  });
-
-  it("gives every message a unique id", () => {
-    const view = buildLiveCoachView(
-      dashboard({ ratio: 1.0 }),
-      liveActivities,
-      NOW,
-      undefined,
-      history
-    );
-    const ids = view.initialMessages.map((m) => m.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it("shows only the synthetic opener when there is no history", () => {
-    const view = buildLiveCoachView(dashboard({ ratio: 1.0 }), liveActivities, NOW, undefined, []);
-    expect(view.initialMessages).toHaveLength(1);
-    expect(view.initialMessages[0].synthetic).toBe(true);
-  });
-
-  it("replays rehydrated activity blocks on persisted assistant turns (issue #228)", () => {
-    const history = [
-      { id: "h-user-1", role: "user" as const, content: "Hvad var mit seneste løb?" },
-      {
-        id: "h-assistant-1",
-        role: "assistant" as const,
-        content: "Her er turen.",
-        blocks: [
-          {
-            kind: "activity" as const,
-            activity: {
-              id: "act-42",
-              type: "Run",
-              startDate: "2026-07-25T06:00:00.000Z",
-              distance: 8000,
-              movingTime: 2400,
-              averageHeartrate: 148,
-            },
-          },
-        ],
-      },
-    ];
-
-    const view = buildLiveCoachView(
-      dashboard({ ratio: 1.0 }),
-      liveActivities,
-      NOW,
-      undefined,
-      history
-    );
-
-    expect(view.initialMessages).toHaveLength(2);
-    expect(view.initialMessages[1]).toMatchObject({
-      role: "coach",
-      text: "Her er turen.",
-      clientId: "h-assistant-1",
-    });
-    expect(view.initialMessages[1].blocks).toHaveLength(1);
-    expect(view.initialMessages[1].blocks?.[0].kind).toBe("activity");
+    expect(view.form.note).toBe("Let træning anbefalet");
+    expect(view.form.sameDayNote).toBeUndefined();
   });
 });
 

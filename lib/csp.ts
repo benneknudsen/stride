@@ -26,12 +26,12 @@ export function buildCsp(nonce: string, isDev: boolean): string {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     // `connect-src` must allowlist the external origins the browser may reach:
-    // the Strava API/OAuth host, the Vercel AI Gateway (AI SDK streaming), and
-    // OpenFreeMap's tile server (RouteMap fetches its style, glyphs and vector
-    // tiles via fetch/XHR — issue #275). Without these, `'self'` alone blocks
-    // those fetch/XHR/stream connections (issue #62). Dev additionally needs a
-    // websocket for HMR.
-    `connect-src 'self' https://www.strava.com https://ai-gateway.vercel.sh https://tiles.openfreemap.org${isDev ? " ws:" : ""}`,
+    // the Strava API/OAuth host and OpenFreeMap's tile server (RouteMap fetches
+    // its style, glyphs and vector tiles via fetch/XHR — issue #275). Without
+    // these, `'self'` alone blocks those fetch/XHR connections (issue #62). Dev
+    // additionally needs a websocket for HMR. #292 dropped the AI gateway host
+    // here: the browser never streams from a model any more.
+    `connect-src 'self' https://www.strava.com https://tiles.openfreemap.org${isDev ? " ws:" : ""}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

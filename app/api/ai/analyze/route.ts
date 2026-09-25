@@ -1,42 +1,23 @@
 /**
- * POST /api/ai/analyze — streaming generative-UI analysis.
+ * POST /api/ai/analyze — streaming block analysis.
  *
- * The centerpiece endpoint. It reduces the athlete's activities to a compact
- * summary, dedupes against the `ai_analyses` cache by `inputHash`, then streams
- * typed analysis blocks as newline-delimited JSON (NDJSON) — one validated
- * block per line, rendered the instant it arrives.
+ * Reduces the athlete's activities to a compact summary (`buildAnalysisInput`)
+ * and streams typed analysis blocks as newline-delimited JSON (NDJSON) — one
+ * validated block per line, rendered the instant it arrives.
  *
- * Provider routing: each model in `getModelCandidates()` is tried in order; if
- * the primary errors before emitting anything, the fallback takes over. If no
- * provider is configured (the public demo) or every provider fails, a
- * deterministic heuristic analysis is streamed instead, so the panel always
- * renders something grounded in real data.
- *
- * Keys never reach the browser — this is the only place the model is touched.
+ * Every block comes from `heuristicBlocks`, which is arithmetic over the
+ * athlete's own numbers: volume trend, pace comparison, a grounded insight, a
+ * next session and — when the progression data warrants one — a coach message.
+ * There is no model in this path and no provider to configure; the session is
+ * read only to size the anonymous payload cap below.
  */
 
-import { streamObject } from "ai";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import {
-  ANALYSIS_SYSTEM_PROMPT,
-  type AnalysisActivity,
-  analysisInputHash,
-  buildAnalysisInput,
-  buildAnalysisPrompt,
-  heuristicBlocks,
-} from "@/lib/ai/analysis";
-import { getModelCandidates, isAIConfigured } from "@/lib/ai/provider";
-import {
-  type AnalysisBlock,
-  analysisBlockSchema,
-  blockToToolCall,
-  toolCallToBlock,
-} from "@/lib/ai/tools";
+import { type AnalysisActivity, buildAnalysisInput, heuristicBlocks } from "@/lib/ai/analysis";
+import { type AnalysisBlock, analysisBlockSchema } from "@/lib/ai/tools";
 import { auth } from "@/lib/auth";
-import { getCachedAnalysis, insertAnalysis } from "@/lib/db/queries";
 import { rateLimit } from "@/lib/rate-limit";
-import type { AnalysisToolCall } from "@/types/domain";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -60,51 +41,28 @@ const requestSchema = z.object({
 });
 
 /**
- * Upper bound on streamed blocks per response. The prompt asks for 3–5; this
- * caps a model that ignores the instruction so a runaway stream can't inflate
- * response size or token spend.
+ * Per-IP rate limit. The blocks reduce client-supplied activities, so on the
+ * keyless demo deploy this is an unauthenticated compute sink. 30 requests per
+ * 60 seconds — generous for a real visitor, cheap to abuse-proof.
  */
-const MAX_BLOCKS = 8;
-
-/** Per-user analyze rate limit: 15 live-AI requests per 60 seconds. */
-const RATE_LIMIT_MAX = 15;
+const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /**
- * Per-IP guard on the heuristic path. The heuristic reduces client-supplied
- * activities *before* auth, so on the keyless demo deploy it is an
- * unauthenticated compute sink. This caps how often one IP can trigger that
- * work: 30 requests per 60 seconds — generous for a real visitor, cheap to
- * abuse-proof. The live-AI path keeps its own (stricter) per-user limit below.
- */
-const HEURISTIC_RATE_LIMIT_MAX = 30;
-const HEURISTIC_RATE_LIMIT_WINDOW_MS = 60_000;
-
-/**
  * Cap on the client-supplied activity payload served to unauthenticated
- * visitors (issue #264). The pre-auth rate-limit key is IP-based, and on
- * self-hosted deployments a client can rotate that IP per request, minting a
- * fresh bucket every time — so the payload itself is capped as
- * defense-in-depth on this unauthenticated compute sink. The authed path keeps
- * the request schema's full 500-activity maximum.
+ * visitors (issue #264). The rate-limit key can be rotated by a client-
+ * controlled XFF hop on self-hosted deployments, so the payload itself is
+ * capped as defense-in-depth on this unauthenticated compute sink. The authed
+ * path keeps the request schema's full 500-activity maximum.
  */
 const MAX_ANON_ACTIVITIES = 100;
-
-/**
- * Per-candidate stream timeout (issue #71 E3). If a model accepts the request
- * but then stalls without streaming, this aborts it so the router falls through
- * to the next candidate (or the heuristic floor) instead of burning the whole
- * `maxDuration`. Two candidates × 12 s stays inside the 30 s budget. A fresh
- * signal is minted per candidate so each gets its own clean window.
- */
-const PROVIDER_TIMEOUT_MS = 12_000;
 
 const NDJSON_HEADERS = {
   "Content-Type": "application/x-ndjson; charset=utf-8",
   "Cache-Control": "no-store",
 } as const;
 
-/** Stream an already-resolved set of blocks (cache hit / heuristic) as NDJSON. */
+/** Stream an already-resolved set of blocks as NDJSON. */
 function ndjsonResponse(blocks: AnalysisBlock[]): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -136,60 +94,9 @@ export async function POST(req: NextRequest) {
 
   const { scope, activities: rawActivities } = parsed.data;
 
-  // Best-effort auth — the demo has no session, and that's fine.
-  const userId = await currentUserId();
-
-  // Issue #264: the pre-auth rate-limit key can be rotated by a client-
-  // controlled XFF hop on self-hosted deployments, so the anonymous payload is
-  // capped before any heuristic compute. The authed path keeps the schema's
-  // full 500-activity maximum.
-  const activities: AnalysisActivity[] = (
-    userId ? rawActivities : rawActivities.slice(0, MAX_ANON_ACTIVITIES)
-  ).map((a) => ({
-    ...a,
-    startDate: new Date(a.startDate),
-  }));
-
-  const input = buildAnalysisInput(activities, scope, new Date());
-  const inputHash = analysisInputHash(input);
-
-  // Cache lookup (inputHash dedup). Safe no-op without a DB / session.
-  if (userId) {
-    const cached = await getCachedAnalysis(userId, scope, inputHash);
-    const cachedBlocks = parseCachedBlocks(cached?.toolCalls);
-    if (cachedBlocks.length > 0) {
-      return ndjsonResponse(cachedBlocks);
-    }
-  }
-
-  // Gating rule: who pays for the call, not whether a key exists (#209).
-  // Without a session, always serve the deterministic heuristic — even when a
-  // key is configured (as it is in production). It is free, data-grounded and
-  // already fenced by a per-IP rate limit, so the public demo's coach feed
-  // fills in instead of hitting a 401. With a session, take the live-AI path
-  // when configured, otherwise fall back to the same heuristic.
-  if (!userId) {
-    // Per-IP guard: this path reduces client-supplied activities (capped to
-    // MAX_ANON_ACTIVITIES) before auth, so on the demo deploy it is an
-    // unauthenticated compute sink.
-    const ip = clientIp(req);
-    const limit = await rateLimit(`ai-heuristic:${ip}`, {
-      max: HEURISTIC_RATE_LIMIT_MAX,
-      windowMs: HEURISTIC_RATE_LIMIT_WINDOW_MS,
-    });
-    if (!limit.allowed) {
-      const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
-      return Response.json(
-        { error: "rate_limited" },
-        { status: 429, headers: { "retry-after": String(retryAfterSeconds) } }
-      );
-    }
-    return ndjsonResponse(heuristicBlocks(input));
-  }
-
-  // Per-user rate limit on the live-AI path (cache hits above never reach here),
-  // mirroring the chat route: 429 with a `retry-after` when the window is full.
-  const limit = await rateLimit(`analyze:${userId}`, {
+  // Per-IP guard first: nothing below is worth a session read or a payload
+  // rewrite for a caller that is already over budget.
+  const limit = await rateLimit(`ai-blocks:${clientIp(req)}`, {
     max: RATE_LIMIT_MAX,
     windowMs: RATE_LIMIT_WINDOW_MS,
   });
@@ -201,85 +108,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // No AI key configured → serve the heuristic even for a signed-in user.
-  if (!isAIConfigured()) {
-    return ndjsonResponse(heuristicBlocks(input));
+  // Best-effort auth — only to decide how large a payload this caller may send.
+  const userId = await currentUserId();
+  const activities: AnalysisActivity[] = (
+    userId ? rawActivities : rawActivities.slice(0, MAX_ANON_ACTIVITIES)
+  ).map((a) => ({
+    ...a,
+    startDate: new Date(a.startDate),
+  }));
+
+  const input = buildAnalysisInput(activities, scope, new Date());
+
+  // The block contract is enforced before a block reaches the stream.
+  const blocks: AnalysisBlock[] = [];
+  for (const block of heuristicBlocks(input)) {
+    const validated = analysisBlockSchema.safeParse(block);
+    if (validated.success) blocks.push(validated.data);
   }
-
-  const prompt = buildAnalysisPrompt(input);
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const collected: AnalysisBlock[] = [];
-      const emit = (block: AnalysisBlock) => {
-        collected.push(block);
-        controller.enqueue(encoder.encode(`${JSON.stringify(block)}\n`));
-      };
-
-      let usedModel: string | null = null;
-
-      // Provider router with fallback: try each model until one streams output.
-      for (const { id, model } of getModelCandidates()) {
-        if (collected.length > 0) break;
-        try {
-          const result = streamObject({
-            model,
-            output: "array",
-            schema: analysisBlockSchema,
-            system: ANALYSIS_SYSTEM_PROMPT,
-            prompt,
-            abortSignal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
-          });
-          for await (const block of result.elementStream) {
-            emit(block);
-            if (collected.length >= MAX_BLOCKS) break;
-          }
-          usedModel = id;
-          break;
-        } catch {
-          // Timed out (E3) or errored. Already streamed part of this model's
-          // output → cannot safely retry; otherwise fall through to the next.
-          if (collected.length > 0) break;
-        }
-      }
-
-      // Every provider failed before emitting → guaranteed heuristic floor.
-      if (collected.length === 0) {
-        for (const block of heuristicBlocks(input)) emit(block);
-        usedModel = null;
-      }
-
-      // Persist a clean model result for inputHash dedup (best-effort). Awaited
-      // BEFORE closing the stream (issue #71 E5): on Vercel the function can be
-      // frozen the instant the response ends, which would truncate a persist
-      // awaited *after* `controller.close()`. Writing while the stream is still
-      // open keeps the request alive until the insert lands — the same ordering
-      // the chat route uses. Caching is an optimisation, so failures never
-      // surface to the client.
-      if (userId && usedModel && collected.length > 0) {
-        try {
-          await insertAnalysis({
-            userId,
-            scope,
-            inputHash,
-            model: usedModel,
-            toolCalls: collected.map(blockToToolCall),
-          });
-        } catch {
-          // Caching is an optimisation; never fail the request over it.
-        }
-      }
-
-      controller.close();
-    },
-  });
-
-  return new Response(stream, { headers: NDJSON_HEADERS });
+  return ndjsonResponse(blocks);
 }
 
 /**
- * Best-effort client IP for the pre-auth rate-limit key, in priority order:
+ * Best-effort client IP for the rate-limit key, in priority order:
  *
  * 1. `x-real-ip` — set by Vercel's edge proxy (and well-configured reverse
  *    proxies) to the actual connecting address; client-supplied values are
@@ -317,12 +167,4 @@ async function currentUserId(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** Rehydrate cached `{ name, args }` tool calls into validated blocks. */
-function parseCachedBlocks(toolCalls: unknown): AnalysisBlock[] {
-  if (!Array.isArray(toolCalls)) return [];
-  return (toolCalls as AnalysisToolCall[])
-    .map((call) => toolCallToBlock(call))
-    .filter((b): b is AnalysisBlock => b !== null);
 }

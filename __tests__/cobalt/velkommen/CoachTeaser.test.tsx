@@ -66,7 +66,7 @@ describe("CoachTeaser (#121, #162)", () => {
     setPrefersReducedMotion(false);
     render(<CoachTeaser />);
 
-    expect(screen.getByText(/AI-coachen · Eksempel på analyse/i)).toBeTruthy();
+    expect(screen.getByText(/Coachen · Eksempel på analyse/i)).toBeTruthy();
     // The meta line pins the script to the demo fixture it replays.
     expect(screen.getByText(/Tempo Tuesday · 10,0 km · 4:27 \/km/i)).toBeTruthy();
   });

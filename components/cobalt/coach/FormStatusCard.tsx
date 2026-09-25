@@ -30,6 +30,10 @@ export function FormStatusCard({ form, started }: { form: CoachView["form"]; sta
         <span className="text-[13px] text-ink">{form.note}</span>
       </div>
 
+      {form.sameDayNote ? (
+        <p className="mb-3 text-[12.5px] leading-relaxed text-ink">{form.sameDayNote}</p>
+      ) : null}
+
       <div className="h-[7px] overflow-hidden rounded-pill bg-cobalt/14">
         <div
           className="h-full rounded-pill bg-cobalt motion-reduce:!transition-none"

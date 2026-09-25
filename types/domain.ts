@@ -1,4 +1,4 @@
-import type { activities, aiAnalyses, users } from "../drizzle/schema";
+import type { activities, users } from "../drizzle/schema";
 
 /**
  * Domain types. Database row types are inferred from the Drizzle schema so
@@ -55,20 +55,12 @@ export type Activity = Omit<typeof activities.$inferSelect, "splits" | "hrZones"
 };
 
 // ---------------------------------------------------------------------------
-// AI analyses
+// Analysis scope
 // ---------------------------------------------------------------------------
 
-/** Scope of an AI analysis — which slice of data it reasons over. */
-export type AnalysisScope = (typeof aiAnalyses.$inferSelect)["scope"];
-
-/** A single generative-UI tool invocation persisted with an analysis. */
-export type AnalysisToolCall = {
-  /** Tool name, e.g. "showTrend" | "showInsight". */
-  name: string;
-  /** Validated arguments the component was rendered with. */
-  args: Record<string, unknown>;
-};
-
-export type Analysis = Omit<typeof aiAnalyses.$inferSelect, "toolCalls"> & {
-  toolCalls: AnalysisToolCall[] | null;
-};
+/**
+ * Scope of an analysis — which slice of data it reasons over. The coach is
+ * computed in-process from the request's activities, so there is no table to
+ * infer this from; it is the block-stream's own vocabulary.
+ */
+export type AnalysisScope = "weekly" | "activity" | "trend" | "overall";

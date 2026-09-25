@@ -1,18 +1,13 @@
 /**
- * Analysis input shaping, deduplication hashing, prompting, and a deterministic
- * heuristic fallback.
+ * Analysis input shaping and the deterministic block builder.
  *
- * The model is expensive and rate-limited, so we reduce raw activities to a
- * compact, rounded summary (`AnalysisInput`) and hash it — identical training
- * data yields an identical `inputHash`, which the analyze route uses to dedupe
- * against the `ai_analyses` cache.
- *
- * When no provider is configured (`isAIConfigured() === false`), `heuristicBlocks`
- * produces the same typed blocks from arithmetic alone, so the public demo
- * renders a real, data-grounded analysis without any AI key.
+ * Raw activities are reduced to a compact, rounded summary (`AnalysisInput`),
+ * and `heuristicBlocks` turns that summary into the same typed blocks a model
+ * used to author. Every number a block carries is arithmetic over the athlete's
+ * own runs, so the analysis is reproducible, needs no provider and costs
+ * nothing to serve.
  */
 
-import { createHash } from "node:crypto";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { formatPace } from "@/lib/metrics";
 import { computeSnapshot, type LoadRisk } from "@/lib/training/progression";
@@ -30,10 +25,11 @@ import type { AnalysisBlock, AnalysisBlockOf } from "./tools";
  * carry a `source` column, but the Strava mapper (`lib/strava/mappers.ts`)
  * normalises into a fixed set of physical columns and unit conventions
  * (distance in metres, times in seconds, speed in m/s, HR in bpm, single-leg
- * cadence). The reads that feed the AI (`getActivities`, `getDashboardActivities`)
- * filter by `userId` only, never by `source`, so the coach sees every synced run
- * regardless of origin. That is why nothing here needs a `source` field. Add
- * provider-specific inputs here only if a metric ever becomes source-dependent.
+ * cadence). The reads that feed the analysis (`getActivities`,
+ * `getDashboardActivities`) filter by `userId` only, never by `source`, so the
+ * coach sees every synced run regardless of origin. That is why nothing here
+ * needs a `source` field. Add provider-specific inputs here only if a metric
+ * ever becomes source-dependent.
  */
 export interface AnalysisActivity {
   startDate: Date;
@@ -67,7 +63,7 @@ interface AnalysisProgression {
   readyToIncrease: boolean | null;
 }
 
-/** A compact, rounded summary of an athlete's training — the model's context. */
+/** A compact, rounded summary of an athlete's training — the analysis input. */
 export interface AnalysisInput {
   scope: AnalysisScope;
   totalRuns: number;
@@ -182,51 +178,6 @@ export function buildAnalysisInput(
   };
 }
 
-/** Stable SHA-256 of the summary — the cache key (`ai_analyses.inputHash`). */
-export function analysisInputHash(input: AnalysisInput): string {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
-}
-
-// ---------------------------------------------------------------------------
-// Prompting
-// ---------------------------------------------------------------------------
-
-export const ANALYSIS_SYSTEM_PROMPT = [
-  "You are Stride, an elite running coach analysing a runner's recent training.",
-  "You communicate exclusively through structured UI blocks — never prose.",
-  "Produce 3 to 5 blocks total, ordered most-important first.",
-  "Ground every statement in the provided numbers; never invent data.",
-  "Favour a mix of block types: at least one trend or comparison, and one workout recommendation.",
-  "Be specific and encouraging but honest about regressions. Use pace as min:sek /km.",
-  // Hard language rule (issue #210): the entire product is Danish, so every
-  // user-facing field the model emits — titles, bodies, metrics, labels,
-  // workout types and recommendations — MUST be written in Danish, addressing
-  // the runner as 'du'. This mirrors how the chat route enforces Danish. Never
-  // emit English in any field; translate running terminology naturally
-  // (fx "tempo", "intervaller", "langtur", "rolig tur", "/km" for fart).
-  "SVAR ALTID PÅ DANSK. Skriv ALLE titler, sætninger, metrics, labels, pas-typer og anbefalinger på dansk, og sig 'du' til brugeren. Brug aldrig engelsk i noget felt.",
-].join(" ");
-
-/** Build the user prompt from the summarised input. */
-export function buildAnalysisPrompt(input: AnalysisInput): string {
-  const paceLine = (p: number | null) => (p === null ? "n/a" : formatPaceSecPerKm(p));
-  return [
-    `Scope: ${input.scope}`,
-    `Total runs: ${input.totalRuns}`,
-    `Total distance: ${input.totalDistanceKm} km`,
-    `Longest run: ${input.longestRunKm} km`,
-    `Total elevation gain: ${input.totalElevationM} m`,
-    `Weekly volume (km, newest first): ${input.weeklyVolumeKm.join(", ")}`,
-    `Avg pace last 7 days: ${paceLine(input.avgPaceLast7)}`,
-    `Avg pace prior 7 days: ${paceLine(input.avgPacePrev7)}`,
-    `Avg HR last 7 days: ${input.avgHrLast7 ?? "n/a"} bpm`,
-    `Avg HR prior 7 days: ${input.avgHrPrev7 ?? "n/a"} bpm`,
-    `Training load ratio (acute:chronic): ${input.progression.loadRatio ?? "n/a"} (risk: ${input.progression.loadRisk ?? "n/a"})`,
-    `4-week volume: ${input.progression.volumeKm ?? "n/a"} km`,
-    `Ready to increase volume: ${input.progression.readyToIncrease ?? "unknown"}`,
-  ].join("\n");
-}
-
 /** Format seconds-per-km as `m:ss` (mirrors metrics.formatPace, which takes m/s). */
 export function formatPaceSecPerKm(secondsPerKm: number | null): string {
   if (secondsPerKm === null || secondsPerKm <= 0) return "--:--";
@@ -234,7 +185,7 @@ export function formatPaceSecPerKm(secondsPerKm: number | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// Deterministic heuristic fallback (no AI key required)
+// Deterministic blocks
 // ---------------------------------------------------------------------------
 
 /** Percentage change a→b, guarding divide-by-zero. */
@@ -304,8 +255,8 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
 }
 
 /**
- * Build typed blocks from arithmetic alone. Used when no provider is configured
- * (the public demo) and as the guaranteed floor if the model errors out.
+ * Build typed blocks from arithmetic alone — the whole analysis. Ordered
+ * most-important first: what changed, what it means, and what to do next.
  */
 export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
   const blocks: AnalysisBlock[] = [];

@@ -1,5 +1,5 @@
 // Stride — coach rule engine. The single source of truth for the periodised
-// build toward the user's target race and the constraint set the AI coach must
+// build toward the user's target race and the constraint set the coach must
 // respect when it proposes or validates a workout.
 //
 // Two halves:
@@ -14,7 +14,7 @@
 //
 // Everything here is pure and deterministic — the only clock reads are the
 // default arguments of `getLocalDate`/`getCurrentPhase` — which keeps it
-// trivially testable and safe to call from server actions or the AI tool layer.
+// trivially testable and safe to call from server actions or the coach surface.
 
 export type PhaseKey = "adapt" | "burn" | "sharpen" | "peak" | "taper";
 
@@ -45,11 +45,11 @@ export type SessionRisk = "low" | "medium" | "high";
  * The canonical session-type vocabulary the plan works in — the single source
  * of truth. Run days carry an effort (easy → race); the rest are non-run days.
  * Everything downstream derives from this one list: {@link SessionType} is its
- * element type, and the chat route's `z.enum(SESSION_TYPES)` tool schema reuses
- * the array verbatim so the model, the validator and the UI can never drift.
- * Callers that receive loosely-typed strings (AI tool output, form input)
- * should normalise/validate at the boundary — internally `normalizeType` still
- * tolerates casing.
+ * element type, and every schema that needs the list (zod enums, the plan
+ * suggestions) reuses the array verbatim so the validator and the UI can never
+ * drift. Callers that receive loosely-typed strings (form input, webhook
+ * payloads) should normalise/validate at the boundary — internally
+ * `normalizeType` still tolerates casing.
  */
 export const SESSION_TYPES = [
   "easy",
@@ -594,7 +594,7 @@ const SPEED_SESSION_TYPES = new Set(["tempo", "intervals", "race", "fartlek", "s
 /** Session types that are NOT a run — leg strength on these days is fine. */
 const NON_RUN_TYPES = new Set(["rest", "strength", "cross", "off", "mobility", "yoga"]);
 
-/** Lowercased, trimmed session type — callers (AI tools, UI) vary the casing. */
+/** Lowercased, trimmed session type — callers (form input, UI) vary the casing. */
 function normalizeType(type?: string): string | undefined {
   return type?.trim().toLowerCase() || undefined;
 }

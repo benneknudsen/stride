@@ -15,7 +15,7 @@ import type { CoachActivityInput, CoachDashboardData } from "@/lib/coach/dashboa
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
-import { getChatHistory, getDashboardActivities, getRacePlan } from "@/lib/db/queries";
+import { getDashboardActivities, getRacePlan } from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
 
 // Coach (issues #34 + #75, consolidated in #86) — the single coach route the
@@ -25,9 +25,9 @@ import { demoActivities } from "@/lib/demo/data";
 //   1. Dagens træning — the recommender's plan-grounded "Næste pas" card beside
 //                    the last-five-runs "Næste aktivitet" variation (#253),
 //                    recomputed per request
-//   2. AI-coach    — chat + form/readiness + 14-day training load (was /coach)
+//   2. Din form    — readiness + 14-day training load (was /coach)
 //   3. Progression — pace/zone/volume/load charts, cached 1 h (getProgressionCharts)
-//   4. Coach-feed  — AI coach cards streamed client-side from /api/ai/analyze
+//   4. Coach-feed  — coach cards streamed client-side from /api/ai/analyze
 //
 // Every section reads the signed-in user's own runs (getDashboardActivities,
 // the #84 pattern) and falls back to the demo fixtures when nothing is synced.
@@ -37,8 +37,8 @@ import { demoActivities } from "@/lib/demo/data";
 export const dynamic = "force-dynamic";
 
 /** What every section on this page reads: the engine's input plus the two fields
- *  only the AI feed needs. Demo fixtures and `getDashboardActivities` rows both
- *  fit — the averages are nullable because the DB columns are. */
+ *  only the coach feed needs. Demo fixtures and `getDashboardActivities` rows
+ *  both fit — the averages are nullable because the DB columns are. */
 type CoachPageActivity = CoachActivityInput & {
   averageSpeed: number | null;
   totalElevationGain: number | null;
@@ -157,16 +157,9 @@ export default async function CoachPage() {
   const session = await auth();
   const userId = session?.user?.id;
 
-  // Issue #202: replay the signed-in user's persisted chat history in the panel.
-  // Best-effort inside getChatHistory (it returns [] on failure), so a history
-  // read never breaks the page — the chat just opens on the fresh greeting.
-  const [rows, racePlan, history] = userId
-    ? await Promise.all([
-        getDashboardActivities(userId),
-        getRacePlan(userId),
-        getChatHistory(userId),
-      ])
-    : [[], null, []];
+  const [rows, racePlan] = userId
+    ? await Promise.all([getDashboardActivities(userId), getRacePlan(userId)])
+    : [[], null];
 
   const live = rows.length > 0;
   const activities: CoachPageActivity[] = live ? rows : demoActivities;
@@ -175,18 +168,12 @@ export default async function CoachPage() {
   // served to another; everyone on the fixtures shares the "demo" entry.
   const scope = live && userId ? userId : undefined;
 
-  // The console's chat + cards derive from the same dashboard the workout card
-  // above them shows, so the two can never contradict each other. The greeting
-  // addresses the signed-in user by their own name (issue: it used to hardcode
-  // the developer's).
-  const user = session?.user;
-  const userName = user?.name?.trim() || user?.email?.split("@")[0] || undefined;
   // Issue #167: run the engine once and share the result. The workout card
-  // (NextWorkoutSection) and the console's chat + cards both read this single
-  // dashboard, so they stay consistent and the computation never doubles up.
+  // (NextWorkoutSection) and the console's form + load cards both read this
+  // single dashboard, so they stay consistent and the computation never doubles up.
   const dashboard = computeCoachDashboard(activities, raceDate, userId);
-  const coachView = user
-    ? buildLiveCoachView(dashboard, activities, new Date(), userName, history)
+  const coachView = userId
+    ? buildLiveCoachView(dashboard, activities, new Date())
     : buildCoachView();
 
   return (
@@ -195,7 +182,7 @@ export default async function CoachPage() {
         <span className="cg-label text-[11px] tracking-[0.2em] text-red">Træner</span>
         <h1 className="m-0 font-cg-display text-[32px] leading-none text-cobalt">Coach</h1>
         <p className="m-0 text-[13.5px] text-ink">
-          Dit næste pas, din progression og din AI-coach — samlet på ét sted.
+          Dit næste pas, din progression og din træning — samlet på ét sted.
         </p>
       </header>
 
@@ -207,8 +194,8 @@ export default async function CoachPage() {
       </section>
 
       <section>
-        <SectionHeading index="02" title="Spørg coachen" hint="AI · samtale" />
-        <CoachConsole view={coachView} visitor={!user} />
+        <SectionHeading index="02" title="Din form" hint="Readiness · belastning" />
+        <CoachConsole view={coachView} />
       </section>
 
       <section>
@@ -219,7 +206,7 @@ export default async function CoachPage() {
       </section>
 
       <section>
-        <SectionHeading index="04" title="Coach-feed" hint="AI · streamet" />
+        <SectionHeading index="04" title="Coach-feed" hint="Analyse · streamet" />
         <Suspense fallback={<SectionLoader height={240} />}>
           <CoachFeed activities={toFeedActivities(activities)} />
         </Suspense>

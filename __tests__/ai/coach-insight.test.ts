@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type AnalysisActivity,
   type AnalysisInput,
-  analysisInputHash,
   buildAnalysisInput,
-  buildAnalysisPrompt,
   coachInsightBlock,
   heuristicBlocks,
 } from "@/lib/ai/analysis";
@@ -105,15 +103,10 @@ describe("buildAnalysisInput progression", () => {
     expect(input.progression.volumeKm).toBeGreaterThan(0);
   });
 
-  it("changes the input hash when progression data differs", () => {
-    const a = analysisInputHash(buildAnalysisInput(STEADY, "overall", NOW));
-    const b = analysisInputHash(buildAnalysisInput(SPIKED, "overall", NOW));
-    expect(a).not.toBe(b);
-  });
-
-  it("includes the training load in the prompt", () => {
-    const prompt = buildAnalysisPrompt(buildAnalysisInput(STEADY, "overall", NOW));
-    expect(prompt).toMatch(/load ratio/i);
+  it("carries a different progression summary per history", () => {
+    expect(buildAnalysisInput(SPIKED, "overall", NOW).progression).not.toEqual(
+      buildAnalysisInput(STEADY, "overall", NOW).progression
+    );
   });
 });
 

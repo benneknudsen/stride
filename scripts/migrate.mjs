@@ -14,7 +14,11 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 const db = drizzle(pool);
 
-// pgvector extension skal eksistere før første migration (bruger vector(1536) type)
+// pgvector must exist before the migration history replays: the `vector(1536)`
+// column on `activity_embeddings` is created by migration 0000. Nothing reads
+// that table any more (issue #292 — the table is dropped in 0009 and the
+// extension is left installed, not dropped), but a fresh database still has to
+// walk 0000, so the extension has to be there first.
 console.log("Ensuring pgvector extension...");
 await pool.query(`CREATE EXTENSION IF NOT EXISTS vector;`);
 

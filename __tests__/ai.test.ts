@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   type AnalysisActivity,
-  analysisInputHash,
   buildAnalysisInput,
   formatPaceSecPerKm,
   heuristicBlocks,
@@ -44,16 +43,15 @@ describe("buildAnalysisInput", () => {
     expect(input.avgPacePrev7).not.toBeNull();
   });
 
-  it("is order-independent for the hash", () => {
-    const a = analysisInputHash(buildAnalysisInput(SAMPLE, "overall", NOW));
-    const b = analysisInputHash(buildAnalysisInput([...SAMPLE].reverse(), "overall", NOW));
-    expect(a).toBe(b);
+  it("is order-independent — the same activities in any order summarise identically", () => {
+    expect(buildAnalysisInput([...SAMPLE].reverse(), "overall", NOW)).toEqual(
+      buildAnalysisInput(SAMPLE, "overall", NOW)
+    );
   });
 
-  it("changes the hash when the scope changes", () => {
-    const a = analysisInputHash(buildAnalysisInput(SAMPLE, "overall", NOW));
-    const b = analysisInputHash(buildAnalysisInput(SAMPLE, "weekly", NOW));
-    expect(a).not.toBe(b);
+  it("carries the requested scope through to the summary", () => {
+    expect(buildAnalysisInput(SAMPLE, "weekly", NOW).scope).toBe("weekly");
+    expect(buildAnalysisInput(SAMPLE, "overall", NOW).scope).toBe("overall");
   });
 });
 
@@ -99,10 +97,9 @@ describe("heuristicBlocks", () => {
     }
   });
 
-  // Issue #210: the deterministic fallback (rendered when no AI key is set, or
-  // when the provider errors) must speak Danish like the rest of the product —
-  // never the old English strings. This runs with no AI key: heuristicBlocks is
-  // pure arithmetic, so it exercises the exact production fallback path.
+  // Issue #210: the blocks must speak Danish like the rest of the product — never
+  // the old English strings. heuristicBlocks is pure arithmetic over the
+  // athlete's own runs, so this is the exact production path.
   it("returns Danish titles, never the English originals", () => {
     const blocks = heuristicBlocks(buildAnalysisInput(SAMPLE, "overall", NOW));
 
@@ -140,7 +137,7 @@ describe("heuristicBlocks", () => {
 });
 
 describe("blockToToolCall / toolCallToBlock", () => {
-  it("round-trips a block through its persisted shape", () => {
+  it("round-trips a block through its flat name/args shape", () => {
     const [block] = heuristicBlocks(buildAnalysisInput(SAMPLE, "overall", NOW));
     const call = blockToToolCall(block);
     expect(call.name).toBe(block.tool);

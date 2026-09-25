@@ -1,6 +1,6 @@
 // Cobalt Glass — race-time estimation.
 // The plan pages used to ship hardcoded race numbers (goal 3:45, pace 5:20,
-// "AI estimate" 3:41) for every user and every race. This module replaces them
+// a hardcoded "3:41") for every user and every race. This module replaces them
 // with values derived from the athlete's own recent runs: a Riegel prediction
 // anchored on the longest recent run, against the race distance inferred from
 // the race's name. Everything is pure and deterministic; when the inputs don't

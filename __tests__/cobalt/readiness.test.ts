@@ -289,16 +289,16 @@ describe("Hjem and Coach show the same readiness (issue #127)", () => {
 // ---------------------------------------------------------------------------
 
 // A rolig tur this morning never trips the #259 hard-effort cap, so the load
-// read stays "ready" — but the hero and the coach opener must name the run
-// instead of promising "Klar til hårdt pas" / "Kroppen er klar i dag.", the
-// same story the rest-day cards tell.
+// read stays "ready" — but the hero must name the run instead of promising
+// "Kroppen er klar i dag.", and the coach form card must not promise "Klar til
+// hårdt pas" either: the same story the rest-day cards tell.
 describe("same-day run surfaces agree (issue #273)", () => {
   /** The saturated 28-run base, newest run this morning (07:30, NOW 09:00). */
   function morningHistory(): HomeActivityLike[] {
     return liveHistory(28);
   }
 
-  it("hero and opener name the run today instead of claiming ready", () => {
+  it("hero and form card name the run today instead of claiming ready", () => {
     const activities = morningHistory();
     const ratio = computeSnapshot(
       activities.map((a) => ({ ...a, hrZones: null })),
@@ -316,10 +316,9 @@ describe("same-day run surfaces agree (issue #273)", () => {
     const coach = buildLiveCoachView(dashboard(ratio, null, sinceLastRun), activities, NOW);
 
     expect(home.heroNote).toBe(SAME_DAY_RUN_NOTE);
-    expect(coach.initialMessages[0].text).toContain(SAME_DAY_RUN_NOTE);
-    expect(coach.initialMessages[0].text).not.toContain("klar til hårdt pas");
+    expect(coach.form.sameDayNote).toBe(SAME_DAY_RUN_NOTE);
     // The readiness card itself keeps the load-derived read — the override is
-    // hero/opener copy only; the #259 cap stays a hard-effort mechanism.
+    // hero/form-card copy only; the #259 cap stays a hard-effort mechanism.
     expect(home.readinessNote).toBe(BAND_NOTES.ready);
     expect(coach.form.note).toBe(BAND_NOTES.ready);
   });
@@ -341,9 +340,8 @@ describe("same-day run surfaces agree (issue #273)", () => {
     const coach = buildLiveCoachView(dashboard(ratio, null, sinceLastRun), activities, NOW);
 
     expect(home.heroNote).toBe("Kroppen er klar i dag.");
-    // The opener lowercases the band note.
-    expect(coach.initialMessages[0].text).toContain("klar til hårdt pas");
-    expect(coach.initialMessages[0].text).not.toContain(SAME_DAY_RUN_NOTE);
+    expect(coach.form.sameDayNote).toBeUndefined();
+    expect(coach.form.note).toBe(BAND_NOTES.ready);
   });
 });
 

@@ -18,7 +18,7 @@ const TYPE_MS = 26;
 
 type Phase = "waiting" | "typing" | "static";
 
-// The landing page's "AI moment": the pre-written analysis above typed out
+// The landing page's "coach moment": the pre-written analysis above typed out
 // character by character, once. No API call — the mono label says honestly
 // that it is an example. Hydration-safe because the server renders the
 // "waiting" phase (script present but transparent, so the card already has
@@ -99,7 +99,7 @@ export function CoachTeaser() {
             aria-hidden="true"
             className="size-2 rounded-full bg-red [animation:cg-pulse-dot_1.4s_ease-in-out_infinite] motion-reduce:[animation:none]"
           />
-          AI-coachen · Eksempel på analyse
+          Coachen · Eksempel på analyse
         </span>
         <span className="cg-label">Tempo Tuesday · 10,0 km · 4:27 /km</span>
       </div>

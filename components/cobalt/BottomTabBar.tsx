@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useKeyboardOpen } from "@/hooks/useVisualViewport";
+import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
