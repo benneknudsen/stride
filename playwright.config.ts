@@ -47,5 +47,27 @@ export default defineConfig({
     url: `${BASE_URL}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // Unmounts Next's dev overlay for this server only (#289). The overlay
+    // mounts a `nextjs-portal` shadow root holding a `position: fixed` toast in
+    // the bottom-left corner. The mobile BottomTabBar is `fixed inset-x-3
+    // bottom-…` with `justify-around`, so Hjem — its first tab — sits exactly
+    // there, and Playwright's hit test refuses the click with "nextjs-portal …
+    // subtree intercepts pointer events". Only the e2e server loses the overlay;
+    // `npm run dev` for a human is untouched.
+    //
+    // `devIndicators: false` is NOT enough here, which is why this is an env var
+    // and not a next.config.ts flag. It only hides the badge while the issue
+    // count is zero; with any runtime error present the overlay keeps a disabled
+    // error pill in the same corner, and the e2e DB failures alone are enough to
+    // produce those. The overlay as a whole is what has to go.
+    //
+    // The trade-off: the browser no longer renders compile/runtime error
+    // overlays during e2e. Errors still reach the dev server's stdout and
+    // Playwright's pageerror events, so a broken run still fails loudly.
+    //
+    // process.env spreads first so the dev server keeps DATABASE_URL, AUTH_SECRET
+    // and friends. A human's own `npm run dev` on :6969 is not covered —
+    // reuseExistingServer above would adopt it as-is — so stop that server first.
+    env: { ...process.env, NEXT_PRIVATE_DISABLE_DEV_OVERLAY_UX: "1" },
   },
 });
