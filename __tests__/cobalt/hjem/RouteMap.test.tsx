@@ -74,6 +74,22 @@ function layerById(id: string) {
   return mocks.addLayer.mock.calls.find(([layer]) => layer.id === id)?.[0];
 }
 
+/** Render a map and fire the `load` handler it registered, so its layers exist. */
+async function renderLoadedMap() {
+  const view = render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
+  await waitFor(() => expect(mocks.onLoad).toBeDefined());
+  mocks.onLoad?.();
+  return view;
+}
+
+/** The element MapLibre was handed, once init got that far (#276). */
+async function awaitMapContainer() {
+  await waitFor(() => expect(mocks.container).toBeDefined());
+  const el = mocks.container;
+  if (!el) throw new Error("MapLibre never received the RouteMap container");
+  return el;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.onLoad = undefined;
@@ -84,10 +100,7 @@ beforeEach(() => {
 
 describe("RouteMap", () => {
   it("adds the route source and draws the three route layers once the map loads", async () => {
-    render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
-
-    await waitFor(() => expect(mocks.onLoad).toBeDefined());
-    mocks.onLoad?.();
+    await renderLoadedMap();
 
     expect(mocks.setWorkerUrl).toHaveBeenCalledWith("/maplibre-gl-worker.mjs");
     expect(mocks.addSource).toHaveBeenCalledWith(
@@ -120,10 +133,7 @@ describe("RouteMap", () => {
 
   it("guards #276: hands MapLibre a container positioned via inline styles", async () => {
     const { container } = render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
-
-    await waitFor(() => expect(mocks.container).toBeDefined());
-    const mapContainer = mocks.container;
-    if (!mapContainer) throw new Error("MapLibre never received the RouteMap container");
+    const mapContainer = await awaitMapContainer();
 
     // Regression guard for #276: maplibre-gl v6 adds an *unlayered*
     // `.maplibregl-map{position:relative}` to the container, which outranks
@@ -137,10 +147,7 @@ describe("RouteMap", () => {
   });
 
   it("filters route-dots down to the Point features only", async () => {
-    render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
-
-    await waitFor(() => expect(mocks.onLoad).toBeDefined());
-    mocks.onLoad?.();
+    await renderLoadedMap();
 
     // Regression guard for #279: the "route" source mixes a LineString with the
     // two Point features, and a circle layer without this filter paints a dot on
@@ -152,6 +159,60 @@ describe("RouteMap", () => {
     });
   });
 
+  it("keeps the brand mapping on the dots: cobalt start, red finish, white ring", async () => {
+    await renderLoadedMap();
+
+    // #284: the start/finish redesign was allowed to change *sizes*, never the
+    // brand mapping — cobalt is start and red is finish, and the ring stays
+    // white on both so the dots read against both Positron tiles and the route.
+    const paint = layerById("route-dots")?.paint as Record<string, unknown>;
+    expect(paint["circle-color"]).toEqual([
+      "match",
+      ["get", "kind"],
+      "start",
+      "#1b29c0",
+      "#ee2418",
+    ]);
+    expect(paint["circle-stroke-color"]).toBe("#ffffff");
+  });
+
+  it("tells start and finish apart by dot size, not by colour alone (#284)", async () => {
+    await renderLoadedMap();
+
+    // #284: at 260px the two dots were the same size, so a glance could not say
+    // which end was which. Both properties must be per-kind expressions, and the
+    // start must be the larger disc — otherwise the dot that drowned is the one
+    // left big.
+    const paint = layerById("route-dots")?.paint as Record<string, unknown>;
+    const byKind = (property: string) => {
+      const expression = paint[property];
+      expect(Array.isArray(expression)).toBe(true);
+      const [, , , start, end] = expression as unknown[];
+      return { start, end };
+    };
+
+    const radius = byKind("circle-radius");
+    const stroke = byKind("circle-stroke-width");
+    expect(radius.start).toBeGreaterThan(radius.end as number);
+    // The finish reads as a target: a smaller red core inside a wider white ring.
+    expect(stroke.end).toBeGreaterThan(stroke.start as number);
+    // Still numbers, not strings or CSS lengths — MapLibre rejects those.
+    for (const value of [radius.start, radius.end, stroke.start, stroke.end]) {
+      expect(typeof value).toBe("number");
+    }
+  });
+
+  it("paints the map box with the silver design token, not a hardcoded hex (#284)", async () => {
+    render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
+    const mapContainer = await awaitMapContainer();
+
+    // #284: the background was a literal `#e9eae5` inline style while the same
+    // value already existed as `--color-silver` / `bg-silver`, so the card
+    // background and the brand token could drift apart.
+    expect(mapContainer.className.split(/\s+/)).toContain("bg-silver");
+    expect(mapContainer.getAttribute("style")).not.toMatch(/e9eae5/i);
+  });
+
   it("never touches MapLibre when there are no coordinates", async () => {
     render(<RouteMap coords={[]} label="Ruten mangler" />);
 
@@ -161,10 +222,7 @@ describe("RouteMap", () => {
   });
 
   it("adds the route source empty so painting a route is always a setData", async () => {
-    render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
-
-    await waitFor(() => expect(mocks.onLoad).toBeDefined());
-    mocks.onLoad?.();
+    await renderLoadedMap();
 
     // #279: the source starts empty and the `load` handler fills it, so a
     // `coords` change can never need an addSource on a map that already has one.
@@ -175,10 +233,7 @@ describe("RouteMap", () => {
   });
 
   it("repaints via setData instead of rebuilding the map when coords change", async () => {
-    const { rerender } = render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
-
-    await waitFor(() => expect(mocks.onLoad).toBeDefined());
-    mocks.onLoad?.();
+    const { rerender } = await renderLoadedMap();
     expect(mocks.setData).toHaveBeenCalledTimes(1);
 
     rerender(<RouteMap coords={COORDS_B} label="Rutekort for demoturen" />);
@@ -200,11 +255,9 @@ describe("RouteMap", () => {
 
   it("keeps the attribution exposed: the accessible name is not on role=img", async () => {
     const { container } = render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
-
-    await waitFor(() => expect(mocks.container).toBeDefined());
-    const mapContainer = mocks.container;
+    const mapContainer = await awaitMapContainer();
     const named = container.querySelector("[aria-label]");
-    if (!mapContainer || !named) throw new Error("RouteMap rendered no named map container");
+    if (!named) throw new Error("RouteMap rendered no named map container");
 
     // #279: `role="img"` makes everything inside presentational, which hid
     // MapLibre's attribution control (an OpenFreeMap/OpenStreetMap licence
@@ -228,7 +281,7 @@ describe("RouteMap", () => {
     mocks.constructorError = new Error("WebGL unavailable");
     const { container } = render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
 
-    // #279: a dead map used to leave a blank #e9eae5 box with no signal at all.
+    // #279: a dead map used to leave a blank silver box with no signal at all.
     await waitFor(() =>
       expect(mocks.captureError).toHaveBeenCalledWith(
         "routemap",
