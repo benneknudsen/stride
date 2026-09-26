@@ -20,6 +20,32 @@ type MapLibre = typeof import("maplibre-gl");
 // `maplibre-gl-shared.mjs` import) lives in `public/` and is pointed to here.
 // `scripts/copy-maplibre-worker.mjs` re-syncs both copies on every dev/build so
 // they can never drift from the installed `maplibre-gl` (#279).
+//
+// Staying on MapLibre rather than switching to Leaflet is deliberate (#284).
+// The ~296 KB gzip is code-split behind the dynamic imports below, so only a
+// user who actually sees a route card pays it, and the vector look is the
+// product. The three structural costs it used to carry — a public worker URL, a
+// `worker-src` CSP directive, and version-pinned worker copies — are all closed
+// now, so the remaining saving is bytes traded away for the look on a card that
+// is on screen for seconds. Revisit only if first-load JS is the measured
+// problem, not the map bundle's share of a route card.
+
+/** The brand hexes, verbatim: MapLibre paint properties are evaluated in the
+ * style engine, not the DOM, so a `circle-color` expression cannot read a CSS
+ * custom property — and the only runtime escape (`getPaintProperty`) does not
+ * exist in a `paint` object. They are duplicated from `--color-cobalt` /
+ * `--color-red` in `app/globals.css` on purpose. */
+const COBALT = "#1b29c0";
+const RED = "#ee2418";
+/** Both dots keep a white ring, so they read against Positron tiles and over
+ * the route line alike; the size pair is what tells them apart (#284). The
+ * start is the bigger solid disc — it sat invisible next to the finish at
+ * 260px — while the finish is a small red core inside a wider ring, which reads
+ * as a target at card size without changing the brand colours. Tunable here
+ * rather than as magic numbers in the layer. These are MapLibre expressions,
+ * not CSS, so plain pixel numbers. */
+const DOT_START = { radius: 6.5, ring: 2.5 };
+const DOT_FINISH = { radius: 4.5, ring: 3 };
 
 function routeGeoJSON(positions: [number, number][]): FeatureCollection<LineString | Point> {
   return {
@@ -45,19 +71,23 @@ function routeGeoJSON(positions: [number, number][]): FeatureCollection<LineStri
 }
 
 function addRouteLayers(map: MapLibreMap) {
+  // The glow under the line *is* the halo (#284) — a 9px stroke at 0.22 opacity,
+  // which lifts the route off the tiles without a `line-dasharray`, so nothing
+  // here changed. The dots are what needed work: same 5px radius on both ends
+  // meant the start vanished into the finish at 260px.
   map.addLayer({
     id: "route-glow",
     type: "line",
     source: "route",
     layout: { "line-cap": "round", "line-join": "round" },
-    paint: { "line-color": "#ee2418", "line-opacity": 0.22, "line-width": 9 },
+    paint: { "line-color": RED, "line-opacity": 0.22, "line-width": 9 },
   });
   map.addLayer({
     id: "route-line",
     type: "line",
     source: "route",
     layout: { "line-cap": "round", "line-join": "round" },
-    paint: { "line-color": "#ee2418", "line-opacity": 1, "line-width": 3.5 },
+    paint: { "line-color": RED, "line-opacity": 1, "line-width": 3.5 },
   });
   map.addLayer({
     id: "route-dots",
@@ -69,10 +99,11 @@ function addRouteLayers(map: MapLibreMap) {
     // by geometry type.
     filter: ["==", ["geometry-type"], "Point"],
     paint: {
-      "circle-color": ["match", ["get", "kind"], "start", "#1b29c0", "#ee2418"],
-      "circle-radius": 5,
+      "circle-color": ["match", ["get", "kind"], "start", COBALT, RED],
+      // Per-kind so the size pair above is what separates start from finish.
+      "circle-radius": ["match", ["get", "kind"], "start", DOT_START.radius, DOT_FINISH.radius],
       "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 2,
+      "circle-stroke-width": ["match", ["get", "kind"], "start", DOT_START.ring, DOT_FINISH.ring],
     },
   });
 }
@@ -223,6 +254,9 @@ export function RouteMap({
   // Tailwind's layered `.absolute`/`.inset-0` and collapses the box to 0px
   // (`overflow:hidden` clips the canvas away). Inline styles beat every
   // non-`!important` stylesheet rule — don't "tidy" this into classes.
+  // `background` is the exception (#284) and can be a class: that unlayered rule
+  // only declares `position`, so it never competes with `bg-silver`'s
+  // `background-color`, and the hex moves back to the `--color-silver` token.
   //
   // #279: a failed init used to leave a dead grey box with no explanation, so
   // say it in the same Danish the callers use for their empty-route case.
@@ -238,8 +272,8 @@ export function RouteMap({
     <figure aria-label={label} className="absolute inset-0">
       <div
         ref={ref}
-        className="absolute inset-0"
-        style={{ position: "absolute", inset: 0, background: "#e9eae5" }}
+        className="absolute inset-0 bg-silver"
+        style={{ position: "absolute", inset: 0 }}
       />
     </figure>
   );
