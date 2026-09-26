@@ -27,7 +27,11 @@ test.describe("BottomTabBar navigation", () => {
     await tabBar.getByRole("link", { name: "Hjem" }).click();
     // The trailing $ matters — /aktiviteter and /plan are both prefixed by "/".
     await expect(page).toHaveURL(/localhost:6969\/$/);
-    await expect(page.getByText(/^Uge \d+ · Marathonplan$/)).toBeVisible();
+    // Hero renders `Uge {weekNumber} · {planName}`. The race name is per-user
+    // (DEFAULT_RACE_NAME, or whatever getRacePlan returns), so match the shape
+    // rather than a literal — this used to assert a hardcoded "Marathonplan"
+    // that ffb280c replaced with the real race name.
+    await expect(page.getByText(/^Uge \d+ · \S/)).toBeVisible();
   });
 
   test("marks the current tab as the active page", async ({ page }) => {
