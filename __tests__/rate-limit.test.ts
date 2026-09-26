@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 
@@ -143,5 +145,100 @@ describe("rateLimit (Upstash Redis)", () => {
     expect(consoleError).not.toHaveBeenCalled();
 
     consoleError.mockRestore();
+  });
+});
+
+/**
+ * #294: the limiter needs url AND token. Production shipped with only one of the
+ * two, which looked identical to "not configured" — the per-instance Map ran
+ * forever with nothing in the logs. These pin the three states apart.
+ */
+describe("rateLimit (Redis configuration, #294)", () => {
+  beforeEach(() => {
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    vi.clearAllMocks();
+    resetRateLimit();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  });
+
+  /** Config reports, oldest first. */
+  function configReports(): string[] {
+    return captureErrorMock.mock.calls
+      .filter(([context]) => context === "rate-limit.config")
+      .map(([, err]) => (err as Error).message);
+  }
+
+  it("names the missing half when only the URL is set, and still limits", async () => {
+    process.env.UPSTASH_REDIS_REST_URL = "https://fake.upstash.io";
+
+    expect((await rateLimit("half", { now: 0, max: 1 })).allowed).toBe(true);
+    expect((await rateLimit("half", { now: 0, max: 1 })).allowed).toBe(false);
+
+    expect(configReports()).toHaveLength(1);
+    expect(configReports()[0]).toContain("UPSTASH_REDIS_REST_TOKEN");
+  });
+
+  it("names the missing half when only the token is set", async () => {
+    process.env.UPSTASH_REDIS_REST_TOKEN = "token";
+
+    await rateLimit("half-token", { now: 0 });
+
+    expect(configReports()).toHaveLength(1);
+    expect(configReports()[0]).toContain("UPSTASH_REDIS_REST_URL");
+  });
+
+  it("reports the per-instance fallback once when production has no Redis at all", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    // Still limited — just per instance, which is the degradation worth naming.
+    expect((await rateLimit("prod", { now: 0, max: 1 })).allowed).toBe(true);
+    expect((await rateLimit("prod", { now: 0, max: 1 })).allowed).toBe(false);
+    await rateLimit("other", { now: 0 });
+
+    // Once per process, not once per request.
+    expect(configReports()).toHaveLength(1);
+  });
+
+  it("stays quiet when Redis is simply absent outside production", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+
+    await rateLimit("local", { now: 0 });
+
+    expect(configReports()).toHaveLength(0);
+  });
+});
+
+/** The only env contract `lib/rate-limit.ts` is allowed to depend on. */
+const REDIS_ENV = ["UPSTASH_REDIS_REST_TOKEN", "UPSTASH_REDIS_REST_URL"];
+
+/**
+ * The deployment, not this repo, is what drifts: Vercel carried a Redis instance
+ * whose variables no code read (#294). These keep the documented contract and the
+ * read one in lockstep, so a rename cannot quietly leave either side stale.
+ */
+describe("rate limiting env contract (#294)", () => {
+  it("reads exactly the variables .env.example documents", () => {
+    const source = readFileSync(join(__dirname, "..", "lib", "rate-limit.ts"), "utf8");
+    const read = [
+      ...new Set(
+        [...source.matchAll(/process\.env\.(UPSTASH_[A-Z0-9_]+)/g)].map(([, name]) => name)
+      ),
+    ].sort();
+
+    const example = readFileSync(join(__dirname, "..", ".env.example"), "utf8");
+    const documented = example
+      .split("\n")
+      .filter((line) => line.startsWith("UPSTASH_"))
+      .map((line) => line.slice(0, line.indexOf("=")))
+      .sort();
+
+    expect(read).toEqual(REDIS_ENV);
+    expect(documented).toEqual(REDIS_ENV);
   });
 });

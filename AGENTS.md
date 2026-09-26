@@ -105,3 +105,5 @@ Deleted in #292 and not to be referenced: `lib/ai/provider.ts`, `lib/ai/harmony.
 
 ## Env vars (see `.env.example`)
 `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID/SECRET`, `RESEND_API_KEY`, `STRAVA_*`, `ENCRYPTION_KEY` (AES-256-GCM), `UPSTASH_REDIS_REST_URL/TOKEN`.
+
+`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` are one unit: `lib/rate-limit.ts` needs both, and a half-set pair is a misconfiguration, not an opt-out — production shipped the URL without the token and the per-instance fallback ran silently (#294). Vercel does **not** provision them; set both in Production and Preview. Without them the limiter degrades to a process-local `Map`, which on Vercel means every instance counts separately (real limit = N× the configured one, reset on every cold start). The deployment also carries provisioned-but-unread `REDIS_URL`, `KV_URL` and `KV_REST_API_*` vars — no code reads them. A degraded limiter reports itself once per process via `captureError("rate-limit.config", …)`.
