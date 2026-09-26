@@ -7,9 +7,14 @@
  * it guards (the block-analyze endpoint, provider syncs).
  *
  * Redis is used whenever UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are
- * set (Vercel Marketplace provisions both). Without them — local dev, tests —
- * it degrades to the old Map. A Redis error also degrades to the Map rather
- * than failing the request open: still limited, just per-instance.
+ * both set. Without them — local dev, tests — it degrades to the old Map. A
+ * Redis error also degrades to the Map rather than failing the request open:
+ * still limited, just per-instance.
+ *
+ * The two variables are one unit, and a half-set pair is a misconfiguration, not
+ * an opt-out: production carried the URL without the token, which read as
+ * "unconfigured" and left the per-instance Map running with nothing in the logs
+ * (#294). That state is now reported by name.
  */
 
 import { Redis } from "@upstash/redis";
@@ -53,9 +58,32 @@ function getRedis(): Redis | null {
 
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  redis = url && token ? new Redis({ url, token }) : null;
 
-  return redis;
+  if (url && token) {
+    redis = new Redis({ url, token });
+    return redis;
+  }
+
+  // Half-configured is not "not configured" (#294). Only that state and a
+  // production deploy with no credentials at all are worth a line — local dev
+  // and tests have neither and stay quiet. Reported once per process, since the
+  // client is resolved once: every extra line is log noise.
+  const halfConfigured = Boolean(url) !== Boolean(token);
+  if (halfConfigured || process.env.NODE_ENV === "production") {
+    const missing = url ? "UPSTASH_REDIS_REST_TOKEN" : "UPSTASH_REDIS_REST_URL";
+    const state = halfConfigured
+      ? `${missing} is not set, so the pair is half-configured`
+      : "no credentials are set";
+    captureError(
+      "rate-limit.config",
+      new Error(
+        `Redis rate limiting is inactive: ${state}. Requests are limited per ` +
+          `serverless instance instead of globally (#294).`
+      )
+    );
+  }
+
+  return null;
 }
 
 /**
