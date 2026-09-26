@@ -1,7 +1,7 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import { captureError } from "@/lib/observability";
 
 // global-error replaces the root layout when the layout itself throws, so it
 // must render its own <html>/<body>. Kept dependency-free and self-styled for
@@ -15,9 +15,10 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     // global-error catches failures in the root layout itself — the most severe
-    // class of crash — so report it to Sentry as well as the console (#178).
-    console.error(error);
-    Sentry.captureException(error);
+    // class of crash — so it is always reported. captureError carries both hops:
+    // the structured log line *and* the Sentry forward, and it forwards only the
+    // sanitized error, so the direct captureException went (issue #281).
+    captureError("error.global", error);
   }, [error]);
 
   return (

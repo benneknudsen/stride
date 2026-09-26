@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { Card } from "@/components/ui/card";
+import { captureError } from "@/lib/observability";
 
 export default function AuthError({
   error,
@@ -12,7 +13,10 @@ export default function AuthError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    // captureError, not console.error(error): it is the one choke point that
+    // serialises only name/message/cause and forwards the sanitized error to
+    // Sentry (#135, #143), so nothing sensitive reaches the log (issue #281).
+    captureError("error.auth", error);
   }, [error]);
 
   return (
