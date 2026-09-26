@@ -2,10 +2,10 @@ import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RouteMap } from "@/components/cobalt/hjem/RouteMap";
 import { formatDanish } from "@/lib/cobalt/format";
 
-// "Rute" on the detail page: the non-interactive Leaflet map fills the card,
-// with a mono header floating top-left and a glass stats chip bottom-left —
-// the same widget language as RouteCard on Hjem, but fed by *this* activity's
-// decoded polyline.
+// "Rute" on the detail page: the non-interactive MapLibre GL map (OpenFreeMap
+// style, since #275) fills the card, with a mono header floating top-left and a
+// glass stats chip bottom-left — the same widget language as RouteCard on Hjem,
+// but fed by *this* activity's decoded polyline.
 //
 // Runs without GPS (the demo fixtures, and any treadmill run) have no polyline,
 // so the card falls back to a dashed placeholder rather than an empty grey box.
