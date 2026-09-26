@@ -44,14 +44,12 @@ export type SessionRisk = "low" | "medium" | "high";
 /**
  * The canonical session-type vocabulary the plan works in — the single source
  * of truth. Run days carry an effort (easy → race); the rest are non-run days.
- * Everything downstream derives from this one list: {@link SessionType} is its
- * element type, and every schema that needs the list (zod enums, the plan
- * suggestions) reuses the array verbatim so the validator and the UI can never
- * drift. Callers that receive loosely-typed strings (form input, webhook
- * payloads) should normalise/validate at the boundary — internally
- * `normalizeType` still tolerates casing.
+ * {@link SessionType} is its element type, so callers take the type, never the
+ * array (issue #283: nothing outside this file reads the array itself).
+ * Loosely-typed strings (form input, webhook payloads) get normalised at the
+ * boundary; internally `normalizeType` still tolerates casing.
  */
-export const SESSION_TYPES = [
+const SESSION_TYPES = [
   "easy",
   "recovery",
   "tempo",

@@ -4,8 +4,10 @@ import authConfig from "@/auth.config";
 import { buildCsp, createNonce } from "@/lib/csp";
 import { ROUTES } from "@/lib/routes";
 
-// Build an edge-safe auth instance from the config that excludes nodemailer and
-// the Drizzle adapter. The full instance lives in lib/auth.ts (Node runtime).
+// Build an edge-safe auth instance from auth.config.ts, which carries only the
+// providers and callbacks that run without a DB: the Drizzle adapter and the
+// Node-only `events.signIn` token mirroring live in lib/auth.ts. The edge proxy
+// reads the session and nothing else.
 const { auth } = NextAuth(authConfig);
 
 const IS_DEV = process.env.NODE_ENV === "development";
