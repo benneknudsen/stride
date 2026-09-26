@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { ErrorState } from "@/components/dashboard/error-state";
 import { Card } from "@/components/ui/card";
+import { captureError } from "@/lib/observability";
 
 export default function RootError({
   error,
@@ -12,7 +13,10 @@ export default function RootError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    // Route through the repo's single observability choke point, which logs only
+    // name/message/cause and forwards the sanitized error to Sentry — a raw
+    // console.error(error) can print token or connection data (issue #281).
+    captureError("error.root", error);
   }, [error]);
 
   return (
