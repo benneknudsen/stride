@@ -76,9 +76,13 @@ export function HjemPageClient({
         started={started}
       />
 
-      {/* Widget grid: covered by one loading overlay; nav + hero stay visible. */}
+      {/* Widget grid: covered by one loading overlay; nav + hero stay visible.
+          `data-testid` is the grid's own handle (#295) — the e2e suite asserts on
+          card headers by name, and "Coach" alone names two <span>s on the page
+          (this grid's AiCoachCard and the mobile BottomTabBar tab), so the
+          assertions need a container only the bento lives in. */}
       <div className="relative pt-4">
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-12 gap-4" data-testid="hjem-bento">
           <Bento span="col-span-12" delay={0.05}>
             <PlanStrip {...view.plan} started={started} />
           </Bento>

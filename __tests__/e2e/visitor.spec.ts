@@ -62,11 +62,18 @@ test.describe("browsing without a session", () => {
     await page.goto("/?demo=1");
     await waitForContent(page);
 
-    // Most cards announce themselves with a mono <span> header. Scoping to the
-    // element matters for "Snit-pace", which is both AvgPaceRing's header and one
-    // of LatestActivityCard's metric labels — an unscoped text match hits both.
+    // Most cards announce themselves with a mono <span> header. The word alone is
+    // not a locator, twice over, and both filters are load-bearing (#295):
+    // "Coach" also names the mobile BottomTabBar tab (a <span> in a link, and
+    // this suite runs at phone width so the bar is in the DOM), while
+    // LatestActivityCard repeats "Snit-pace" as a metric label. The grid testid
+    // drops the chrome, `span` drops the metric <div>, so every header below
+    // resolves to exactly one element — no .first() to hide a real regression.
     const header = (name: string) =>
-      page.locator("span").filter({ hasText: new RegExp(`^${name}$`) });
+      page
+        .getByTestId("hjem-bento")
+        .locator("span")
+        .filter({ hasText: new RegExp(`^${name}$`) });
 
     await expect(page.getByRole("link", { name: /Se plan/ })).toBeVisible(); // PlanStrip
     await expect(header("Seneste aktivitet")).toBeVisible(); // LatestActivityCard
