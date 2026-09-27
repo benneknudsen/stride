@@ -7,12 +7,35 @@ import { CountUpNumber } from "@/components/cobalt/CountUpNumber";
 // outside the loading overlay, so it stays interactive while the plan below
 // loads. `started` flips the stats from their dimmed pulsing 0-state into the
 // count-up.
+
+const GOAL_PREFIX = "Mål under ";
+
+/**
+ * The headline. "Mål under 1:55" became "Ét mål: halvmaraton under 1:55"
+ * (issue #291) — the goal was never attached to a distance, so the strongest
+ * sentence on the page named a time and nothing else. Only the "Mål under …"
+ * shape can take a distance; any other goal ("Mål på vej", from a locked
+ * estimate) takes the same "Mål" → "Ét mål:" rename without one, and a null goal
+ * falls back to the neutral headline.
+ *
+ * Every branch returns a dotless sentence: the JSX below owns the single period,
+ * so a branch can't add one of its own and print "Klar til race..".
+ */
+function headline(goalLabel: string | null, distanceInline: string): string {
+  if (!goalLabel) return "Klar til race";
+  if (goalLabel.startsWith(GOAL_PREFIX)) {
+    return `Ét mål: ${distanceInline} under ${goalLabel.slice(GOAL_PREFIX.length)}`;
+  }
+  return goalLabel.replace(/^Mål/, "Ét mål:");
+}
+
 export function PlanHeader({
   planTitle,
   totalWeeks,
   weekOfPlan,
   daysToRace,
   goalLabel,
+  distanceInline,
   started,
 }: {
   planTitle: string;
@@ -21,6 +44,8 @@ export function PlanHeader({
   daysToRace: number;
   /** Derived goal ("Mål under 1:55"); null falls back to a neutral headline. */
   goalLabel: string | null;
+  /** The race distance mid-sentence ("halvmaraton") — names the goal. */
+  distanceInline: string;
   started: boolean;
 }) {
   return (
@@ -30,7 +55,7 @@ export function PlanHeader({
         <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
           {totalWeeks} uger.
           <br />
-          {goalLabel ? `${goalLabel.replace(/^Mål/, "Ét mål:")}.` : "Klar til race."}
+          {headline(goalLabel, distanceInline)}.
         </h1>
       </div>
 

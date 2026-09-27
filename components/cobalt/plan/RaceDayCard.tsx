@@ -12,9 +12,13 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 // Race day card — the red goal card. Race name + date, a live days-to-race
-// countdown, and the three target numbers (goal time, race pace, estimate).
-// `onEdit` (signed-in users, issue #99) adds the "Skift race" affordance that
-// opens the RaceDateDialog.
+// countdown, the distance the card's numbers are for, and the three target
+// numbers (goal time, race pace, estimate). `onEdit` (signed-in users, issue #99)
+// adds the "Skift race" affordance that opens the RaceDateDialog.
+//
+// The distance chip (issue #291) exists because `raceDistanceKm` has always
+// driven the pace and the prediction, so a goal time and a race pace were
+// rendered with nothing saying which distance they belonged to.
 //
 // When the view-model carries a `lock` (issue #117) there is no prediction to
 // show, so the three numbers give way to the lock state: what's missing, and the
@@ -29,6 +33,10 @@ export function RaceDayCard({
   daysToRace: number;
   onEdit?: () => void;
 }) {
+  // A distance with no preset name labels itself as the distance, so joining the
+  // two would read "12,5 km · 12,5 km" — keep the one the label already carries.
+  const distanceChip = [...new Set([race.distanceLabel, race.distanceKmLabel])].join(" · ");
+
   return (
     <GlassCard variant="red" className="px-[26px] py-[22px] text-onred" data-testid="race-day-card">
       <div className="mb-3 flex items-start justify-between">
@@ -54,6 +62,13 @@ export function RaceDayCard({
         <br />
         {race.dayLabel}
       </div>
+
+      <span
+        className="mt-3 inline-block rounded-pill border border-current/30 px-2.5 py-0.5 cg-label-sm tracking-[0.12em] opacity-85"
+        data-testid="race-distance-chip"
+      >
+        {distanceChip}
+      </span>
 
       {race.lock ? (
         <div

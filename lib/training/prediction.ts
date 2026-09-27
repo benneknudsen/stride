@@ -23,13 +23,19 @@
 // the same activities always yield the same paces, so a server render and a
 // client hydration can't disagree.
 
+import { HALF_MARATHON_KM } from "@/lib/coach/engine";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { formatPace } from "@/lib/metrics";
 
 const DAY_MS = 86_400_000;
 
-/** The race the plan builds toward — the distance `getWeekPlan` already prescribes on race day. */
-export const HALF_MARATHON_KM = 21.0975;
+/**
+ * The race the plan builds toward — the distance `getWeekPlan` already prescribes on race day.
+ * Re-exported from the engine, which owns it: the engine has to stay a
+ * dependency-free leaf, and the predictor's own `lib/metrics` import already
+ * reaches back into it.
+ */
+export { HALF_MARATHON_KM };
 
 /** Riegel's fatigue exponent. 1.06 is the canonical value for trained runners. */
 const RIEGEL_EXPONENT = 1.06;
