@@ -78,6 +78,7 @@ Live data is default (#84): authed users get their own synced activities + race 
 - `__tests__/` mirrors `lib/` and feature dirs (`db/`, `cobalt/`, `ai/`, `strava/`, `hooks/`, `coach/`, `training/`, `actions/`, `e2e/`).
 - `vitest.config.ts`: node env, `@` alias, **excludes `__tests__/e2e/**`**, coverage threshold ~82%.
 - `npm run test:e2e` runs Playwright (4 specs) — not a stub.
+- The e2e suite **owns** its dev server: `reuseExistingServer` is off and `webServer` starts `npm run dev` with `NEXT_PRIVATE_DISABLE_DEV_OVERLAY_UX=1`, because a dev server started by hand lacks it and its overlay covers the mobile BottomTabBar, failing `navigation.spec.ts` on a 30s click timeout (#297). Stop any `npm run dev` on :6969 first; the run refuses with the reason otherwise. Next allows only one `next dev` per project directory, so a separate e2e port is not an option.
 - Validate changes with: `biome check . && tsc --noEmit && vitest run`.
 
 ## Working in a git worktree
