@@ -15,6 +15,9 @@ const RACE: PlanView["race"] = {
   dayLabel: "Søndag 20. september",
   dateValue: "2026-09-20",
   distanceKm: 21.0975,
+  distanceLabel: "Halvmarathon",
+  distanceInline: "halvmaraton",
+  distanceKmLabel: "21,1 km",
   goalTimeSeconds: null,
   goalTime: "1:40",
   racePace: "4:45",
@@ -54,6 +57,28 @@ describe("RaceDayCard — unlocked", () => {
     expect(screen.getByText("45:00")).toBeDefined();
     expect(screen.getByText("4:30")).toBeDefined();
     expect(screen.getByText("Måltid")).toBeDefined();
+  });
+
+  it("names the race distance it paces for (issue #291)", () => {
+    // raceDistanceKm drives pace and prediction everywhere, but the card never
+    // said which distance those numbers are for. Asserted against the card's own
+    // textContent so a missing chip fails as an assertion, not a lookup throw.
+    render(<RaceDayCard race={RACE} daysToRace={68} />);
+    const text = screen.getByTestId("race-day-card").textContent ?? "";
+    expect(text).toContain("Halvmarathon · 21,1 km");
+  });
+
+  it("drops the duplicate number when the distance has no preset name", () => {
+    // A custom 12,5 km race labels itself as the distance, so the chip must not
+    // read "12,5 km · 12,5 km".
+    render(
+      <RaceDayCard
+        race={{ ...RACE, distanceKm: 12.5, distanceLabel: "12,5 km", distanceKmLabel: "12,5 km" }}
+        daysToRace={68}
+      />
+    );
+    const chip = screen.getByTestId("race-distance-chip").textContent ?? "";
+    expect(chip).toBe("12,5 km");
   });
 });
 

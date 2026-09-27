@@ -179,10 +179,13 @@ export function buildLoadGauge(load: TrainingLoad): LoadGaugeView {
 // ── The assembled dashboard ─────────────────────────────────────────────────
 
 /**
- * The workout card without the recommender's week plan — nothing renders a
- * Mon–Sun strip any more, so it never leaves the recommender.
+ * The card `WorkoutCard` renders. It was once the recommendation minus its Mon–Sun
+ * week strip; #291 removed the strip from the recommendation itself, so this is
+ * now a straight alias. It stays because the card, the dashboard payload and
+ * their tests all name this shape, and renaming it to claim the simplification
+ * would be churn with nothing behind it.
  */
-export type WorkoutCardView = Omit<WorkoutRecommendation, "weekStrip">;
+export type WorkoutCardView = WorkoutRecommendation;
 
 export interface CoachDashboardData {
   workout: WorkoutCardView;
@@ -240,9 +243,10 @@ export function buildCoachDashboard(
       return latest === null || runStart.getTime() > latest.getTime() ? runStart : latest;
     }, null);
 
-  // The recommender still builds its phase week plan internally to find today's
-  // slot; the page renders no strip, so it is dropped here.
-  const { weekStrip: _weekStrip, ...workout } = recommendWorkout(
+  // The recommender builds the phase week plan internally to find today's slot
+  // and the week's budget, but keeps it to itself (issue #291) — so the card
+  // comes back ready to render.
+  const workout = recommendWorkout(
     {
       // The signed-in user's own id; "demo" only on the fixture path. The goal
       // stays the product's Zone-2 philosophy — no per-user goal exists yet, and

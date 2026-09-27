@@ -372,18 +372,30 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       ).toBeGreaterThan(0);
     });
 
-    it("returns a full Mon–Sun week strip matching the phase plan", () => {
-      const rec = recommend();
-      expect(rec.weekStrip).toHaveLength(7);
-      expect(rec.weekStrip.map((d) => d.weekday)).toEqual([
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-        "sun",
+    it("carries no week plan — no surface renders a Mon–Sun strip (issue #291)", () => {
+      // The recommender still reads the phase week plan for today's slot and the
+      // week's budget, but it no longer hands the plan on. Pinned by shape so a
+      // week strip can't quietly come back.
+      expect(Object.keys(recommend()).sort()).toEqual([
+        "distanceKm",
+        "heartRateCap",
+        "paceRange",
+        "reason",
+        "shoe",
+        "type",
       ]);
+    });
+
+    it("still takes today's slot from the phase week plan, not from thin air", () => {
+      // The plan is load-bearing even though it no longer escapes: a Wednesday in
+      // the sharpen block is a tempo day, and a Tuesday in burn is a rest day.
+      const sharpen = recommend(
+        { progression: snapshot({ date: SHARPEN_WEDNESDAY }) },
+        SHARPEN_WEDNESDAY
+      );
+      expect(sharpen.type).toBe("tempo");
+      const burn = recommend({ progression: snapshot({ date: BURN_TUESDAY }) }, BURN_TUESDAY);
+      expect(burn.type).toBe("rest");
     });
 
     it("formats the pace range as m:ss strings", () => {

@@ -10,7 +10,12 @@ import {
   planTotalWeeks,
 } from "@/lib/coach/engine";
 import { buildHomeView, type HomeActivityLike } from "@/lib/cobalt/hjem";
-import { buildPlanView, getPlanSuggestions, type RunSuggestion } from "@/lib/cobalt/plan";
+import {
+  buildPlanView,
+  getPlanSuggestions,
+  type RunSuggestion,
+  type UpcomingWeek,
+} from "@/lib/cobalt/plan";
 import { formatPaceClock, predictRace, zonePaces } from "@/lib/training/prediction";
 
 // View-model tests for the race parameterisation (issue #99): the countdown,
@@ -734,6 +739,22 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
     return addDays(now, -((now.getDay() + 6) % 7));
   }
 
+  /**
+   * The phase the view-model gives the week starting on `start` (issue #291):
+   * a week containing race day is the taper, even when its Monday still reads as
+   * peak. Mirrors the rule so these tests check the row against the phase the
+   * row is *supposed* to carry.
+   */
+  function phaseOfWeek(start: Date, race: Date): PhaseKey {
+    const daysToRace = daysBetween(start, race);
+    return daysToRace >= 0 && daysToRace <= 6 ? "taper" : getCurrentPhase(start, race);
+  }
+
+  /** What makes a row readable as *its own* week, now that the prose dropped the count. */
+  function rowIdentity(week: UpcomingWeek): string {
+    return `${week.dateLabel}|${week.weekInPhase}|${week.focus}`;
+  }
+
   it("derives the template path's rows from the phase engine, not a frozen 52/56/38", () => {
     const now = midOf("sharpen");
     const view = buildPlanView(undefined, now, RACE, RACE_NAME);
@@ -743,7 +764,7 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
     const monday = trainingWeekMonday(now);
     view.upcomingWeeks.forEach((week, i) => {
       const start = addDays(monday, (i + 1) * 7);
-      const phase = getCurrentPhase(start, RACE);
+      const phase = phaseOfWeek(start, RACE);
       const sessions = getWeekPlan(phase, start, RACE, RACE_NAME);
       const km = Math.round(sessions.reduce((sum, s) => sum + (s.distanceKm ?? 0), 0));
       expect(week.week).toBe(view.weekOfPlan + i + 1);
@@ -760,19 +781,26 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
   it("differentiates consecutive weeks that fall in the same phase", () => {
     const now = addDays(RACE, -75);
     const monday = trainingWeekMonday(now);
-    const phases = [1, 2, 3].map((o) => getCurrentPhase(addDays(monday, o * 7), RACE));
+    const phases = [1, 2, 3].map((o) => phaseOfWeek(addDays(monday, o * 7), RACE));
     expect(new Set(phases).size).toBe(1);
     expect(phases[0]).toBe("burn");
 
     const view = buildPlanView(undefined, now, RACE, RACE_NAME);
-    const focuses = view.upcomingWeeks.map((w) => w.focus);
-    expect(new Set(focuses).size).toBe(focuses.length);
+    // Three burn weeks share one focus sentence, so what separates them is the
+    // week-within-the-phase and the date span (#291 moved the count out of the
+    // prose — the rows still must not read as the same week).
+    const counts = view.upcomingWeeks.map((w) => w.weekInPhase);
+    expect(counts[1]).toBe(counts[0] + 1);
+    expect(counts[2]).toBe(counts[1] + 1);
+    expect(new Set(view.upcomingWeeks.map((w) => w.phaseTotal)).size).toBe(1);
+    const identities = view.upcomingWeeks.map(rowIdentity);
+    expect(new Set(identities).size).toBe(identities.length);
   });
 
   it("lets a phase change show through across the window", () => {
     const now = addDays(RACE, -62);
     const monday = trainingWeekMonday(now);
-    const phases = [1, 2, 3].map((o) => getCurrentPhase(addDays(monday, o * 7), RACE));
+    const phases = [1, 2, 3].map((o) => phaseOfWeek(addDays(monday, o * 7), RACE));
     expect(new Set(phases).size).toBeGreaterThan(1);
 
     const view = buildPlanView(undefined, now, RACE, RACE_NAME);
@@ -781,7 +809,8 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
         expect(view.upcomingWeeks[i].focus).not.toBe(view.upcomingWeeks[i - 1].focus);
       }
     }
-    expect(new Set(view.upcomingWeeks.map((w) => w.focus)).size).toBe(3);
+    const identities = view.upcomingWeeks.map(rowIdentity);
+    expect(new Set(identities).size).toBe(3);
   });
 
   it("reads any taper week muted with the nedtrapning copy", () => {
@@ -792,7 +821,7 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
       const view = buildPlanView(undefined, now, RACE_SAT, "CPH Half");
       const monday = trainingWeekMonday(now);
       view.upcomingWeeks.forEach((week, i) => {
-        const phase = getCurrentPhase(addDays(monday, (i + 1) * 7), RACE_SAT);
+        const phase = phaseOfWeek(addDays(monday, (i + 1) * 7), RACE_SAT);
         expect(week.muted).toBe(phase === "taper");
         if (phase === "taper") {
           sawTaper = true;
@@ -801,6 +830,279 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
       });
     }
     expect(sawTaper).toBe(true);
+  });
+
+  // A weekend race used to be planned as if it didn't exist. The row's phase came
+  // from getCurrentPhase(start), and start is the week's *Monday* — for a Sunday
+  // race that Monday is still the last day of peak, so the final row prescribed a
+  // full peak week and never mentioned the race. #291 plans the week that
+  // contains race day as the taper week it actually is.
+  describe("race week (issue #291)", () => {
+    /** The Monday of the week `race` falls in. */
+    function raceWeekMonday(race: Date): Date {
+      return addDays(race, -((race.getDay() + 6) % 7));
+    }
+
+    /** `now` two weeks before the race week, so the 2nd row lands on it. */
+    const NOW = addDays(raceWeekMonday(RACE), -14);
+
+    const [beforeRace, raceWeek, afterRace] = buildPlanView(
+      undefined,
+      NOW,
+      RACE,
+      RACE_NAME
+    ).upcomingWeeks;
+
+    it("prescribes less than the peak week before it, not another peak week", () => {
+      expect(beforeRace.km).toBeGreaterThan(0);
+      expect(raceWeek.km).toBeLessThan(beforeRace.km);
+    });
+
+    it("flags the race week and no other", () => {
+      expect(raceWeek).toMatchObject({ isRaceWeek: true });
+      expect(beforeRace.isRaceWeek).toBe(false);
+      expect(afterRace.isRaceWeek).toBe(false);
+    });
+
+    it("puts the race itself among the week's sessions", () => {
+      expect(raceWeek.sessions).toBeDefined();
+      expect(raceWeek.sessions.some((session) => session.tone === "race")).toBe(true);
+      // The race is the only session with no pace target — it is a time, not a pace.
+      expect(raceWeek.sessions.find((session) => session.tone === "race")?.pace).toBeNull();
+    });
+
+    it("keeps the taper copy and the muted read on the race week", () => {
+      expect(raceWeek.focus).toContain("Nedtrapning");
+      expect(raceWeek.muted).toBe(true);
+    });
+  });
+
+  // The week scale caps what a runner can absorb in a week. How far the race is
+  // is not that: it's a fact about the event. Scaled, a 21,1 km half marathon
+  // printed as "Race 14 km" for anyone whose load ratio dipped the scale, and the
+  // half-km grid turned 21,0975 into "21 km" next to the card's own "21,1 km".
+  describe("race distance is a fact, not a prescription (issue #291)", () => {
+    /** The Monday of the week `race` falls in. */
+    function raceWeekMonday(race: Date): Date {
+      return addDays(race, -((race.getDay() + 6) % 7));
+    }
+
+    /** The week before the race week, so the 1st row lands on the race itself. */
+    const NOW = addDays(raceWeekMonday(RACE), -7);
+
+    /**
+     * A runner with a real prediction but a thin recent week: enough history to
+     * predict from, ~10 km in the last seven days, so `volumeScale` floors at 0,6
+     * and every prescribed distance in the window is scaled down by it.
+     */
+    function liveRun(daysAgo: number, km: number, paceSecPerKm: number, hr: number) {
+      const startDate = addDays(NOW, -daysAgo);
+      startDate.setHours(7, 30, 0, 0);
+      const distance = km * 1000;
+      const movingTime = Math.round(km * paceSecPerKm);
+      return {
+        id: `run-${daysAgo}`,
+        name: `Tur ${daysAgo}`,
+        type: "Run",
+        startDate,
+        distance,
+        movingTime,
+        averageSpeed: distance / movingTime,
+        averageHeartrate: hr,
+        averageCadence: 88,
+        totalElevationGain: 15,
+      } as HomeActivityLike;
+    }
+
+    const RUNS: HomeActivityLike[] = [
+      liveRun(6, 10, 270, 168),
+      liveRun(9, 12, 330, 148),
+      liveRun(13, 9, 335, 145),
+      liveRun(17, 10, 330, 146),
+      liveRun(24, 8, 340, 142),
+      liveRun(31, 15, 335, 150),
+    ];
+
+    /** The race-week row and its lines, for a runner chasing `distanceKm`. */
+    function raceWeekFor(raceDistanceKm?: number) {
+      const view = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, raceDistanceKm);
+      expect(view.dataDriven).toBe(true);
+      const sessions = view.upcomingWeeks.find((week) => week.isRaceWeek)?.sessions ?? [];
+      return {
+        view,
+        race: sessions.find((session) => session.tone === "race"),
+        easy: sessions.find((session) => session.tone === "easy"),
+      };
+    }
+
+    it("scales the rest of the race week, so the exemption is not vacuous", () => {
+      // The taper prescribes 6 easy km (4 km plus the 2 km shakeout) and this
+      // runner's thin week scales that well under it — the scale is live here, so
+      // the race line staying out of it is a real exemption.
+      expect(raceWeekFor().easy?.distanceKm).toBeLessThan(6);
+    });
+
+    it("prints the half marathon the runner registered for, unscaled and unrounded", () => {
+      // 21,0975 km exactly: the half-km grid would have made this 21, and the week
+      // scale would have made it 14.
+      expect(raceWeekFor().race?.distanceKm).toBe(21.0975);
+    });
+
+    it("gives a 10K runner a 10 km race line, not a scaled fraction of one", () => {
+      expect(raceWeekFor(10).race?.distanceKm).toBe(10);
+    });
+
+    it("keeps the race week's total equal to the lines it prints", () => {
+      // The row states a volume and lists the runs that make it up. Exempting the
+      // race from the scale without exempting it from the total would print "18 km"
+      // over a "Race 21,1 km" line — a row that adds up to nothing (#291).
+      const { view, race, easy } = raceWeekFor();
+      const raceWeek = view.upcomingWeeks.find((week) => week.isRaceWeek);
+      const printed = (race?.distanceKm ?? 0) + (easy?.distanceKm ?? 0);
+      expect(raceWeek?.km).toBe(Math.round(printed));
+    });
+  });
+
+  // "Kommende uger" was three rows of week number + prose + volume, which left
+  // the runner to work out what to actually run (#291). These pin the concrete
+  // shape each row now carries.
+  describe("concrete week rows (issue #291)", () => {
+    /** A peak week, a taper/race week and the week after — the interesting shapes. */
+    const NOW = addDays(RACE, -20);
+    const [peak, raceWeek] = buildPlanView(undefined, NOW, RACE, RACE_NAME).upcomingWeeks;
+    /** The engine's own plan for the peak row, so the tests check against it. */
+    const peakMonday = addDays(trainingWeekMonday(NOW), 7);
+    const peakPlan = getWeekPlan(phaseOfWeek(peakMonday, RACE), peakMonday, RACE, RACE_NAME);
+
+    it("names the calendar week each row lands in", () => {
+      const now = addDays(RACE, -75);
+      const labels = buildPlanView(undefined, now, RACE, RACE_NAME).upcomingWeeks.map(
+        (w) => w.dateLabel
+      );
+      expect(labels).toEqual(["2.–8. aug", "9.–15. aug", "16.–22. aug"]);
+      expect(new Set(labels).size).toBe(labels.length);
+    });
+
+    it("counts the running days, not the week slots", () => {
+      // A peak week runs 5 of its 7 days; the rest days are not runs.
+      expect(peakPlan).toHaveLength(7);
+      expect(peak.runCount).toBe(peakPlan.filter((session) => session.type !== "rest").length);
+      expect(peak.runCount).toBe(5);
+    });
+
+    it("keeps runCount and the grouped easy line in agreement", () => {
+      const easy = peak.sessions.filter((session) => session.tone === "easy");
+      const hardDays = peak.sessions.filter((session) => session.tone !== "easy").length;
+      expect(easy).toHaveLength(1);
+      // One line stands in for every easy day, and its count is part of the label.
+      expect(easy[0].label).toBe(`${peak.runCount - hardDays} rolige ture`);
+      expect(peak.runCount).toBe(Number(easy[0].label.split(" ")[0]) + hardDays);
+    });
+
+    it("gives the grouped easy line the sum of the easy days it stands for", () => {
+      const easyKm = peakPlan
+        .filter((session) => session.type === "easy")
+        .reduce((sum, session) => sum + (session.distanceKm ?? 0), 0);
+      const grouped = peak.sessions.find((session) => session.tone === "easy");
+      expect(grouped?.distanceKm).toBe(easyKm);
+      // And the row's volume is the sum of the lines it prints.
+      const printed = peak.sessions.reduce((sum, session) => sum + session.distanceKm, 0);
+      expect(printed).toBe(peak.km);
+    });
+
+    it("leaves the first row with no delta — it has no earlier week in the window", () => {
+      const weeks = buildPlanView(undefined, NOW, RACE, RACE_NAME).upcomingWeeks;
+      expect(weeks[0].deltaKm).toBeNull();
+      for (let i = 1; i < weeks.length; i++) {
+        expect(weeks[i].deltaKm).toBe(weeks[i].km - weeks[i - 1].km);
+      }
+    });
+
+    it("signs the delta: volume builds up, then drops into race week", () => {
+      const weeks = buildPlanView(undefined, addDays(RACE, -75), RACE, RACE_NAME).upcomingWeeks;
+      const buildUp = buildPlanView(undefined, addDays(RACE, -62), RACE, RACE_NAME).upcomingWeeks;
+      // A burn week holds its volume, so the delta is flat, not invented.
+      expect(weeks[1].deltaKm).toBe(0);
+      // Crossing into the sharpen block adds sessions.
+      expect(buildUp[1].deltaKm).toBeGreaterThan(0);
+      // The race week is the sharpest drop on the plan.
+      expect(peak.deltaKm).toBeNull();
+      expect(raceWeek.deltaKm).toBeLessThan(0);
+      expect(raceWeek.km).toBeLessThan(peak.km);
+    });
+
+    it("paces every run that has a target, and only the race week drops them", () => {
+      for (const session of peak.sessions) {
+        expect(session.pace).toMatch(/^\d:\d{2}$/);
+      }
+      // Race day is a finish time, and the race week's short runs exist to leave
+      // the runner fresh — neither gets a pace to chase.
+      const raceWeekPaces = raceWeek.sessions.map((session) => session.pace);
+      expect(raceWeekPaces).toEqual([null, null]);
+    });
+
+    it("colours each line by kind, so the UI never re-derives it", () => {
+      expect(peak.sessions.map((session) => session.tone)).toEqual(["quality", "long", "easy"]);
+      expect(raceWeek.sessions.map((session) => session.tone)).toEqual(["race", "easy"]);
+    });
+
+    it("reports the week within its phase and how long the phase runs", () => {
+      // The second row opens the sharpen block: week 1 of 3.
+      const weeks = buildPlanView(undefined, addDays(RACE, -62), RACE, RACE_NAME).upcomingWeeks;
+      expect(weeks[1].weekInPhase).toBe(1);
+      expect(weeks[1].phaseTotal).toBe(3);
+      // The race week is the only week of its block, so "1 af 1" is what it holds.
+      expect(raceWeek.weekInPhase).toBe(1);
+      expect(raceWeek.phaseTotal).toBe(1);
+    });
+  });
+
+  // raceDistanceKm drove pace and prediction but was rendered nowhere except the
+  // edit dialog, so the card showed a goal time and a pace with no distance
+  // attached to them (#291).
+  describe("race distance labels (issue #291)", () => {
+    const NOW = addDays(RACE, -40);
+
+    it("names the distance the runner chose, all three ways", () => {
+      const race = buildPlanView(undefined, NOW, RACE, RACE_NAME, false, null, 42.195).race;
+      expect(race.distanceLabel).toBe("Marathon");
+      expect(race.distanceInline).toBe("marathon");
+      expect(race.distanceKmLabel).toBe("42,2 km");
+    });
+
+    it("lowercases the Danish word for the mid-sentence form only", () => {
+      const race = buildPlanView(undefined, NOW, RACE, RACE_NAME, false, null, 10).race;
+      expect(race.distanceLabel).toBe("10K");
+      expect(race.distanceInline).toBe("10K");
+      // A whole distance prints without the decimal nobody wants to read.
+      expect(race.distanceKmLabel).toBe("10 km");
+    });
+
+    it("falls back to a custom distance when it isn't a standard one", () => {
+      const race = buildPlanView(undefined, NOW, RACE, RACE_NAME, false, null, 12.5).race;
+      expect(race.distanceLabel).toBe("12,5 km");
+      expect(race.distanceInline).toBe("12,5 km");
+      expect(race.distanceKmLabel).toBe("12,5 km");
+    });
+
+    it("gives a whole-km custom distance the same figure in both chip halves", () => {
+      // The card joins the name and the figure with "·" and drops a duplicate, so
+      // the two have to be the same string. Formatted differently — "14,0 km" from
+      // the name, "14 km" from the figure — the chip reads "14,0 km · 14 km": the
+      // same number twice, and no dedupe catches it (#291).
+      const race = buildPlanView(undefined, NOW, RACE, RACE_NAME, false, null, 14).race;
+      expect(race.distanceLabel).toBe("14 km");
+      expect(race.distanceKmLabel).toBe("14 km");
+    });
+
+    it("falls back to the half marathon for a visitor and a legacy user", () => {
+      // No distance chosen: demo, visitor, or a user who never opened the dialog.
+      const race = buildPlanView(undefined, NOW, RACE, RACE_NAME).race;
+      expect(race.distanceKm).toBeNull();
+      expect(race.distanceLabel).toBe("Halvmarathon");
+      expect(race.distanceInline).toBe("halvmaraton");
+      expect(race.distanceKmLabel).toBe("21,1 km");
+    });
   });
 
   it("keeps the derived (live) path's rows phase-aware and distinct", () => {
@@ -837,6 +1139,7 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
     for (const week of view.upcomingWeeks) {
       expect(week.km).toBeGreaterThan(0);
     }
-    expect(new Set(view.upcomingWeeks.map((w) => w.focus)).size).toBe(3);
+    const identities = view.upcomingWeeks.map(rowIdentity);
+    expect(new Set(identities).size).toBe(3);
   });
 });

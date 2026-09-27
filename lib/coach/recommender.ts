@@ -30,7 +30,6 @@ import {
   getPhaseRules,
   getWeekPlan,
   MIN_RECOVERY_HOURS,
-  type PlannedSession,
   type SessionRisk,
   type SessionType,
   validateWorkout,
@@ -40,9 +39,6 @@ import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
 import type { Goal } from "@/lib/training/goals";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
-
-/** One day of the recommendation's week strip — the engine's planned session. */
-type WeekDay = PlannedSession;
 
 export interface WorkoutInput {
   /** Carried for future multi-goal support — not yet wired into the recommender. */
@@ -83,7 +79,6 @@ export interface WorkoutRecommendation {
   heartRateCap: number;
   shoe: "vomero" | "adios-pro-4";
   reason: string[];
-  weekStrip: WeekDay[];
 }
 
 // ── Tunables ────────────────────────────────────────────────────────────────
@@ -165,7 +160,7 @@ export function weekToDateDistanceKm(
     .reduce((sum, activity) => sum + activity.distance / 1000, 0);
 }
 
-function restCard(reason: string[], weekStrip: WeekDay[]): WorkoutRecommendation {
+function restCard(reason: string[]): WorkoutRecommendation {
   return {
     type: "rest",
     distanceKm: 0,
@@ -173,7 +168,6 @@ function restCard(reason: string[], weekStrip: WeekDay[]): WorkoutRecommendation
     heartRateCap: ZONE2_CEILING_BPM,
     shoe: "vomero",
     reason,
-    weekStrip,
   };
 }
 
@@ -192,15 +186,18 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   const today = getLocalDate(now);
   const phase = getCurrentPhase(today, input.raceDate);
   const rules = getPhaseRules(phase, input.raceDate);
-  const weekStrip = getWeekPlan(phase, mondayOfWeek(today), input.raceDate);
+  // The phase week plan is the recommender's own budget for the week: it decides
+  // today's slot (step 1) and what the week is meant to hold (step 3c). It never
+  // leaves this function — no surface renders a Mon–Sun strip (issue #291).
+  const weekPlan = getWeekPlan(phase, mondayOfWeek(today), input.raceDate);
   const reason: string[] = [];
 
   // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
   const dayOfWeek = (today.getDay() + 6) % 7; // 0 = Mon … 6 = Sun
-  const slot = weekStrip[dayOfWeek];
+  const slot = weekPlan[dayOfWeek];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
-    return restCard(reason, weekStrip);
+    return restCard(reason);
   }
 
   // 6. Intensity: tempo only where the phase allows it; otherwise Zone 2.
@@ -229,7 +226,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
         `Kun ${Math.round(gap)} timer siden sidste løbetur — under ${recoveryHours}-timers restitutionsbufferen før ${type === "tempo" ? "et hårdt pas" : "en rolig tur"}.`
       );
     }
-    return restCard(reason, weekStrip);
+    return restCard(reason);
   }
 
   // 3. Football yesterday → no hard session.
@@ -253,7 +250,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     reason.push(
       `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Din krop har brug for restitution i dag.`
     );
-    return restCard(reason, weekStrip);
+    return restCard(reason);
   }
   if (readiness.band === "easy") {
     if (type !== "easy") {
@@ -273,7 +270,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   // stacks load onto a full week instead of spreading it. Only active when the
   // caller knows the week's tally; the scale-down half of the gate sits just
   // below the distance step, where today's km are known.
-  const intendedWeeklyKm = weekStrip.reduce((sum, day) => sum + (day.distanceKm ?? 0), 0);
+  const intendedWeeklyKm = weekPlan.reduce((sum, day) => sum + (day.distanceKm ?? 0), 0);
   // #261: prorate the budget by how far into the week we are, so the gate asks
   // "have you already run more than this week's share through today?" rather
   // than "have you run the whole week's plan?". The full-week comparison let an
@@ -289,7 +286,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     reason.push(
       `Du har allerede løbet ${round1(weekToDateKm)} km i denne uge — ugens planlagte volumen i ${phase}-fasen er ${round1(proratedWeeklyKm)} km indtil i dag, så i dag er en hviledag.`
     );
-    return restCard(reason, weekStrip);
+    return restCard(reason);
   }
 
   // 4 + 5. Distance from the phase band; progression unlocks the upper end.
@@ -393,5 +390,5 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   const paceRange: PaceRange = PACE_RANGES[type];
   const heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
 
-  return { type, distanceKm, paceRange, heartRateCap, shoe, reason, weekStrip };
+  return { type, distanceKm, paceRange, heartRateCap, shoe, reason };
 }
