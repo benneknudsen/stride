@@ -55,6 +55,7 @@ next-env.d.ts
 .cc-review/
 
 # Claude Code brief files
+.cc-briefs/
 .cc-brief-*.txt
 
 # Claude Code review summary (not versioned)

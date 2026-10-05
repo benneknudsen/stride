@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { AiCoachCard } from "@/components/cobalt/hjem/AiCoachCard";
+import { CoachCard } from "@/components/cobalt/hjem/CoachCard";
 import { DataSourcesCard } from "@/components/cobalt/hjem/DataSourcesCard";
 import { Hero } from "@/components/cobalt/hjem/Hero";
 import { LatestActivityCard } from "@/components/cobalt/hjem/LatestActivityCard";
@@ -79,7 +79,7 @@ export function HjemPageClient({
       {/* Widget grid: covered by one loading overlay; nav + hero stay visible.
           `data-testid` is the grid's own handle (#295) — the e2e suite asserts on
           card headers by name, and "Coach" alone names two <span>s on the page
-          (this grid's AiCoachCard and the mobile BottomTabBar tab), so the
+          (this grid's CoachCard and the mobile BottomTabBar tab), so the
           assertions need a container only the bento lives in. */}
       <div className="relative pt-4">
         <div className="grid grid-cols-12 gap-4" data-testid="hjem-bento">
@@ -114,7 +114,7 @@ export function HjemPageClient({
             <RecoveryCard pct={view.readinessPct} note={view.readinessNote} started={started} />
           </Bento>
           <Bento span="col-span-12 lg:col-span-5" delay={0.42}>
-            <AiCoachCard quote={view.coachQuote} />
+            <CoachCard quote={view.coachQuote} />
           </Bento>
 
           {view.recentRuns.length > 0 ? (

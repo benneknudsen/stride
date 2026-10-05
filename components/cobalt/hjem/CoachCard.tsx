@@ -7,7 +7,7 @@ import { ROUTES } from "@/lib/routes";
 // serif-italic coaching quote in guillemets, and a pill into the coach route.
 // The "Ugens plan" pill is gone with the weekly schedule it pointed at — the
 // coach recommends the next activity from the last five runs instead.
-export function AiCoachCard({ quote }: { quote: string }) {
+export function CoachCard({ quote }: { quote: string }) {
   return (
     <GlassCard
       variant="cobalt"
