@@ -15,7 +15,8 @@ Each task is a self-contained prompt for Claude Code. Do them in order.
 > withdrawn** and must not be built — both are marked inline. Everything that
 > replaced them is the deterministic engine: `heuristicBlocks` in
 > `lib/ai/analysis.ts`, the block contract in `lib/ai/tools.ts`, `lib/coach/*`
-> and `lib/training/*`.
+> and `lib/training/*`. Task 2's "Vercel Postgres" line is likewise the original
+> plan: the database is **Neon Postgres**, not Vercel Postgres.
 
 ## Foundation
 

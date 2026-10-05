@@ -21,7 +21,9 @@
 > `lib/training/*`, and the one readiness mapping in `lib/cobalt/readiness.ts`.
 > `lib/ai/provider.ts`, `lib/ai/harmony.ts`, `lib/ai/prompts.ts`,
 > `lib/ai/coach-tools.ts`, `app/api/ai/chat/` and `actions/chat.ts` no longer
-> exist. Read `AGENTS.md` for the current architecture.
+> exist. Read `AGENTS.md` for the current architecture. The Tech Stack list and
+> §2's heading are likewise the original plan: the database is **Neon Postgres**,
+> not Vercel Postgres.
 
 ## Overview
 
