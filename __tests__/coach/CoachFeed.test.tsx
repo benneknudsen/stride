@@ -39,6 +39,15 @@ const TREND_CALLOUT_LINE = JSON.stringify({
   direction: "up",
 });
 
+const RUN_REVIEW_LINE = JSON.stringify({
+  tool: "runReview",
+  title: "Onsdagsturen · 10,0 km",
+  metric: "4:27 /km · 165 bpm",
+  body: "Turen tog 45 min — på niveau med dit 7-dages snit.",
+  nextRunLabel: "Næste løb: torsdag · hviledag nu — tidligst 24 timer efter turen",
+  suggestedRun: "Let pas · 9,0 km · 5:45–6:15 /km",
+});
+
 /** A NDJSON body delivered in one chunk, then closed. */
 function streamOf(text: string): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
@@ -143,6 +152,23 @@ describe("CoachFeed — abort-based stream lifecycle (issue #265)", () => {
     await waitFor(() => expect(screen.getByText("Genanalyser")).toBeDefined());
     expect(screen.queryByText("Læser din træning…")).toBeNull();
     expect(screen.queryByText("Kunne ikke hente coach-feedet lige nu. Prøv igen.")).toBeNull();
+  });
+
+  test("renders a streamed runReview through its own card (#298)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(streamOf(`${RUN_REVIEW_LINE}\n`), { status: 200 })
+    );
+
+    render(<CoachFeed activities={activities} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Turens gennemgang")).toBeDefined();
+      expect(screen.getByText("Onsdagsturen · 10,0 km")).toBeDefined();
+      expect(
+        screen.getByText("Næste løb: torsdag · hviledag nu — tidligst 24 timer efter turen")
+      ).toBeDefined();
+      expect(screen.getByText("Let pas · 9,0 km · 5:45–6:15 /km")).toBeDefined();
+    });
   });
 });
 

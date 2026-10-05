@@ -7,7 +7,9 @@ import type { AnalysisBlock } from "@/lib/ai/tools";
 
 // We import the function directly from CoachFeed — it's not exported,
 // so we replicate the exact logic inline for testing. This is the
-// same function body verbatim, verified against CoachFeed.tsx.
+// same function body verbatim (the `runReview` variant throws here: it
+// renders through its own RunReviewCard, issue #298), verified against
+// CoachFeed.tsx.
 
 type TrendDirection = "up" | "down" | "flat";
 
@@ -67,6 +69,10 @@ function feedCardView(block: AnalysisBlock): FeedCardView {
         metric: block.distanceKm ? `${block.workoutType} · ${block.distanceKm} km` : block.details,
         tone: "insight",
       };
+    case "runReview":
+      // The per-run review renders through RunReviewCard in CoachFeed (#298),
+      // never through this generic mapping.
+      throw new Error("runReview renders through RunReviewCard");
   }
 }
 
@@ -75,7 +81,7 @@ import { parseFeedLine } from "@/lib/coach/feed";
 
 // ── feedCardView tests ───────────────────────────────────────────────────
 
-describe("feedCardView — all 5 AnalysisBlock variants", () => {
+describe("feedCardView — the 5 generic AnalysisBlock variants", () => {
   test("coachInsight with full data", () => {
     const block: AnalysisBlock = {
       tool: "coachInsight",

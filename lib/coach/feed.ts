@@ -6,6 +6,7 @@
 // Kept pure and framework-free so the wire contract is unit-testable without a
 // running server — the component (CoachFeed.tsx) just does the fetch + I/O.
 
+import type { RunReviewPlanContext } from "@/lib/ai/analysis";
 import { type AnalysisBlock, analysisBlockSchema } from "@/lib/ai/tools";
 import type { AnalysisScope } from "@/types/domain";
 
@@ -37,10 +38,18 @@ interface CoachFeedRequest {
     averageHeartrate: number | null;
     totalElevationGain: number | null;
   }[];
+  /**
+   * The engine's plan facts for the per-run review (#298) — optional: without
+   * them the endpoint emits the context-free feed it always has.
+   */
+  planContext?: RunReviewPlanContext;
 }
 
 /** Build the trend-scoped analyze request from an activity history. */
-export function buildCoachFeedRequest(activities: CoachFeedActivityInput[]): CoachFeedRequest {
+export function buildCoachFeedRequest(
+  activities: CoachFeedActivityInput[],
+  planContext?: RunReviewPlanContext
+): CoachFeedRequest {
   return {
     scope: COACH_FEED_SCOPE,
     activities: activities.map((a) => ({
@@ -51,6 +60,7 @@ export function buildCoachFeedRequest(activities: CoachFeedActivityInput[]): Coa
       averageHeartrate: a.averageHeartrate ?? null,
       totalElevationGain: a.totalElevationGain ?? null,
     })),
+    ...(planContext ? { planContext } : {}),
   };
 }
 

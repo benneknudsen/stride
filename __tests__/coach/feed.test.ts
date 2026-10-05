@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { RunReviewPlanContext } from "@/lib/ai/analysis";
 import type { AnalysisBlock } from "@/lib/ai/tools";
 import {
   buildCoachFeedRequest,
@@ -8,6 +9,47 @@ import {
 } from "@/lib/coach/feed";
 
 const RUN_DATE = new Date(2026, 6, 15, 8, 0);
+
+/** The plan context the coach page attaches for the per-run review (#298). */
+const PLAN_CONTEXT: RunReviewPlanContext = {
+  phase: "burn",
+  phaseLabel: "Burn",
+  raceLabel: "Silkeborg Halvmarathon",
+  daysToRace: 74,
+  readiness: { pct: 85, band: "ready", note: "Klar til hårdt pas" },
+  recoveryHours: 24,
+  suggestions: [
+    {
+      type: "easy",
+      label: "Let pas",
+      description: "Rolig restitution",
+      distanceKm: 9,
+      paceRange: { min: "5:45", max: "6:15" },
+    },
+    {
+      type: "tempo",
+      label: "Kvalitetspas",
+      description: "Tempo · hårdt",
+      distanceKm: 10,
+      paceRange: { min: "4:45", max: "5:05" },
+    },
+    {
+      type: "long",
+      label: "Langtur",
+      description: "Lang tur · moderat",
+      distanceKm: 16,
+      paceRange: { min: "5:45", max: "6:15" },
+    },
+  ],
+  lastRun: {
+    startDate: RUN_DATE.toISOString(),
+    distanceKm: 10,
+    paceSecPerKm: 300,
+    averageHeartrate: 145,
+    movingTimeSec: 3000,
+  },
+  recommended: { type: "easy", distanceKm: 8, reason: "Distance fra burn-fasens bånd (8–10 km)." },
+};
 
 function activity(overrides: Partial<CoachFeedActivityInput> = {}): CoachFeedActivityInput {
   return {
@@ -78,6 +120,19 @@ describe("buildCoachFeedRequest", () => {
   it("produces a JSON-serializable payload", () => {
     const req = buildCoachFeedRequest([activity()]);
     expect(JSON.parse(JSON.stringify(req))).toEqual(req);
+  });
+
+  it("forwards the plan context for the run review when supplied (#298)", () => {
+    const req = buildCoachFeedRequest([activity()], PLAN_CONTEXT);
+
+    expect(req.planContext).toEqual(PLAN_CONTEXT);
+    expect(JSON.parse(JSON.stringify(req))).toEqual(req);
+  });
+
+  it("omits planContext from the wire when not supplied (#298)", () => {
+    const req = buildCoachFeedRequest([activity()]);
+
+    expect("planContext" in req).toBe(false);
   });
 });
 

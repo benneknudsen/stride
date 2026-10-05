@@ -8,8 +8,10 @@
  * nothing to serve.
  */
 
+import { getLocalDate } from "@/lib/coach/engine";
+import { DA_WEEKDAYS, formatDanish } from "@/lib/cobalt/format";
 import { ensureDate } from "@/lib/db/calendar-date";
-import { formatPace } from "@/lib/metrics";
+import { formatDuration, formatPace } from "@/lib/metrics";
 import { computeSnapshot, type LoadRisk } from "@/lib/training/progression";
 import type { AnalysisScope } from "@/types/domain";
 import type { AnalysisBlock, AnalysisBlockOf } from "./tools";
@@ -82,6 +84,68 @@ export interface AnalysisInput {
   avgHrPrev7: number | null;
   /** Training-load progression over the trailing 4 weeks. */
   progression: AnalysisProgression;
+  /**
+   * The engine's plan facts for the per-run review (#298), supplied by the
+   * server. Absent on every context-free path, where no review is emitted.
+   */
+  planContext?: RunReviewPlanContext;
+}
+
+/** One of the week's three plan suggestions, flattened for the wire (#298). */
+export interface RunReviewSuggestion {
+  type: "easy" | "tempo" | "long";
+  /** Danish label ("Let pas" / "Kvalitetspas" / "Langtur"). */
+  label: string;
+  /** Plain-language description ("Rolig restitution" / "Tempo · hårdt"). */
+  description: string;
+  distanceKm: number;
+  /** Target pace range, fast → slow, formatted "m:ss". */
+  paceRange: { min: string; max: string };
+}
+
+/** The runner's most recent run, pre-computed server-side for the review (#298). */
+export interface RunReviewLastRun {
+  startDate: Date | string;
+  distanceKm: number;
+  paceSecPerKm: number;
+  averageHeartrate: number | null;
+  /** Moving time in seconds — the review names the duration ("45 min"). */
+  movingTimeSec: number;
+}
+
+/** The recommender's own decision for the next run, flattened for the wire (#298). */
+export interface RunReviewRecommendation {
+  type: "rest" | "easy" | "tempo" | "long";
+  distanceKm: number;
+  /** The first reason line from `recommendWorkout`, in its own Danish words. */
+  reason: string;
+}
+
+/**
+ * The engine's plan facts the server derives and sends for the per-run review
+ * (#298): phase, race, readiness band, recovery window, the three suggestions
+ * and the recommender's decision. Plain JSON — it crosses to the client and
+ * comes back on the wire, where the analyze route validates it.
+ */
+export interface RunReviewPlanContext {
+  /** The engine's phase key, e.g. "burn". */
+  phase: string;
+  /** Danish phase label, e.g. "Burn". */
+  phaseLabel: string;
+  /** Race label from the user's own race plan, or the engine's demo name. */
+  raceLabel: string | null;
+  /** Whole days from `now` to the race; null when no race is set. */
+  daysToRace: number | null;
+  /** The readiness band the Hjem gauge and the recommender show for the ratio. */
+  readiness: { pct: number; band: "ready" | "easy" | "rest"; note: string };
+  /** Hours of recovery the engine requires before the recommended run. */
+  recoveryHours: number;
+  /** The three phase-aware suggestions from `getPlanSuggestions`. */
+  suggestions: RunReviewSuggestion[];
+  /** The runner's most recent run, or null when there is none. */
+  lastRun: RunReviewLastRun | null;
+  /** The recommender's decision for the next run — the review echoes it. */
+  recommended: RunReviewRecommendation;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -111,12 +175,15 @@ function windowHr(runs: AnalysisActivity[]): number | null {
 
 /**
  * Reduce raw activities to a deterministic summary. `now` is injected so the
- * hash is reproducible in tests; production passes the request time.
+ * hash is reproducible in tests; production passes the request time. The
+ * optional `planContext` (#298) rides along untouched — without it the summary
+ * is exactly what it always was.
  */
 export function buildAnalysisInput(
   activities: AnalysisActivity[],
   scope: AnalysisScope,
-  now: Date
+  now: Date,
+  planContext?: RunReviewPlanContext
 ): AnalysisInput {
   const nowMs = now.getTime();
   const totalDistance = activities.reduce((sum, a) => sum + a.distance, 0);
@@ -175,6 +242,7 @@ export function buildAnalysisInput(
     avgHrLast7: windowHr(last7),
     avgHrPrev7: windowHr(prev7),
     progression,
+    ...(planContext ? { planContext } : {}),
   };
 }
 
@@ -254,12 +322,137 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
   return null;
 }
 
+const HOUR_MS = 3_600_000;
+
+/** Days until the race as a Danish time phrase — "i morgen", "om 74 dage". */
+function daysToRaceText(days: number): string {
+  if (days <= 0) return "på racedagen";
+  if (days === 1) return "i morgen";
+  return `om ${days} dage`;
+}
+
+/**
+ * How the run's pace sits against the last seven days, as a Danish clause.
+ * The "eneste tur i den seneste uge" claim is only made when the run actually
+ * falls in that window: `avgPaceLast7` is null both when the run is the window's
+ * only pace sample and when the run is not in the window at all.
+ */
+function paceComparison(
+  secondsPerKm: number,
+  recentAvg: number | null,
+  runDate: Date,
+  now: Date
+): string {
+  if (recentAvg !== null) {
+    const delta = Math.round(secondsPerKm - recentAvg);
+    const recentLabel = `${formatPaceSecPerKm(recentAvg)} /km`;
+    if (Math.abs(delta) <= 3) return `på niveau med dit 7-dages snit på ${recentLabel}`;
+    if (delta < 0)
+      return `${Math.abs(delta)} sek. hurtigere end dit 7-dages snit på ${recentLabel}`;
+    return `${delta} sek. langsommere end dit 7-dages snit på ${recentLabel}`;
+  }
+  const age = now.getTime() - runDate.getTime();
+  if (age >= 0 && age < 7 * DAY_MS) return "den eneste tur i den seneste uge";
+  if (age >= 7 * DAY_MS) return `turen var for ${Math.floor(age / DAY_MS)} dage siden`;
+  return "turen ligger uden for de seneste 7 dage";
+}
+
+/**
+ * The per-run review (#298) — the coach's read of the runner's latest run,
+ * grounded entirely in the engine's plan context: the run's own numbers, how it
+ * compares to the last seven days, and which of the week's three suggestions is
+ * next (the type `recommendWorkout` landed on). Inside the recovery window the
+ * review holds the day as hvile and points at nothing — the same decision the
+ * recommender made. Null without context or a last run, so context-free callers
+ * see exactly the feed they saw before. `now` is a parameter: same input, same
+ * block, byte for byte.
+ */
+export function runReviewBlock(
+  input: AnalysisInput,
+  now: Date
+): AnalysisBlockOf<"runReview"> | null {
+  const context = input.planContext;
+  const run = context?.lastRun;
+  if (!context || !run || input.totalRuns === 0) return null;
+
+  const runDate = ensureDate(run.startDate);
+  const weekday = DA_WEEKDAYS[getLocalDate(runDate).getDay()];
+  const resting = context.recommended.type === "rest";
+  const suggestion = resting
+    ? null
+    : (context.suggestions.find((s) => s.type === context.recommended.type) ?? null);
+
+  const metricParts = [`${formatPaceSecPerKm(run.paceSecPerKm)} /km`];
+  if (run.averageHeartrate !== null && run.averageHeartrate > 0) {
+    metricParts.push(`${run.averageHeartrate} bpm`);
+  }
+
+  const raceClause = context.raceLabel
+    ? ` frem mod ${context.raceLabel}${
+        context.daysToRace !== null ? ` ${daysToRaceText(context.daysToRace)}` : ""
+      }`
+    : "";
+  const planSentence = `Du er i ${context.phaseLabel}-fasen${raceClause}, og din readiness er ${
+    context.readiness.pct
+  }% (${context.readiness.note.toLowerCase()}).`;
+
+  const recommendation = resting
+    ? `I dag holder vi hviledag: ${context.recommended.reason}`
+    : suggestion
+      ? `Dagens pas bliver ${suggestion.description.toLowerCase()} (${formatDanish(
+          suggestion.distanceKm
+        )} km): ${context.recommended.reason}`
+      : context.recommended.reason;
+
+  const earliest = new Date(runDate.getTime() + context.recoveryHours * HOUR_MS);
+  const windowActive = now.getTime() < earliest.getTime();
+  const nextRunDay = DA_WEEKDAYS[getLocalDate(earliest).getDay()].toLowerCase();
+  let nextRunLabel: string;
+  if (windowActive) {
+    nextRunLabel = resting
+      ? `Næste løb: ${nextRunDay} · hviledag nu — tidligst ${context.recoveryHours} timer efter turen`
+      : `Næste løb: ${nextRunDay} · tidligst ${context.recoveryHours} timer efter turen`;
+  } else {
+    nextRunLabel = resting
+      ? `Næste løb: hviledag i dag — ${context.recommended.reason}`
+      : "Næste løb: i dag · recovery-vinduet er klaret";
+  }
+
+  const suggestedRun = suggestion
+    ? `${suggestion.label} · ${formatDanish(suggestion.distanceKm)} km · ${
+        suggestion.paceRange.min
+      }–${suggestion.paceRange.max} /km`
+    : null;
+
+  return {
+    tool: "runReview",
+    title: `${weekday}sturen · ${formatDanish(run.distanceKm)} km`,
+    metric: metricParts.join(" · "),
+    body: `Turen tog ${formatDuration(run.movingTimeSec)} — ${paceComparison(
+      run.paceSecPerKm,
+      input.avgPaceLast7,
+      runDate,
+      now
+    )}. ${planSentence} ${recommendation}`,
+    nextRunLabel,
+    suggestedRun,
+  };
+}
+
 /**
  * Build typed blocks from arithmetic alone — the whole analysis. Ordered
  * most-important first: what changed, what it means, and what to do next.
+ * `now` is optional (#298) and only feeds the per-run review; callers without a
+ * plan context, or without a clock, get exactly the blocks they always did.
  */
-export function heuristicBlocks(input: AnalysisInput): AnalysisBlock[] {
+export function heuristicBlocks(input: AnalysisInput, now?: Date): AnalysisBlock[] {
   const blocks: AnalysisBlock[] = [];
+
+  // 0) The per-run review (#298) — the coach opens with the newest run before
+  // the aggregate trend cards, since it is the most concrete event in the feed.
+  const review = now ? runReviewBlock(input, now) : null;
+  if (review) blocks.push(review);
+
   const [thisWeek = 0, lastWeek = 0] = input.weeklyVolumeKm;
 
   // 1) Volume trend, this week vs last.
