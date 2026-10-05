@@ -31,7 +31,12 @@ export interface PhaseRules {
   longRunMaxKm: number;
 }
 
-type Severity = "hard" | "soft" | "phase" | "safety";
+/**
+ * The engine's severity vocabulary — `hard` blocks, `soft`/`phase`/`safety`
+ * advise. Exported so consumers can read a {@link ConstraintTrace} row's own
+ * severity alongside its status.
+ */
+export type Severity = "hard" | "soft" | "phase" | "safety";
 
 /**
  * A caller-supplied risk level for the planned session (issue #76 B2). Distinct
@@ -70,6 +75,8 @@ export type SessionType = (typeof SESSION_TYPES)[number];
 
 interface Constraint {
   id: string;
+  /** Short Danish name for the rule, used by the trace UI. */
+  label: string;
   description: string;
   severity: Severity;
   category: string;
@@ -647,6 +654,7 @@ function hoursBetween(a: Date, b: Date): number {
 /** Puls — Zone 2 ceiling. Base phases must not exceed Zone 2. */
 const zone2HrCeiling: Constraint = {
   id: "zone2-hr-ceiling",
+  label: "Zone 2-loft",
   description: `Basefaser holder indsatsen på maks Zone 2 (≤ ${ZONE2_CEILING_BPM} bpm, absolut — ikke %HRmax).`,
   severity: "hard",
   category: "heart-rate",
@@ -669,6 +677,7 @@ const zone2HrCeiling: Constraint = {
  */
 const recoveryWindow: Constraint = {
   id: "recovery-window",
+  label: "Restitution",
   description: `Mindst ${MIN_RECOVERY_HOURS} timer før kvalitetspas, ${EASY_MIN_RECOVERY_HOURS} timer før rolige ture.`,
   severity: "hard",
   category: "recovery",
@@ -690,6 +699,7 @@ const recoveryWindow: Constraint = {
 /** Skadesforebyggelse — never squat / leg-press on a run day. */
 const noStrengthOnRunDays: Constraint = {
   id: "no-strength-on-run-days",
+  label: "Styrke på løbedag",
   description: "Aldrig squat / benpres på en løbedag.",
   severity: "hard",
   category: "injury-prevention",
@@ -708,6 +718,7 @@ const noStrengthOnRunDays: Constraint = {
 /** Sko — the Adios Pro 4 is for speed / intervals only. */
 const adiosProSpeedOnly: Constraint = {
   id: "adios-pro-speed-only",
+  label: "Sko til fart",
   description: "Adios Pro 4 kun til fart- / intervalpas.",
   severity: "hard",
   category: "footwear",
@@ -733,6 +744,7 @@ const adiosProSpeedOnly: Constraint = {
  */
 const longRunCap: Constraint = {
   id: "long-run-cap",
+  label: "Loft på lang tur",
   description: "Lang tur begrænset til 16 km (adapt/burn) / 18 km (sharpen/peak).",
   severity: "hard",
   category: "long-run",
@@ -753,6 +765,7 @@ const longRunCap: Constraint = {
 /** Fodbold — no hard running the day after a match. */
 const footballRecovery: Constraint = {
   id: "football-recovery",
+  label: "Fodbold i går",
   description: "Ingen hård løbetræning dagen efter en fodboldkamp.",
   severity: "soft",
   category: "football",
@@ -771,6 +784,7 @@ const footballRecovery: Constraint = {
 /** Basefase — keep ~90% of running in Zone 2 during the adapt/burn base. */
 const basePhaseZone2: Constraint = {
   id: "base-phase-zone2",
+  label: "Zone 2-base",
   description: "Basefaser vil have ~90% af løbet i Zone 2 (kun adapt/burn).",
   severity: "phase",
   category: "base-phase",
@@ -789,6 +803,7 @@ const basePhaseZone2: Constraint = {
 /** Distance-øgning — weekly volume should grow no more than 10%. */
 const weeklyProgression: Constraint = {
   id: "weekly-distance-progression",
+  label: "Ugentlig progression",
   description: "Ugentlig distance bør højst vokse 10%.",
   severity: "safety",
   category: "progression",
@@ -815,6 +830,7 @@ const weeklyProgression: Constraint = {
  */
 const highRiskSession: Constraint = {
   id: "high-risk-session",
+  label: "Højrisiko",
   description: "Et højrisiko-pas skal holdes roligt (ingen kvalitetsindsats).",
   severity: "soft",
   category: "risk",
@@ -875,6 +891,67 @@ export function validateWorkout(context: WorkoutContext): ValidationResult {
     issues,
     warnings,
   };
+}
+
+// ── Constraint trace (#301) ─────────────────────────────────────────────────
+
+/**
+ * A rule's verdict for one {@link WorkoutContext}: `blocked` (a hard issue),
+ * `warning` (soft/phase/safety — advisory, exactly what `validateWorkout` puts
+ * in `warnings`), `passed` (evaluated, nothing to report) or `not-applicable`
+ * (filtered out for the phase by {@link getActiveConstraints}).
+ */
+export type ConstraintTraceStatus = "passed" | "warning" | "blocked" | "not-applicable";
+
+/** One row of the rule trace — the engine's whole rule set for one context. */
+export interface ConstraintTrace {
+  id: string;
+  category: string;
+  severity: Severity;
+  status: ConstraintTraceStatus;
+  /** Short Danish name for the rule. */
+  label: string;
+  /** The rule's description when it passed / was out of play, else its message. */
+  detail: string;
+  /** The issue's remedy, when the rule raised one. */
+  suggestion?: string;
+}
+
+/**
+ * Trace every constraint against one context (issue #301): one row per entry in
+ * {@link ALL_CONSTRAINTS}, in that order — including the rules that passed and
+ * the phase-inactive ones, so the surface can show the whole rule set rather
+ * than only what fired. Statuses mirror `validateWorkout` exactly: a `hard`
+ * issue is `blocked`, anything else is `warning`, so the trace can never claim
+ * a block the validator did not produce. Pure and deterministic.
+ */
+export function traceWorkout(context: WorkoutContext): ConstraintTrace[] {
+  const activeIds = new Set(getActiveConstraints(context.phase).map((c) => c.id));
+
+  return ALL_CONSTRAINTS.map((constraint) => {
+    const base = {
+      id: constraint.id,
+      category: constraint.category,
+      severity: constraint.severity,
+      label: constraint.label,
+    };
+
+    if (!activeIds.has(constraint.id)) {
+      return { ...base, status: "not-applicable", detail: constraint.description };
+    }
+
+    const issue = constraint.evaluate(context);
+    if (!issue) {
+      return { ...base, status: "passed", detail: constraint.description };
+    }
+
+    return {
+      ...base,
+      status: issue.severity === "hard" ? "blocked" : "warning",
+      detail: issue.message,
+      ...(issue.suggestion ? { suggestion: issue.suggestion } : {}),
+    };
+  });
 }
 
 // ── Client serialization ──────────────────────────────────────────────────────
