@@ -14,6 +14,7 @@ import { auth } from "@/lib/auth";
 import type { CoachActivityInput, CoachDashboardData } from "@/lib/coach/dashboard";
 import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboard-data";
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
+import { buildRunReviewContext } from "@/lib/coach/run-review";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
 import { getDashboardActivities, getRacePlan } from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
@@ -175,6 +176,19 @@ export default async function CoachPage() {
   const coachView = userId
     ? buildLiveCoachView(dashboard, activities, new Date())
     : buildCoachView();
+  // Issue #298: the plan facts the deterministic run review reasons over. Built
+  // here, from the user's own view model and race plan — the analyze route never
+  // reads the database or the session, it only validates this payload.
+  const planContext = buildRunReviewContext({
+    activities,
+    now: new Date(),
+    raceDate,
+    raceName: racePlan?.raceName ?? null,
+    raceDistanceKm: racePlan?.raceDistanceKm ?? null,
+    goalTimeSeconds: racePlan?.goalTimeSeconds ?? null,
+    ratio: dashboard.loadGauge.ratio,
+    workout: dashboard.workout,
+  });
 
   return (
     <main className="flex flex-col gap-8 pt-4 pb-4">
@@ -208,7 +222,7 @@ export default async function CoachPage() {
       <section>
         <SectionHeading index="04" title="Coach-feed" hint="Analyse · streamet" />
         <Suspense fallback={<SectionLoader height={240} />}>
-          <CoachFeed activities={toFeedActivities(activities)} />
+          <CoachFeed activities={toFeedActivities(activities)} planContext={planContext} />
         </Suspense>
       </section>
     </main>

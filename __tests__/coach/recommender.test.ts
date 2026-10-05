@@ -381,6 +381,7 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
         "heartRateCap",
         "paceRange",
         "reason",
+        "recoveryHours",
         "shoe",
         "type",
       ]);

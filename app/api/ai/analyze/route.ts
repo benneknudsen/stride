@@ -35,9 +35,54 @@ const requestActivitySchema = z.object({
   totalElevationGain: z.number().nullable().optional(),
 });
 
+/** One plan suggestion the run review may point at (#298). */
+const requestSuggestionSchema = z.object({
+  type: z.enum(["easy", "tempo", "long"]),
+  label: z.string().max(40),
+  description: z.string().max(80),
+  distanceKm: z.number().positive().max(60),
+  paceRange: z.object({ min: z.string().max(8), max: z.string().max(8) }),
+});
+
+/**
+ * The optional engine context for the per-run review (#298). Deliberately
+ * size-bounded field by field: it is client-supplied, and on the keyless demo
+ * deploy this route is an unauthenticated compute sink (#264). The route never
+ * reads the database or the session for it — the coach page computed it from
+ * the user's own view model.
+ */
+const requestPlanContextSchema = z.object({
+  phase: z.string().max(16),
+  phaseLabel: z.string().max(24),
+  raceLabel: z.string().max(120).nullable(),
+  daysToRace: z.number().int().min(-3650).max(3650).nullable(),
+  readiness: z.object({
+    pct: z.number().min(0).max(100),
+    band: z.enum(["ready", "easy", "rest"]),
+    note: z.string().max(80),
+  }),
+  recoveryHours: z.number().positive().max(168),
+  suggestions: z.array(requestSuggestionSchema).min(1).max(3),
+  lastRun: z
+    .object({
+      startDate: z.iso.datetime({ offset: true }),
+      distanceKm: z.number().positive().max(100),
+      paceSecPerKm: z.number().positive().max(3600),
+      averageHeartrate: z.number().positive().max(260).nullable(),
+      movingTimeSec: z.number().positive().max(86_400),
+    })
+    .nullable(),
+  recommended: z.object({
+    type: z.enum(["rest", "easy", "tempo", "long"]),
+    distanceKm: z.number().min(0).max(100),
+    reason: z.string().max(300),
+  }),
+});
+
 const requestSchema = z.object({
   scope: z.enum(["weekly", "activity", "trend", "overall"]).default("overall"),
   activities: z.array(requestActivitySchema).min(1).max(500),
+  planContext: requestPlanContextSchema.optional(),
 });
 
 /**
@@ -117,11 +162,14 @@ export async function POST(req: NextRequest) {
     startDate: new Date(a.startDate),
   }));
 
-  const input = buildAnalysisInput(activities, scope, new Date());
+  // Resolve the request clock once and thread it through both the summary and
+  // the review, so the emitted blocks can never disagree about "now" (#298).
+  const now = new Date();
+  const input = buildAnalysisInput(activities, scope, now, parsed.data.planContext);
 
   // The block contract is enforced before a block reaches the stream.
   const blocks: AnalysisBlock[] = [];
-  for (const block of heuristicBlocks(input)) {
+  for (const block of heuristicBlocks(input, now)) {
     const validated = analysisBlockSchema.safeParse(block);
     if (validated.success) blocks.push(validated.data);
   }

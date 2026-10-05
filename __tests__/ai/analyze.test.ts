@@ -52,6 +52,54 @@ function ipRequest(headers: Record<string, string>): NextRequest {
   }) as unknown as NextRequest;
 }
 
+/**
+ * The plan context the coach page sends for the per-run review (issue #298):
+ * engine facts only, no database access in the route.
+ */
+const RUN_REVIEW_CONTEXT = {
+  phase: "burn",
+  phaseLabel: "Burn",
+  raceLabel: "Silkeborg Halvmarathon",
+  daysToRace: 74,
+  readiness: { pct: 85, band: "ready", note: "Klar til hårdt pas" },
+  recoveryHours: 24,
+  suggestions: [
+    {
+      type: "easy",
+      label: "Let pas",
+      description: "Rolig restitution",
+      distanceKm: 9,
+      paceRange: { min: "5:45", max: "6:15" },
+    },
+    {
+      type: "tempo",
+      label: "Kvalitetspas",
+      description: "Tempo · hårdt",
+      distanceKm: 10,
+      paceRange: { min: "4:45", max: "5:05" },
+    },
+    {
+      type: "long",
+      label: "Langtur",
+      description: "Lang tur · moderat",
+      distanceKm: 16,
+      paceRange: { min: "5:45", max: "6:15" },
+    },
+  ],
+  lastRun: {
+    startDate: "2026-07-03T06:00:00.000Z",
+    distanceKm: 10,
+    paceSecPerKm: 300,
+    averageHeartrate: 152,
+    movingTimeSec: 3000,
+  },
+  recommended: {
+    type: "easy",
+    distanceKm: 8,
+    reason: "Distance fra burn-fasens bånd (8–10 km).",
+  },
+};
+
 /** N minimal 1 km activities on consecutive days, for payload-cap tests. */
 function manyActivities(count: number): RequestActivity[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -148,6 +196,74 @@ describe("POST /api/ai/analyze", () => {
 
   it("rejects an empty activity list", async () => {
     const res = await POST(analyzeRequest({ activities: [] }));
+
+    expect(res.status).toBe(400);
+  });
+
+  it("streams the run review first when a plan context is supplied (#298)", async () => {
+    const res = await POST(
+      analyzeRequest({ activities: ACTIVITIES, planContext: RUN_REVIEW_CONTEXT })
+    );
+
+    expect(res.status).toBe(200);
+    const blocks = await readBlocks(res);
+    expect(blocks[0]?.tool).toBe("runReview");
+    for (const block of blocks) {
+      expect(analysisBlockSchema.safeParse(block).success).toBe(true);
+    }
+  });
+
+  it("rejects an oversized plan context (#298)", async () => {
+    const res = await POST(
+      analyzeRequest({
+        activities: ACTIVITIES,
+        planContext: { ...RUN_REVIEW_CONTEXT, raceLabel: "x".repeat(200) },
+      })
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a non-ISO lastRun.startDate with a 400, not a 500 (#298)", async () => {
+    const res = await POST(
+      analyzeRequest({
+        activities: ACTIVITIES,
+        planContext: {
+          ...RUN_REVIEW_CONTEXT,
+          lastRun: { ...RUN_REVIEW_CONTEXT.lastRun, startDate: "hah" },
+        },
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; issues: unknown[] };
+    expect(body.error).toBe("invalid_request");
+    expect(body.issues.length).toBeGreaterThan(0);
+  });
+
+  it("still accepts a valid ISO lastRun.startDate with an offset (#298)", async () => {
+    const res = await POST(
+      analyzeRequest({
+        activities: ACTIVITIES,
+        planContext: {
+          ...RUN_REVIEW_CONTEXT,
+          lastRun: { ...RUN_REVIEW_CONTEXT.lastRun, startDate: "2026-07-03T08:00:00+02:00" },
+        },
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const blocks = await readBlocks(res);
+    expect(blocks[0]?.tool).toBe("runReview");
+  });
+
+  it("rejects an empty suggestions list (#298)", async () => {
+    const res = await POST(
+      analyzeRequest({
+        activities: ACTIVITIES,
+        planContext: { ...RUN_REVIEW_CONTEXT, suggestions: [] },
+      })
+    );
 
     expect(res.status).toBe(400);
   });

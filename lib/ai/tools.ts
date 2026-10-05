@@ -105,6 +105,35 @@ export const coachInsightSchema = z.object({
   action: z.string().optional().describe("Optional call to action, e.g. 'Plan an easy week'"),
 });
 
+/**
+ * The per-run review (#298) — the coach's read of the runner's latest run and
+ * the plan around it: the run's own numbers, when the next run may happen, and
+ * which of the week's three suggestions fits. Built by arithmetic over the
+ * engine's facts (recovery buffer, readiness, phase) — never a model.
+ */
+const runReviewSchema = z.object({
+  title: z
+    .string()
+    .describe("Short headline naming the reviewed run, e.g. 'Tirsdagsturen · 10,0 km'"),
+  metric: z.string().describe("The run's key numbers, e.g. '4:27 /km · 165 bpm'"),
+  body: z
+    .string()
+    .describe(
+      "The coach's review of the run and the plan around it, in Danish, grounded in the numbers"
+    ),
+  nextRunLabel: z
+    .string()
+    .describe(
+      "When the next run may happen, from the recovery window, e.g. 'Næste løb: torsdag · tidligst 24 t efter turen'"
+    ),
+  suggestedRun: z
+    .string()
+    .nullable()
+    .describe(
+      "The suggested run from the week's three plan suggestions, with distance and pace — null on a rest day"
+    ),
+});
+
 // ---------------------------------------------------------------------------
 // Streamed block — a discriminated union over the tool inputs
 // ---------------------------------------------------------------------------
@@ -120,6 +149,7 @@ export const analysisBlockSchema = z.discriminatedUnion("tool", [
   workoutRecommendationSchema.extend({ tool: z.literal("workoutRecommendation") }),
   metricComparisonSchema.extend({ tool: z.literal("metricComparison") }),
   coachInsightSchema.extend({ tool: z.literal("coachInsight") }),
+  runReviewSchema.extend({ tool: z.literal("runReview") }),
 ]);
 
 export type AnalysisBlock = z.infer<typeof analysisBlockSchema>;

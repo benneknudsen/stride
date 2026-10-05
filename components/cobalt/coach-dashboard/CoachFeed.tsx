@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RunReviewCard } from "@/components/cobalt/coach-dashboard/RunReviewCard";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
-import type { AnalysisBlock, TrendDirection } from "@/lib/ai/tools";
+import type { RunReviewPlanContext } from "@/lib/ai/analysis";
+import type { AnalysisBlock, AnalysisBlockOf, TrendDirection } from "@/lib/ai/tools";
 import {
   buildCoachFeedRequest,
   type CoachFeedActivityInput,
@@ -32,8 +34,11 @@ interface FeedCardView {
   tone: "insight" | "warning" | "milestone";
 }
 
-/** Project any analysis block onto the shared feed-card shape. */
-function feedCardView(block: AnalysisBlock): FeedCardView {
+/** The generic feed-card variants — `runReview` renders through its own card. */
+type FeedCardBlock = Exclude<AnalysisBlock, AnalysisBlockOf<"runReview">>;
+
+/** Project a generic analysis block onto the shared feed-card shape. */
+function feedCardView(block: FeedCardBlock): FeedCardView {
   switch (block.tool) {
     case "coachInsight":
       return {
@@ -80,6 +85,10 @@ function feedCardView(block: AnalysisBlock): FeedCardView {
         metric: block.distanceKm ? `${block.workoutType} · ${block.distanceKm} km` : block.details,
         tone: "insight",
       };
+    default: {
+      const exhaustive: never = block;
+      return exhaustive;
+    }
   }
 }
 
@@ -137,7 +146,38 @@ function FeedCard({ view }: { view: FeedCardView }) {
 
 const DEFAULT_ERROR_MESSAGE = "Kunne ikke hente coach-feedet lige nu. Prøv igen.";
 
-export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[] }) {
+/**
+ * Route one streamed block to its card. Exhaustive over `tool`: a future block
+ * variant fails typecheck here rather than rendering as a silent blank card.
+ */
+function BlockCard({ block }: { block: AnalysisBlock }) {
+  switch (block.tool) {
+    case "runReview":
+      return <RunReviewCard review={block} />;
+    case "coachInsight":
+    case "trendCallout":
+    case "metricComparison":
+    case "insightCard":
+    case "workoutRecommendation":
+      return <FeedCard view={feedCardView(block)} />;
+    default: {
+      const exhaustive: never = block;
+      return exhaustive;
+    }
+  }
+}
+
+export function CoachFeed({
+  activities,
+  planContext,
+}: {
+  activities: CoachFeedActivityInput[];
+  /**
+   * The engine's plan facts for the per-run review (#298), computed by the
+   * server page. Optional: without it the feed is exactly what it always was.
+   */
+  planContext?: RunReviewPlanContext;
+}) {
   const [status, setStatus] = useState<Status>("streaming");
   const [blocks, setBlocks] = useState<AnalysisBlock[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>(DEFAULT_ERROR_MESSAGE);
@@ -157,7 +197,7 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
       const res = await fetch("/api/ai/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildCoachFeedRequest(activities)),
+        body: JSON.stringify(buildCoachFeedRequest(activities, planContext)),
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
@@ -203,7 +243,7 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
       }
       setStatus("error");
     }
-  }, [activities]);
+  }, [activities, planContext]);
 
   // Start the feed on mount and abort the in-flight stream on unmount (issue
   // #265). This abort/re-run cycle replaces the old startedRef guard: under
@@ -241,10 +281,10 @@ export function CoachFeed({ activities }: { activities: CoachFeedActivityInput[]
       ) : blocks.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {blocks.map((block, i) => (
-            <FeedCard
+            <BlockCard
               // biome-ignore lint/suspicious/noArrayIndexKey: stream is append-only, never reordered
               key={i}
-              view={feedCardView(block)}
+              block={block}
             />
           ))}
         </div>

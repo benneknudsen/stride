@@ -79,6 +79,13 @@ export interface WorkoutRecommendation {
   heartRateCap: number;
   shoe: "vomero" | "adios-pro-4";
   reason: string[];
+  /**
+   * The recovery window (hours) the recommender enforced between the last run
+   * and the next one: 24 for an easy/long run, 48 before tempo, 72 with an
+   * injury history. Carried so surfaces that quote the window state the
+   * engine's actual requirement instead of re-deriving it from `type`.
+   */
+  recoveryHours: number;
 }
 
 // ── Tunables ────────────────────────────────────────────────────────────────
@@ -160,7 +167,7 @@ export function weekToDateDistanceKm(
     .reduce((sum, activity) => sum + activity.distance / 1000, 0);
 }
 
-function restCard(reason: string[]): WorkoutRecommendation {
+function restCard(reason: string[], recoveryHours: number): WorkoutRecommendation {
   return {
     type: "rest",
     distanceKm: 0,
@@ -168,6 +175,7 @@ function restCard(reason: string[]): WorkoutRecommendation {
     heartRateCap: ZONE2_CEILING_BPM,
     shoe: "vomero",
     reason,
+    recoveryHours,
   };
 }
 
@@ -197,7 +205,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   const slot = weekPlan[dayOfWeek];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
-    return restCard(reason);
+    return restCard(reason, input.injuryHistory ? INJURY_RECOVERY_HOURS : EASY_MIN_RECOVERY_HOURS);
   }
 
   // 6. Intensity: tempo only where the phase allows it; otherwise Zone 2.
@@ -226,7 +234,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
         `Kun ${Math.round(gap)} timer siden sidste løbetur — under ${recoveryHours}-timers restitutionsbufferen før ${type === "tempo" ? "et hårdt pas" : "en rolig tur"}.`
       );
     }
-    return restCard(reason);
+    return restCard(reason, recoveryHours);
   }
 
   // 3. Football yesterday → no hard session.
@@ -250,7 +258,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     reason.push(
       `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Din krop har brug for restitution i dag.`
     );
-    return restCard(reason);
+    return restCard(reason, recoveryHours);
   }
   if (readiness.band === "easy") {
     if (type !== "easy") {
@@ -286,7 +294,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     reason.push(
       `Du har allerede løbet ${round1(weekToDateKm)} km i denne uge — ugens planlagte volumen i ${phase}-fasen er ${round1(proratedWeeklyKm)} km indtil i dag, så i dag er en hviledag.`
     );
-    return restCard(reason);
+    return restCard(reason, recoveryHours);
   }
 
   // 4 + 5. Distance from the phase band; progression unlocks the upper end.
@@ -390,5 +398,5 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   const paceRange: PaceRange = PACE_RANGES[type];
   const heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
 
-  return { type, distanceKm, paceRange, heartRateCap, shoe, reason };
+  return { type, distanceKm, paceRange, heartRateCap, shoe, reason, recoveryHours };
 }
