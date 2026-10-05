@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { buildPhases, getPhaseRules, getWeekPlan, type PhaseKey } from "@/lib/coach/engine";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  ALL_CONSTRAINTS,
+  buildPhases,
+  getPhaseRules,
+  getWeekPlan,
+  type PhaseKey,
+} from "@/lib/coach/engine";
 import {
   recommendWorkout,
   TEMPO_HR_CAP_BPM,
@@ -28,6 +34,10 @@ const RACE_DATES: [string, Date][] = [
   ["2026 default race", new Date(2026, 8, 20)],
   ["2027 race", new Date(2027, 9, 10)],
 ];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
   const phases = buildPhases(RACE);
@@ -383,6 +393,7 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
         "reason",
         "recoveryHours",
         "shoe",
+        "trace",
         "type",
       ]);
     });
@@ -403,6 +414,64 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       const rec = recommend();
       expect(rec.paceRange.min).toMatch(/^\d:\d{2}$/);
       expect(rec.paceRange.max).toMatch(/^\d:\d{2}$/);
+    });
+  });
+
+  describe("step 8b — constraint trace (#301)", () => {
+    it("carries one trace row per constraint, in the engine's order", () => {
+      expect(recommend().trace.map((t) => t.id)).toEqual(ALL_CONSTRAINTS.map((c) => c.id));
+    });
+
+    it("traces the phase the card was built in", () => {
+      const burn = recommend().trace;
+      expect(burn.find((t) => t.id === "zone2-hr-ceiling")?.status).not.toBe("not-applicable");
+
+      const sharpen = recommend(
+        { progression: snapshot({ date: SHARPEN_WEDNESDAY }) },
+        SHARPEN_WEDNESDAY
+      ).trace;
+      expect(sharpen.find((t) => t.id === "zone2-hr-ceiling")?.status).toBe("not-applicable");
+    });
+
+    it("shows no blocked rule and no empty detail on a clean recommendation", () => {
+      const clean = recommend();
+      expect(clean.trace.filter((t) => t.status === "blocked")).toEqual([]);
+      expect(clean.trace.every((t) => t.detail.length > 0)).toBe(true);
+    });
+
+    it("is deterministic — same input and clock give an identical trace", () => {
+      expect(JSON.stringify(recommend().trace)).toBe(JSON.stringify(recommend().trace));
+    });
+
+    it("carries no rule trace on an early rest card — the reasons explain it", () => {
+      const rest = recommend({ lastRun: new Date(BURN_WEDNESDAY.getTime() - 12 * HOUR_MS) });
+      expect(rest.type).toBe("rest");
+      expect(rest.trace).toEqual([]);
+    });
+
+    it("shows the hard rule as blocked and downgrades the card to a rolig tur", () => {
+      // The B3 downgrade is a defensive net the real inputs cannot trip (the
+      // recommendation is built from the same rules it is validated against), so
+      // fault-inject one hard issue into the rule and prove both halves move
+      // together: the card downgrades, the trace names the rule that did it.
+      const recovery = ALL_CONSTRAINTS.find((c) => c.id === "recovery-window");
+      if (!recovery) throw new Error("recovery-window constraint missing");
+      vi.spyOn(recovery, "evaluate").mockReturnValue({
+        constraintId: "recovery-window",
+        severity: "hard",
+        message: "Testblokering.",
+        suggestion: "Testforslag.",
+      });
+
+      const rec = recommend(
+        { progression: snapshot({ date: SHARPEN_WEDNESDAY }) },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toContain("recovery-window");
+      const entry = rec.trace.find((t) => t.id === "recovery-window");
+      expect(entry?.status).toBe("blocked");
     });
   });
 

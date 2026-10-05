@@ -515,3 +515,98 @@ describe("CoachFeed — edge inputs", () => {
     });
   });
 });
+
+// ── WorkoutTraceCard — "Hvorfor dette pas" (issue #301) ───────────────────
+
+import { WorkoutTraceCard } from "@/components/cobalt/coach-dashboard/WorkoutTraceCard";
+import type { WorkoutCardView } from "@/lib/coach/dashboard";
+
+/** A card with one blocked rule, one warning, one passed and one out of play. */
+function traceWorkoutFixture(): WorkoutCardView {
+  return {
+    type: "easy",
+    distanceKm: 8,
+    paceRange: { min: "5:45", max: "6:15" },
+    heartRateCap: 155,
+    shoe: "vomero",
+    reason: ["Distance fra burn-fasens bånd (8–10 km)."],
+    recoveryHours: 24,
+    trace: [
+      {
+        id: "zone2-hr-ceiling",
+        category: "heart-rate",
+        severity: "hard",
+        status: "not-applicable",
+        label: "Zone 2-loft",
+        detail: "Basefaser holder indsatsen på maks Zone 2.",
+      },
+      {
+        id: "recovery-window",
+        category: "recovery",
+        severity: "hard",
+        status: "blocked",
+        label: "Restitution",
+        detail: "For kort tid siden hårdt pas.",
+        suggestion: "Udskyd turen.",
+      },
+      {
+        id: "football-recovery",
+        category: "football",
+        severity: "soft",
+        status: "warning",
+        label: "Fodbold i går",
+        detail: "Hårdt pas dagen efter fodbold.",
+        suggestion: "Hold det roligt.",
+      },
+      {
+        id: "long-run-cap",
+        category: "long-run",
+        severity: "hard",
+        status: "passed",
+        label: "Loft på lang tur",
+        detail: "Lang tur begrænset til 16 km / 18 km.",
+      },
+    ],
+  };
+}
+
+describe("WorkoutTraceCard — why this workout (#301)", () => {
+  test("shows the recommender's interventions and shaping rules up front", () => {
+    render(<WorkoutTraceCard workout={traceWorkoutFixture()} />);
+
+    expect(screen.getByText("Distance fra burn-fasens bånd (8–10 km).")).toBeDefined();
+    expect(screen.getByText("Blokeret")).toBeDefined();
+    expect(screen.getByText("For kort tid siden hårdt pas.")).toBeDefined();
+    expect(screen.getByText("Udskyd turen.")).toBeDefined();
+    expect(screen.getByText("Advarsel")).toBeDefined();
+
+    // A shaping rule is visible without opening anything — never folded away.
+    expect(screen.getByText("For kort tid siden hårdt pas.").closest("details")).toBeNull();
+  });
+
+  test("folds passed and phase-inactive rules into a native details section", () => {
+    const { container } = render(<WorkoutTraceCard workout={traceWorkoutFixture()} />);
+
+    const details = container.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details?.open).toBe(false);
+    expect(screen.getByText(/Se alle 4 regler/)).toBeDefined();
+    expect(screen.getByText("Lang tur begrænset til 16 km / 18 km.").closest("details")).toBe(
+      details
+    );
+    expect(screen.getByText(/Zone 2-loft · Ikke i spil/)).toBeDefined();
+  });
+
+  test("renders a rest card's reasons without an empty rule section", () => {
+    const rest = {
+      ...traceWorkoutFixture(),
+      type: "rest" as const,
+      trace: [],
+      reason: ["Planlagt hviledag i burn-fasen — restitution er en del af planen."],
+    };
+    render(<WorkoutTraceCard workout={rest} />);
+
+    expect(screen.getByText(/Planlagt hviledag/)).toBeDefined();
+    expect(screen.queryByText(/Se alle/)).toBeNull();
+  });
+});

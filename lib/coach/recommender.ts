@@ -24,6 +24,7 @@
 // Pure and deterministic: the clock is a parameter, so tests pin any date.
 
 import {
+  type ConstraintTrace,
   EASY_MIN_RECOVERY_HOURS,
   getCurrentPhase,
   getLocalDate,
@@ -32,7 +33,9 @@ import {
   MIN_RECOVERY_HOURS,
   type SessionRisk,
   type SessionType,
+  traceWorkout,
   validateWorkout,
+  type WorkoutContext,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
@@ -86,6 +89,16 @@ export interface WorkoutRecommendation {
    * engine's actual requirement instead of re-deriving it from `type`.
    */
   recoveryHours: number;
+  /**
+   * The engine's whole rule set traced against the exact context
+   * `validateWorkout` evaluated, built before the downgrade below (issue #301)
+   * — every constraint, one row each, blocked/warning/passed/not-applicable.
+   * When a hard rule blocks the assembled pas, the trace still names that rule
+   * beside the downgraded card. Carried so the coach surface can show why this
+   * pas, from the same context that produced it; early rest cards carry no
+   * trace (their `reason` lines are the explanation).
+   */
+  trace: ConstraintTrace[];
 }
 
 // ── Tunables ────────────────────────────────────────────────────────────────
@@ -176,6 +189,9 @@ function restCard(reason: string[], recoveryHours: number): WorkoutRecommendatio
     shoe: "vomero",
     reason,
     recoveryHours,
+    // An early rest stops before the engine's validation step, so there is no
+    // context to trace — the reason lines carry the why (issue #301).
+    trace: [],
   };
 }
 
@@ -373,7 +389,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   // rules the constraints enforce, so this is a defensive last line — but a hard
   // (blocking) issue means it would break a safety rule, so downgrade to a safe
   // easy Zone 2 run rather than surface a violating card.
-  const validation = validateWorkout({
+  const validationContext: WorkoutContext = {
     plannedDate: now,
     plannedType: type,
     plannedDistanceKm: distanceKm,
@@ -384,7 +400,13 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     phase,
     risk: input.risk,
     raceDate: input.raceDate,
-  });
+  };
+  const validation = validateWorkout(validationContext);
+  // #301: trace the SAME context instance validateWorkout just evaluated — the
+  // rule list can never describe a different pas than the one that was blocked.
+  // Built before the downgrade below, so the blocking rule stays visible next to
+  // the downgraded card; that is the point of the trace.
+  const trace = traceWorkout(validationContext);
   if (validation.issues.length > 0) {
     type = "easy";
     plannedZone = 2;
@@ -398,5 +420,5 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   const paceRange: PaceRange = PACE_RANGES[type];
   const heartRateCap = type === "tempo" ? TEMPO_HR_CAP_BPM : ZONE2_CEILING_BPM;
 
-  return { type, distanceKm, paceRange, heartRateCap, shoe, reason, recoveryHours };
+  return { type, distanceKm, paceRange, heartRateCap, shoe, reason, recoveryHours, trace };
 }

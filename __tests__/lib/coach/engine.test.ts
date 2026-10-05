@@ -14,6 +14,7 @@ import {
   planTotalWeeks,
   type SessionType,
   serializeValidationResult,
+  traceWorkout,
   validateWorkout,
   WEEKDAYS,
   type WorkoutContext,
@@ -832,5 +833,98 @@ describe("validateWorkout — result structure & edge cases", () => {
     for (const entry of [...result.issues, ...result.warnings]) {
       expect(knownIds.has(entry.constraintId)).toBe(true);
     }
+  });
+});
+
+describe("traceWorkout — the whole rule set, one row per constraint (#301)", () => {
+  it("carries every constraint exactly once, in ALL_CONSTRAINTS order", () => {
+    const trace = traceWorkout(ctx());
+    expect(trace.map((t) => t.id)).toEqual(ALL_CONSTRAINTS.map((c) => c.id));
+    expect(new Set(trace.map((t) => t.id)).size).toBe(ALL_CONSTRAINTS.length);
+  });
+
+  it("marks a rule with nothing to say 'passed', with the rule's own description", () => {
+    const trace = traceWorkout(ctx({ plannedType: "easy", lastRunDate: hoursBefore(72) }));
+    const entry = trace.find((t) => t.id === "recovery-window");
+    const constraint = ALL_CONSTRAINTS.find((c) => c.id === "recovery-window");
+    expect(entry?.status).toBe("passed");
+    expect(entry?.detail).toBe(constraint?.description);
+    expect(entry?.suggestion).toBeUndefined();
+  });
+
+  it("marks a hard issue 'blocked', with the issue's message and suggestion", () => {
+    const trace = traceWorkout(ctx({ plannedType: "easy", lastRunDate: hoursBefore(12) }));
+    const entry = trace.find((t) => t.id === "recovery-window");
+    expect(entry?.status).toBe("blocked");
+    expect(entry?.severity).toBe("hard");
+    expect(entry?.detail).toContain(String(EASY_MIN_RECOVERY_HOURS));
+    expect(entry?.suggestion).toBeTruthy();
+  });
+
+  it("marks a soft issue 'warning'", () => {
+    const trace = traceWorkout(ctx({ phase: "sharpen", plannedType: "tempo", risk: "high" }));
+    const entry = trace.find((t) => t.id === "high-risk-session");
+    expect(entry?.status).toBe("warning");
+    expect(entry?.detail).toBeTruthy();
+  });
+
+  it("marks a phase issue 'warning' — guidance never blocks", () => {
+    const trace = traceWorkout(ctx({ phase: "burn", plannedType: "tempo" }));
+    expect(trace.find((t) => t.id === "base-phase-zone2")?.status).toBe("warning");
+  });
+
+  it("marks a safety issue 'warning' — it advises, it never blocks", () => {
+    const trace = traceWorkout(
+      ctx({ plannedType: "easy", previousWeekDistanceKm: 50, weeklyDistanceKm: 60 })
+    );
+    expect(trace.find((t) => t.id === "weekly-distance-progression")?.status).toBe("warning");
+  });
+
+  it("includes phase-inactive rules as 'not-applicable', verified against getActiveConstraints", () => {
+    const trace = traceWorkout(ctx({ phase: "sharpen" }));
+    const activeIds = new Set(getActiveConstraints("sharpen").map((c) => c.id));
+
+    for (const entry of trace) {
+      if (!activeIds.has(entry.id)) {
+        expect(entry.status, entry.id).toBe("not-applicable");
+        expect(entry.detail).toBe(ALL_CONSTRAINTS.find((c) => c.id === entry.id)?.description);
+      }
+    }
+    expect(
+      trace
+        .filter((t) => t.status === "not-applicable")
+        .map((t) => t.id)
+        .sort()
+    ).toEqual(["base-phase-zone2", "zone2-hr-ceiling"]);
+  });
+
+  it("keeps the Zone-2 rules active in a base phase", () => {
+    const trace = traceWorkout(ctx({ phase: "burn" }));
+    expect(trace.find((t) => t.id === "zone2-hr-ceiling")?.status).not.toBe("not-applicable");
+    expect(trace.find((t) => t.id === "base-phase-zone2")?.status).not.toBe("not-applicable");
+  });
+
+  it("mirrors validateWorkout: blocked ids are its issues, warning ids its warnings", () => {
+    const context = ctx({
+      phase: "adapt",
+      plannedType: "easy",
+      plannedZone: 4,
+      lastRunDate: hoursBefore(12),
+      previousWeekDistanceKm: 50,
+      weeklyDistanceKm: 60,
+    });
+    const trace = traceWorkout(context);
+    const validation = validateWorkout(context);
+    expect(trace.filter((t) => t.status === "blocked").map((t) => t.id)).toEqual(
+      validation.issues.map((i) => i.constraintId)
+    );
+    expect(trace.filter((t) => t.status === "warning").map((t) => t.id)).toEqual(
+      validation.warnings.map((w) => w.constraintId)
+    );
+  });
+
+  it("is deterministic — the same context yields a byte-identical trace", () => {
+    const context = ctx({ plannedType: "tempo", lastRunDate: hoursBefore(12) });
+    expect(JSON.stringify(traceWorkout(context))).toBe(JSON.stringify(traceWorkout(context)));
   });
 });

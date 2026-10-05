@@ -6,6 +6,7 @@ import { NextActivityCard } from "@/components/cobalt/coach-dashboard/NextActivi
 import { PaceEfficiencyChart } from "@/components/cobalt/coach-dashboard/PaceEfficiencyChart";
 import { VolumeTrendChart } from "@/components/cobalt/coach-dashboard/VolumeTrendChart";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
+import { WorkoutTraceCard } from "@/components/cobalt/coach-dashboard/WorkoutTraceCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
@@ -77,8 +78,11 @@ async function NextWorkoutSection({ dashboard }: { dashboard: CoachDashboardData
   const { workout, nextActivity } = dashboard;
   return (
     <div className="grid grid-cols-12 gap-4">
-      <div className="col-span-12 lg:col-span-7">
+      <div className="col-span-12 flex flex-col gap-4 lg:col-span-7">
         <WorkoutCard workout={workout} />
+        {/* Issue #301: the rule trace hangs off "Næste pas" — same carried
+            recommendation, so the why can never describe a different pas. */}
+        <WorkoutTraceCard workout={workout} />
       </div>
       <div className="col-span-12 lg:col-span-5">
         <NextActivityCard activity={nextActivity} />
