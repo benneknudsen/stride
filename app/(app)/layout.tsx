@@ -23,6 +23,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="relative min-h-screen bg-silver font-cg-sans text-cobalt">
+      {/* #308: the nav is a fixed floating pill now, so the in-flow space the
+          old bar occupied (18px offset + 56px mobile / 69.5px md height,
+          measured on the bar itself) is reserved by a spacer that only renders
+          with the chrome — the Velkommen landing page keeps its own layout.
+          The <noscript> rule is the #304 pattern: Motion server-renders the
+          pill in its hidden entrance state, which only JS clears. */}
+      <noscript>
+        <style>{`[data-testid="nav-pill"]{opacity:1 !important;transform:none !important}`}</style>
+      </noscript>
       <BackgroundBlobs />
       <div className="relative mx-auto max-w-[1360px] px-4 pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)_+_96px)] md:px-7 md:pt-0 md:pb-10">
         {/* Velkommen (visitor on "/") is a landing page and drops the app chrome;
@@ -31,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Suspense fallback={null}>
           <LandingChromeGate signedIn={user !== undefined}>
             <NavBar userName={userName} userImage={user?.image} stravaConnected={stravaConnected} />
+            <div aria-hidden className="h-[74px] md:h-[87.5px]" />
           </LandingChromeGate>
         </Suspense>
         <Suspense fallback={null}>

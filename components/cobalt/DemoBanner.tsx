@@ -23,8 +23,12 @@ export function DemoBanner() {
   return (
     // Sticky (not fixed) so it scrolls inside the page flow and can't detach on
     // iOS like a fixed bar with backdrop-filter would; z-40 keeps it under the
-    // BottomTabBar (z-50).
-    <div className="sticky top-2 z-40 mt-3 flex justify-center sm:mt-4 [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
+    // BottomTabBar (z-50). Since #308 the nav is a fixed pill that owns the top
+    // band (18px offset + 52px/67.5px pill), so the stick position is pushed
+    // below the pill's bottom — otherwise this chip slides underneath the glass
+    // and the two translucent layers mash. Rides with the page up to the end of
+    // the pill's shadow, then pins just below it.
+    <div className="sticky top-[calc(env(safe-area-inset-top,0px)_+_78px)] z-40 mt-3 flex justify-center sm:mt-4 md:top-[calc(env(safe-area-inset-top,0px)_+_94px)] [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
       <GlassCard className="flex max-w-full items-center gap-3 rounded-pill py-1.5 pr-1.5 pl-4 sm:gap-4 sm:py-2 sm:pr-2">
         <span className="flex-none rounded-pill bg-red px-2.5 py-1 cg-label tracking-[0.18em] font-semibold text-white">
           Demo

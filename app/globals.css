@@ -157,6 +157,34 @@
   }
 }
 
+/* Issue #308: the floating nav pill server-renders Motion's hidden entrance
+   state (opacity 0 / scale 0) as inline styles, which only JS can clear. With
+   scripting disabled the pill must simply stand visible — a navigation that
+   disappears without JS is worse than no animation. `!important` is required
+   to win over the inline styles; the <noscript> rule in app/(app)/layout.tsx
+   covers older engines without the `scripting` media feature. */
+@media (scripting: none) {
+  [data-testid="nav-pill"] {
+    /* biome-ignore lint/complexity/noImportantStyles: must beat Motion's inline hidden state (#308) */
+    opacity: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must beat Motion's inline scale(0) (#308) */
+    transform: none !important;
+  }
+}
+
+/* Under prefers-reduced-motion the pill never moves: no entrance, no
+   scroll-away (#308). The JS honours this too (`useReducedMotion`), but this
+   rule also covers the window before hydration, where the inline hidden state
+   is on screen. */
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="nav-pill"] {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion = the pill never moves (#308) */
+    opacity: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion = the pill never moves (#308) */
+    transform: none !important;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    Cobalt Glass — redesign design tokens (ADDITIVE)
    Static brand values, deliberately namespaced so they never clobber the
