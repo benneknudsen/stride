@@ -1,6 +1,7 @@
 "use client";
 
 import { track } from "@vercel/analytics";
+import { motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,10 +14,16 @@ import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
-// Glass-pill navigation. Active route = a raised liquid-glass pill (issue #100,
-// shared with the BottomTabBar) rather than a flat cobalt fill. Coach carries the
-// red sync spark. Sync POSTs to /api/strava/sync and drives the button from the
-// response — idle → syncing → synced|error → idle — so it can be run again (#97).
+// Floating-pill navigation (#308). A full-width fixed strip that only centres
+// (clicks pass through it everywhere except the pill itself); the pill is the
+// glass bar grown from zero on load and scaled back to zero when the user
+// scrolls down — the measured reference movement from docs/bevaegelsesstrategi.md
+// a.5. The (app) layout reserves the height the bar used to occupy in flow, so
+// page content starts where it always did and nothing scrolls underneath it at
+// rest. Active route = a raised liquid-glass pill (issue #100, shared with the
+// BottomTabBar) rather than a flat cobalt fill. Coach carries the red sync
+// spark. Sync POSTs to /api/strava/sync and drives the button from the
+// response — idle → syncing → synced|error|rate_limited → idle — so it can be run again (#97).
 //
 // For a visitor the Hjem tab points at the demo dashboard (`/demo`) instead of
 // bare "/" — "/" shows the Velkommen landing page without a session, and a tab
@@ -30,6 +37,13 @@ const LINKS = [
 
 /** How long a terminal state shows before the button returns to "Synkronisér". */
 const RESET_DELAY_MS = { synced: 2500, error: 4000, rate_limited: 4000 } as const;
+
+/** Reference entrance/hide curve (a.5): a strong ease-out over ~0.8 s. */
+const PILL_EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
+const PILL_DURATION_S = 0.8;
+/** Hide only after a real downward run — the reference listener's thresholds. */
+const HIDE_AFTER_Y = 150;
+const HIDE_AFTER_DELTA = 120;
 
 export function NavBar({
   userName,
@@ -55,6 +69,11 @@ export function NavBar({
   const pathname = usePathname();
   const router = useRouter();
   const current = activeHref ?? pathname ?? "/";
+  const reduceMotion = useReducedMotion();
+  // #308: the pill scoots away on a downward scroll and returns on the first
+  // upward one — the reference behaviour, driven by a plain passive listener.
+  // Reduced motion turns the whole idea off: the pill stays put and visible.
+  const [scrolledAway, setScrolledAway] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -86,6 +105,34 @@ export function NavBar({
     },
     []
   );
+
+  // #308 scroll listener: accumulate downward travel past the thresholds to
+  // hide, return on the first upward pixel (or back near the top). A client
+  // navigation scrolls back to the top, and that programmatic scroll fires the
+  // same event, so the pill can never stay hidden across pages.
+  useEffect(() => {
+    if (reduceMotion) return;
+    let lastY = window.scrollY;
+    let downward = 0;
+    const onScroll = () => {
+      const y = window.scrollY;
+      const delta = y - lastY;
+      lastY = y;
+      if (y <= HIDE_AFTER_Y || delta < 0) {
+        downward = 0;
+        setScrolledAway(false);
+        return;
+      }
+      if (delta > 0) {
+        downward += delta;
+        if (downward > HIDE_AFTER_DELTA) setScrolledAway(true);
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [reduceMotion]);
+
+  const pillHidden = !reduceMotion && scrolledAway;
 
   const settle = useCallback((state: "synced" | "error" | "rate_limited") => {
     setSyncState(state);
@@ -142,136 +189,158 @@ export function NavBar({
     : LINKS.map((link) => (link.href === ROUTES.HOME ? { ...link, href: DEMO_HOME_ROUTE } : link));
 
   return (
-    <nav className="cg-glass mt-[18px] flex items-center justify-between gap-3 rounded-card px-4 py-2.5 md:gap-[18px] md:px-[22px] md:py-[13px]">
-      <Link href={ROUTES.HOME} className="flex items-center gap-3">
-        <Logo />
-        <Wordmark />
-      </Link>
+    // #308: a full-width fixed strip that only centres the pill — nothing of
+    // the strip itself is visible or clickable (`pointer-events-none` lets
+    // content behind it work; the pill re-enables its own events). The top
+    // offset matches the old in-flow bar (`mt-[18px]` under the safe-area).
+    // Through md the pill spans the shell (phone ~92%, tablet full column): at
+    // those widths a content-fit pill would overflow once the identity chip and
+    // sync control are on screen. From lg it is content-sized and centred —
+    // the reference geometry (a centred pill, not a full-width bar) — with the
+    // measured natural width (~700px at 1440px) coming from `lg:gap-16`/
+    // `xl:gap-24` between the three groups.
+    <nav className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center">
+      <div className="w-full max-w-[1360px] px-4 md:px-7">
+        <motion.div
+          data-testid="nav-pill"
+          initial={{ opacity: 0, scale: 0 }}
+          animate={pillHidden ? { opacity: 0, scale: 0 } : { opacity: 1, scale: 1 }}
+          transition={
+            reduceMotion ? { duration: 0 } : { duration: PILL_DURATION_S, ease: PILL_EASE }
+          }
+          className="cg-glass pointer-events-auto mt-[calc(env(safe-area-inset-top,0px)_+_18px)] flex w-full items-center justify-between gap-3 rounded-pill px-5 py-2 md:gap-[18px] md:px-7 md:py-3 lg:mx-auto lg:w-fit lg:gap-16 xl:gap-24"
+        >
+          <Link href={ROUTES.HOME} className="flex items-center gap-3">
+            <Logo />
+            <Wordmark />
+          </Link>
 
-      <div className="hidden items-center gap-1.5 text-[13px] font-medium md:flex">
-        {links.map((link) => {
-          const active = isActive(link.href);
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              aria-current={active ? "page" : undefined}
-              // Anonymous nav event: the tab label is the only property, no PII.
-              onClick={() => track("navigeret_til_side", { side: link.label })}
-              style={glassTabStyle(active)}
-              className={cn(
-                "cg-interactive flex items-center gap-1.5 rounded-pill border border-solid px-[18px] py-2.5",
-                "transition-all duration-300 ease-out motion-reduce:transition-none",
-                active ? "font-semibold text-cobalt" : "text-ink hover:text-cobalt"
-              )}
-            >
-              {link.spark ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path
-                    d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z"
-                    fill="var(--color-red)"
-                  />
-                </svg>
-              ) : null}
-              {link.label}
-            </Link>
-          );
-        })}
-      </div>
+          <div className="hidden items-center gap-1.5 text-[13px] font-medium md:flex">
+            {links.map((link) => {
+              const active = isActive(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={active ? "page" : undefined}
+                  // Anonymous nav event: the tab label is the only property, no PII.
+                  onClick={() => track("navigeret_til_side", { side: link.label })}
+                  style={glassTabStyle(active)}
+                  className={cn(
+                    "cg-interactive flex items-center gap-1.5 rounded-pill border border-solid px-[18px] py-2.5",
+                    "transition-all duration-300 ease-out motion-reduce:transition-none",
+                    active ? "font-semibold text-cobalt" : "text-ink hover:text-cobalt"
+                  )}
+                >
+                  {link.spark ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path
+                        d="M12 2 L14.2 9.8 L22 12 L14.2 14.2 L12 22 L9.8 14.2 L2 12 L9.8 9.8 Z"
+                        fill="var(--color-red)"
+                      />
+                    </svg>
+                  ) : null}
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
 
-      <div className="flex items-center gap-3">
-        {/* The sync button only makes sense for a connected user (#216).
+          <div className="flex items-center gap-3">
+            {/* The sync button only makes sense for a connected user (#216).
             A visitor has no session, so it would always 401 — hide it. A
             signed-in user without Strava gets a connect CTA into the OAuth
             flow instead; only a connected user gets the real sync control. */}
-        {!userName ? null : !stravaConnected ? (
-          <button
-            type="button"
-            onClick={() => void signIn("strava", { callbackUrl: ROUTES.HOME })}
-            className="cg-interactive inline-flex items-center gap-2 rounded-pill bg-cobalt px-[18px] py-2 text-[12.5px] font-semibold text-silver transition-colors hover:bg-cobalt-light"
-            style={{
-              boxShadow: "0 6px 20px color-mix(in srgb, var(--color-cobalt) 25%, transparent)",
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M12 5v14M5 12h14"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-              />
-            </svg>
-            Forbind Strava
-          </button>
-        ) : (
-          <SyncButton state={syncState} onSync={handleSync} />
-        )}
-        {userName ? (
-          // Hover open/close is a pointer-only nicety; keyboard and touch users
-          // drive the menu through the button's click toggle below.
-          // biome-ignore lint/a11y/noStaticElementInteractions: hover is progressive enhancement, button handles interaction
-          <div className="relative" onMouseEnter={openMenu} onMouseLeave={closeMenu}>
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              aria-label="Kontomenu"
-              className="cg-interactive flex items-center gap-3 rounded-pill"
-            >
-              <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
-                {userName.toUpperCase()}
-              </span>
-              {userImage ? (
-                <Image
-                  src={userImage}
-                  alt={userName}
-                  width={32}
-                  height={32}
-                  className="size-8 flex-none rounded-full object-cover ring-1 ring-white/70"
-                />
-              ) : (
-                <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
-                  {userName.slice(0, 1).toUpperCase()}
-                </span>
-              )}
-            </button>
-
-            {menuOpen ? (
-              <div
-                role="menu"
-                className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[168px] rounded-card border border-cobalt/15 bg-white/60 p-1.5 shadow-lg backdrop-blur-xl"
+            {!userName ? null : !stravaConnected ? (
+              <button
+                type="button"
+                onClick={() => void signIn("strava", { callbackUrl: ROUTES.HOME })}
+                className="cg-interactive inline-flex items-center gap-2 rounded-pill bg-cobalt px-[18px] py-2 text-[12.5px] font-semibold text-silver transition-colors hover:bg-cobalt-light"
+                style={{
+                  boxShadow: "0 6px 20px color-mix(in srgb, var(--color-cobalt) 25%, transparent)",
+                }}
               >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 5v14M5 12h14"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                Forbind Strava
+              </button>
+            ) : (
+              <SyncButton state={syncState} onSync={handleSync} />
+            )}
+            {userName ? (
+              // Hover open/close is a pointer-only nicety; keyboard and touch users
+              // drive the menu through the button's click toggle below.
+              // biome-ignore lint/a11y/noStaticElementInteractions: hover is progressive enhancement, button handles interaction
+              <div className="relative" onMouseEnter={openMenu} onMouseLeave={closeMenu}>
                 <button
                   type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    void signOut({ callbackUrl: ROUTES.HOME });
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-pill px-3 py-2 text-left text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.08]"
+                  onClick={() => setMenuOpen((open) => !open)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label="Kontomenu"
+                  className="cg-interactive flex items-center gap-3 rounded-pill"
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <path d="M16 17l5-5-5-5" />
-                    <path d="M21 12H9" />
-                  </svg>
-                  Log ud
+                  <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
+                    {userName.toUpperCase()}
+                  </span>
+                  {userImage ? (
+                    <Image
+                      src={userImage}
+                      alt={userName}
+                      width={32}
+                      height={32}
+                      className="size-8 flex-none rounded-full object-cover ring-1 ring-white/70"
+                    />
+                  ) : (
+                    <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
+                      {userName.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
                 </button>
+
+                {menuOpen ? (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[168px] rounded-card border border-cobalt/15 bg-white/60 p-1.5 shadow-lg backdrop-blur-xl"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        void signOut({ callbackUrl: ROUTES.HOME });
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-pill px-3 py-2 text-left text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.08]"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <path d="M16 17l5-5-5-5" />
+                        <path d="M21 12H9" />
+                      </svg>
+                      Log ud
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
-        ) : null}
+        </motion.div>
       </div>
     </nav>
   );
