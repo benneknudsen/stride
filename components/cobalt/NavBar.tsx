@@ -221,7 +221,7 @@ export function NavBar({
           transition={
             reduceMotion ? { duration: 0 } : { duration: PILL_DURATION_S, ease: PILL_EASE }
           }
-          className="cg-glass pointer-events-auto mt-[calc(env(safe-area-inset-top,0px)_+_18px)] flex w-full items-center justify-between gap-3 rounded-pill px-5 py-2 md:gap-[18px] md:px-7 md:py-3 lg:mx-auto lg:w-fit lg:gap-16 xl:gap-24"
+          className="cg-glass-nav pointer-events-auto mt-[calc(env(safe-area-inset-top,0px)_+_18px)] flex w-full items-center justify-between gap-3 rounded-pill px-5 py-2 md:gap-[18px] md:px-7 md:py-3 lg:mx-auto lg:w-fit lg:gap-16 xl:gap-24"
         >
           <Link href={ROUTES.HOME} className="flex items-center gap-3">
             <Logo />
