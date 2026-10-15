@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
+import { lockSmoothScroll, unlockSmoothScroll } from "@/lib/smooth-scroll";
 import { cn } from "@/lib/utils";
 
 // Full-region loading overlay: a blurred silver scrim + centred RunnerLoader.
@@ -34,6 +35,16 @@ export function LoadingOverlay({
     }, 600);
     return () => clearTimeout(timer);
   }, [show, mounted]);
+
+  // #307: while the scrim is up the smooth-scrolled page is frozen with it —
+  // tied to `show`, so the release lands when the overlay starts lifting and
+  // is guaranteed on unmount/close too. No-op where Lenis is not running
+  // (every caller today; the overlay only ever renders inside the app cards).
+  useEffect(() => {
+    if (!show) return;
+    lockSmoothScroll();
+    return () => unlockSmoothScroll();
+  }, [show]);
 
   if (!mounted) return null;
 

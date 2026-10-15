@@ -1,5 +1,6 @@
 import { HjemPageClient } from "@/components/cobalt/hjem/HjemPageClient";
 import { VelkommenPage } from "@/components/cobalt/velkommen/VelkommenPage";
+import { SmoothScrollProvider } from "@/components/providers/smooth-scroll-provider";
 import { auth } from "@/lib/auth";
 import { buildHomeView } from "@/lib/cobalt/hjem";
 import { getDashboardActivities, getRacePlan, getStravaTokens } from "@/lib/db/queries";
@@ -31,7 +32,14 @@ export default async function HjemPage({
   const userId = user?.id;
 
   if (!userId && demo === undefined) {
-    return <VelkommenPage />;
+    // The Velkommen landing is the one (app) route that gets Lenis (#307) —
+    // wrapping the landing branch, not the layout, is what keeps the smooth
+    // scroll off every other page in the shell.
+    return (
+      <SmoothScrollProvider>
+        <VelkommenPage />
+      </SmoothScrollProvider>
+    );
   }
 
   const [activities, racePlan, stravaTokens] = userId

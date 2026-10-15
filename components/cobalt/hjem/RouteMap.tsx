@@ -269,7 +269,15 @@ export function RouteMap({
   }
 
   return (
-    <figure aria-label={label} className="absolute inset-0">
+    // #307: `data-lenis-prevent` marks the map as a Lenis exception, so a
+    // wheel/touch gesture inside it stays with MapLibre instead of being
+    // smoothed away by the landing page's smooth scroll. Lenis matches it via
+    // closest(), so the attribute covers the canvas and the attribution
+    // control alike. Note this is insurance, not a fix for an observed bug:
+    // the map is `interactive: false` (#284), so MapLibre currently consumes
+    // no gestures at all — the exception only starts carrying weight if that
+    // decision is ever reversed.
+    <figure aria-label={label} data-lenis-prevent className="absolute inset-0">
       <div
         ref={ref}
         className="absolute inset-0 bg-silver"
