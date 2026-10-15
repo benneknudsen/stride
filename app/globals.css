@@ -141,6 +141,22 @@
   }
 }
 
+/* Issue #304: the login card and its rows server-render Motion's `hidden`
+   entrance state (opacity 0 / translateY(8px)) as inline styles, which only
+   JS can clear — with scripting disabled the page would show an empty card.
+   `!important` is required to win over the inline styles; the <noscript> rule
+   in app/(auth)/layout.tsx covers older engines without the `scripting`
+   media feature. */
+@media (scripting: none) {
+  [data-testid="login-card"],
+  [data-testid="login-card"] * {
+    /* biome-ignore lint/complexity/noImportantStyles: must beat Motion's inline hidden state (#304) */
+    opacity: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: must beat Motion's inline translateY(8px) (#304) */
+    transform: none !important;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    Cobalt Glass — redesign design tokens (ADDITIVE)
    Static brand values, deliberately namespaced so they never clobber the

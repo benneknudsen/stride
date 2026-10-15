@@ -9,9 +9,23 @@ import { ROUTES } from "@/lib/routes";
 // connect a data source is captured. VelkommenPage stays a Server Component and
 // just renders these where a login link is needed. The event is anonymous —
 // clicking "Log ind" starts the Strava connect flow, and no PII is sent.
-export function LoginLink({ className, children }: { className?: string; children: ReactNode }) {
+//
+// Issue #304: the login page reuses this for its secondary demo CTA, so the
+// destination and the tracked event are overridable — the defaults keep every
+// existing landing call site (and its event) exactly as it was.
+export function LoginLink({
+  className,
+  children,
+  href = ROUTES.LOGIN,
+  trackEvent = "datakilde_forbundet",
+}: {
+  className?: string;
+  children: ReactNode;
+  href?: string;
+  trackEvent?: string;
+}) {
   return (
-    <Link href={ROUTES.LOGIN} className={className} onClick={() => track("datakilde_forbundet")}>
+    <Link href={href} className={className} onClick={() => track(trackEvent)}>
       {children}
     </Link>
   );
