@@ -8,9 +8,11 @@
 
 ## Kort konklusion
 
-**Bliv på CSS-keyframes. Udvid `cg-*`-vokabularet i `app/globals.css`, og løs pille-navbarens scroll-adfærd med en lille scroll-lytter i stedet for et animationsbibliotek. Ingen ny afhængighed.**
+**Beslutning (opdateret 2026-10-15, #304): Motion hentes ind.** Produktejeren har ombestemt den oprindelige research-anbefaling: kvaliteten af bevægelsen vejer tungere end bundlestørrelsen — "45 kB er helt okay hvis det bliver gjort ordentligt". Beslutningen ændrer ikke de målte priser; den oprindelige konklusion står nedenfor som det historiske grundlag. Hvad der ændrede sig og hvorfor: afsnit f); hvilken falsifikator der udløste det: afsnit h).
 
-De målte priser (minificeret bundle, gzip-9, React holdt udenfor — metode i afsnit d):
+**Oprindelig konklusion (research, uændret):** Bliv på CSS-keyframes. Udvid `cg-*`-vokabularet i `app/globals.css`, og løs pille-navbarens scroll-adfærd med en lille scroll-lytter i stedet for et animationsbibliotek. Ingen ny afhængighed.
+
+De målte priser (minificeret bundle, gzip-9, React holdt udenfor — metode i afsnit d) er uændrede fakta, før som efter beslutningen:
 
 | Mulighed | Målt størrelse |
 | --- | --- |
@@ -248,7 +250,7 @@ To ting, der er værd at vide om metoden:
 
 **`prefers-reduced-motion`:** Motion har indbygget støtte (`MotionConfig`/`useReducedMotion`), men den skal slås til og vedligeholdes pr. flade; detaljerne i den målte version er ikke verificeret her. Det er en funktionelt god vej, men ikke gratis i opmærksomhed.
 
-**SSR/hydration-risiko:** Motion server-renderer sine starttilstande. Project One er beviset: HTML'en indeholder 17 inline `opacity:0`-stile, dvs. **indhold er usynligt indtil hydration**. Det er håndterbart — men det betyder, at en JS-fejl eller langsom load viser en tom side. Strides sider har i dag ingen sådan afhængighed. Motion 14's egen kildekode indeholder desuden en kommentar om, at et tidligere re-eksport-mønster fik **Next.js Turbopack til at løbe tør for hukommelse** under module-graf-analyse (rettet i den målte version; historisk note, men viser at integrationsfladen mod Next/Turbopack er reel).
+**SSR/hydration-risiko:** Motion server-renderer sine starttilstande. Project One er beviset: HTML'en indeholder 17 inline `opacity:0`-stile, dvs. **indhold er usynligt indtil hydration**. Det er håndterbart — men det betyder, at en JS-fejl eller langsom load viser en tom side. Strides sider har i dag ingen sådan afhængighed. (Opdateret 2026-10-15, #304: Stride har nu én — login-kortet entrer med Motion og server-rendres i `hidden`-tilstanden (`opacity:0`), så uden JS ville kortet aldrig blive synligt. Scripts slået fra er dækket med `@media (scripting: none)` i `app/globals.css` og et `<noscript>`-fallback i `app/(auth)/layout.tsx`; en hydration-fejl med JS aktiveret er ikke dækket og står som accepteret residual risiko.) Motion 14's egen kildekode indeholder desuden en kommentar om, at et tidligere re-eksport-mønster fik **Next.js Turbopack til at løbe tør for hukommelse** under module-graf-analyse (rettet i den målte version; historisk note, men viser at integrationsfladen mod Next/Turbopack er reel).
 
 ### Mulighed 3 — GSAP
 
@@ -268,7 +270,7 @@ To ting, der er værd at vide om metoden:
 
 ## f) Anbefaling
 
-**Vælg Mulighed 1: bliv på CSS-keyframes.** Udvid `cg-*`-vokabularet med det der mangler (en entré med valgfri stagger samt en flip-keyframe til #306), og byg pille-navbarens scroll-adfærd som en lille client-hook uden animationsbibliotek.
+**Oprindelig anbefaling (research, 2026-10-15): Vælg Mulighed 1 — bliv på CSS-keyframes.** Udvid `cg-*`-vokabularet med det der mangler (en entré med valgfri stagger samt en flip-keyframe til #306), og byg pille-navbarens scroll-adfærd som en lille client-hook uden animationsbibliotek.
 
 Begrundelser, i prioriteret rækkefølge:
 
@@ -281,6 +283,16 @@ Begrundelser, i prioriteret rækkefølge:
 
 **Hvornår ville Motion være det rigtige valg:** hvis vi får behov for entré/exit hen over *unmount* (`AnimatePresence`), delt-layout-morfe (FLIP), fjederfysik eller gestus-drevet koreografi som CSS + små hooks ikke kan udtrykke. Marginalprisen er målt (5,3 kB gzip for `m`, 44,1–45,8 kB for fuld API), så den beslutning er allerede prissat. **Hvornår ville GSAP være det rigtige valg:** kun hvis vi vælger `text-stream`-blokken; ingen andre observerede behov kræver den.
 
+### Opdatering 2026-10-15: beslutningen er ændret — Motion hentes ind (#304)
+
+Produktejeren har ombestemt anbefalingen ovenfor. Beslutningen er nu: **Motion hentes ind.** Kvaliteten af bevægelsen vejer tungere end bundlestørrelsen — "45 kB er helt okay hvis det bliver gjort ordentligt". Hvad der ændrede sig, og hvad der ikke gjorde:
+
+- **Målingen er uændret.** Prisen står ved magt som fakta, præcis som målt i afsnit d: 44,1–45,8 kB gzip for den fulde API, 5,3 kB for `m`-varianten. Det er beslutningen om at betale den pris, der er ny — ikke tallet.
+- **Det var kvalitetsvurderingen, der tippede beslutningen.** Prisargumentet i den oprindelige anbefaling (punkt 1) er stadig korrekt som regnestykke; ejeren har vurderet, at reference-kvaliteten i bevægelsen kræver biblioteket, og har accepteret prisen. Dermed er falsifikator 1 i afsnit h udløst: den visuelle efterprøvelse, som a.5 ikke kunne levere, faldt ud til Motions fordel.
+- **Husstandarden bevares, ikke erstattes.** Motion bruges med `useReducedMotion()`, så reduced-motion-værnet fra CSS-vejen gælder uændret — et acceptkrav i #304, ikke en option.
+
+I praksis: `motion` (v14.3.0) er installeret og bruges via `motion/react` — ikke `framer-motion`. #304 (login) er den første flade, der tager biblioteket i brug. Om #306 og #308 også bruger Motion eller fortsat CSS afgøres i de issues; beslutningen her handler om, at biblioteket nu er godkendt og tilgængeligt, ikke om at alle flader skal bruge det.
+
 ---
 
 ## g) Rækkefølge for de øvrige issues
@@ -290,7 +302,7 @@ Begrundelser, i prioriteret rækkefølge:
 3. **#308 — Navigation som flydende pille (project-one-mønstret).** Derefter, som ren CSS-pille + lille scroll-retnings-hook. Den nuværende `NavBar` er allerede en glas-pille; tilføjelsen er den flydende opførsel og entréen. Skal sammentænkes med `BottomTabBar` på mobil.
 4. **#307 — Lenis på landing + login.** Sidst, som separat beslutning: det er den eneste effekt, CSS ikke kan levere, den har sin egen målte pris (5,3 kB gzip), og den har de største samspils-risici (global scroll-optagelse vs. MapLibre, overlays, kort). Intet i #304/#306/#308 afhænger af den — den kan droppes uden at røre dem.
 
-Rækkefølgen er bevidst: de tre første kompilerer beslutningen ind i CSS-vokabularet og giver hver for sig synlig effekt. #307 er den eneste, der kan falsificere "ingen JS-bevægelsesafhængighed"-linjen — og den afgøres derfor for sig selv.
+Rækkefølgen er bevidst: de tre første kompilerer beslutningen ind i CSS-vokabularet og giver hver for sig synlig effekt. #307 er den eneste, der kan falsificere "ingen JS-bevægelsesafhængighed"-linjen — og den afgøres derfor for sig selv. (Opdateret 2026-10-15, #304: linjen er nu falsk — Motion er hentet ind til login-kortets entré, så #307 er ikke længere den eneste vej til en JS-bevægelsesafhængighed; se afsnit f.)
 
 ---
 
@@ -298,9 +310,11 @@ Rækkefølgen er bevidst: de tre første kompilerer beslutningen ind i CSS-vokab
 
 Runtime-efterprøvelsen i a.5 ændrer **ikke** konklusionen i afsnit f: målingerne bekræfter den — referencens pille-entré og pille-skjul er scale+opacity fra nul til fuld størrelse og baglæns. Også baggrundselementerne trækker i samme retning: deres målte bevægelse er en svajen med rotation + translate, og begge dele kan CSS-keyframes udtrykke direkte (`rotate` + `translate` i keyframes). [udledt] At beslutningsdelen er en passiv scroll-lytter uden bibliotek, der toggler en boolean, er konsistent med kildekode-læsningen i a.2, ikke målt i a.5. Falsifikator 1 indsnævres derfor til oplevelsen, som målingen ikke kan bedømme.
 
+**Opdatering 2026-10-15 (#304): falsifikator 1 er udløst, og beslutningen er ændret.** Målingerne nedenfor står uændret — de ændrede ikke konklusionen. Det gjorde oplevelses-vurderingen derimod: ejeren har accepteret Motion-prisen for at få referencekvaliteten (se afsnit f, "Opdatering"), og `motion` bruges derfor fra #304 og frem. Resten af dette afsnit står som den oprindelige falsifikator-analyse.
+
 Anbefalingen er forkert, hvis:
 
-1. **Den visuelle efterprøvelse siger, at CSS-entré/Flip/pille ikke rammer referencekvaliteten.** Runtime-målingen (a.5) [observeret-runtime] har taget den del, der kan måles: referencens pille-entré er samtidig scale+opacity fra 0 til fuld størrelse, og skjul er samme bevægelse baglæns — dvs. CSS-udtrykkeligt. Tilbage er *oplevelsen* (jank, blødhed, om det distraherer). Falder den igennem, er `m`-varianten (5,3 kB gzip) eller fuld Motion (44,1–45,8 kB) standardvalget.
+1. **Den visuelle efterprøvelse siger, at CSS-entré/Flip/pille ikke rammer referencekvaliteten.** (Udløst 2026-10-15 — beslutningen er ændret til Motion, se afsnit f.) Runtime-målingen (a.5) [observeret-runtime] har taget den del, der kan måles: referencens pille-entré er samtidig scale+opacity fra 0 til fuld størrelse, og skjul er samme bevægelse baglæns — dvs. CSS-udtrykkeligt. Tilbage er *oplevelsen* (jank, blødhed, om det distraherer). Falder den igennem, er `m`-varianten (5,3 kB gzip) eller fuld Motion (44,1–45,8 kB) standardvalget.
 2. **#308 viser sig at kræve delt-layout-morfe eller gestus-drevne overgange** som CSS + scroll-lytter ikke kan udtrykke. Så er Motion begrundet — og prisen er allerede målt.
 3. **Route-skift-entré/exit bliver et produktkrav.** CSS kan ikke animere unmount; det kræver `AnimatePresence`.
 4. **#307 (Lenis) bliver godkendt.** Så findes der alligevel et JS-bevægelseslag; genåbn samtidig vurderingen af, om Motion skal med i samme ombæring. (Lenis er dog scroll-smoothing, ikke et generelt animationsbibliotek — det alene gør ikke Motion gratis.)
