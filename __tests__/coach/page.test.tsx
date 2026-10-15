@@ -42,6 +42,9 @@ function findElement(node: unknown, predicate: (el: AnyElement) => boolean): Any
 const isNextWorkoutSection = (el: AnyElement) =>
   typeof el.type === "function" && el.type.name === "NextWorkoutSection";
 
+const isFlipText = (el: AnyElement) =>
+  typeof el.type === "function" && (el.type as { name?: string }).name === "FlipText";
+
 describe("CoachPage — issue #167", () => {
   beforeEach(() => {
     vi.mocked(computeCoachDashboard).mockClear();
@@ -61,6 +64,21 @@ describe("CoachPage — issue #167", () => {
 
     expect(computeCoachDashboard).toHaveBeenCalledTimes(1);
     expect(section?.props.dashboard).toBe(dashboard);
+  });
+});
+
+describe("CoachPage — issue #317 (flip title)", () => {
+  it("renders the Coach title through FlipText", async () => {
+    const tree = await CoachPage();
+
+    const title = findElement(tree, (el) => el.type === "h1");
+    expect(title).not.toBeNull();
+
+    // findElement only descends into element nodes, so a plain-text title would
+    // yield null here — the flip is the thing that makes the title reachable.
+    const flip = findElement(title?.props.children, isFlipText);
+    expect(flip).not.toBeNull();
+    expect(flip?.props.children).toBe("Coach");
   });
 });
 

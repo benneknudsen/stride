@@ -80,6 +80,59 @@ describe("FlipText — SSR determinism (#306)", () => {
   });
 });
 
+// Issue #317: the same component now carries every page-title flip, and a title
+// can be arbitrarily long (an activity name is user data). Two additions make
+// that safe: `\n` in the string becomes a real line break between the animated
+// lines, and `maxTotalDuration` caps delay + stagger + duration so the whole
+// flip finishes on schedule no matter how long the string is.
+describe("FlipText — bounded flip for long titles (#317)", () => {
+  const delayList = (html: string): number[] =>
+    [...html.matchAll(/--flip-delay:([\d.]+)s/g)].map((match) => Number(match[1]));
+
+  test("a cap bounds the last character's delay and the flip's end", () => {
+    const LONG = "Morgenløb langs åen i Silkeborg";
+    const html = renderToStaticMarkup(
+      <FlipText duration={1.2} maxTotalDuration={1.4}>
+        {LONG}
+      </FlipText>
+    );
+
+    const delays = delayList(html);
+    expect(delays).toHaveLength(LONG.replaceAll(" ", "").length);
+    // The cap leaves 1.4 − 1.2 = 0.2 s for the stagger; nothing starts later.
+    expect(Math.max(...delays)).toBeLessThanOrEqual(0.2);
+  });
+
+  test("without a cap the source's sine pacing is unchanged", () => {
+    // Regression pin for the login flip (#306): its stagger must keep the
+    // ported sine spread, which reaches ~0.54 s with the 2.2 s default.
+    const delays = delayList(renderToStaticMarkup(<FlipText>Log ind</FlipText>));
+    expect(Math.max(...delays)).toBeGreaterThan(0.5);
+  });
+
+  test("a newline renders a real line break and is not animated as a character", () => {
+    const { container } = render(<FlipText>{"Alle dine ture,\nsamlet ét sted."}</FlipText>);
+
+    const hidden = container.querySelector('[aria-hidden="true"]');
+    expect(hidden?.querySelectorAll("br")).toHaveLength(1);
+    // The newline itself must not sit inside a character span — every animated
+    // span is a single glyph.
+    expect(hidden?.textContent).not.toContain("\n");
+  });
+
+  test("the accessible name stays one string across the line break", () => {
+    render(
+      <h1>
+        <FlipText>{"Alle dine ture,\nsamlet ét sted."}</FlipText>
+      </h1>
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Alle dine ture, samlet ét sted." })
+    ).toBeTruthy();
+  });
+});
+
 describe("FlipText — reduced motion is CSS-gated (#306)", () => {
   const NO_PREFERENCE = "prefers-reduced-motion: no-preference";
 

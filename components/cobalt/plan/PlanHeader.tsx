@@ -1,4 +1,6 @@
 import { CountUpNumber } from "@/components/cobalt/CountUpNumber";
+import { FlipText } from "@/components/cobalt/FlipText";
+import { TITLE_FLIP } from "@/lib/cobalt/flip";
 
 // Plan header: red mono label ("TRÆNINGSPLAN · SILKEBORG HALVMARATHON") + a
 // two-line serif-italic headline, with two big count-up stats on the right
@@ -53,9 +55,9 @@ export function PlanHeader({
       <div className="[animation:cg-fade-up_0.7s_ease_both] motion-reduce:[animation:none]">
         <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red">{planTitle}</div>
         <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
-          {totalWeeks} uger.
-          <br />
-          {headline(goalLabel, distanceInline)}.
+          <FlipText {...TITLE_FLIP}>
+            {`${totalWeeks} uger.\n${headline(goalLabel, distanceInline)}.`}
+          </FlipText>
         </h1>
       </div>
 

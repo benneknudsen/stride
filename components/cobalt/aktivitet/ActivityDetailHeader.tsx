@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { FlipText } from "@/components/cobalt/FlipText";
 import { IntensityMeter } from "@/components/cobalt/IntensityMeter";
 import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import type { ActivityDetailView } from "@/lib/cobalt/aktivitet";
+import { TITLE_FLIP } from "@/lib/cobalt/flip";
 import { formatDanish } from "@/lib/cobalt/format";
 import { zoneBadgeText } from "@/lib/cobalt/zones";
 import { ROUTES } from "@/lib/routes";
@@ -38,7 +40,9 @@ export function ActivityDetailHeader({ view }: { view: ActivityDetailView }) {
                 className="hidden sm:flex"
               />
             ) : null}
-            <span className="min-w-0 break-words">{view.name}</span>
+            <span className="min-w-0 break-words">
+              <FlipText {...TITLE_FLIP}>{view.name}</FlipText>
+            </span>
           </h1>
 
           {view.zone ? (
