@@ -33,6 +33,17 @@ function setPrefersReducedMotion(matches: boolean) {
   });
 }
 
+// Lenis (issue #307) auto-resizes through ResizeObserver, which jsdom does not
+// ship either — a no-op stand-in keeps the provider's real mount path running.
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+);
+
 describe("LoginPage — CTA hierarchy and entrance (#304)", () => {
   beforeEach(() => {
     vi.clearAllMocks();

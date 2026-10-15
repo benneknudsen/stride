@@ -1,7 +1,10 @@
 /** @vitest-environment jsdom */
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type Lenis from "lenis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RaceDateDialog } from "@/components/cobalt/plan/RaceDateDialog";
+import { registerSmoothScroll, unregisterSmoothScroll } from "@/lib/smooth-scroll";
 
 /**
  * The race picker dialog (issue #99, #238) with the goal-entry fix from issue
@@ -165,5 +168,29 @@ describe("RaceDateDialog — goal entry (issue #239)", () => {
         expect.objectContaining({ raceDistanceKm: 21.0975, goalTimeSeconds: 6329 })
       )
     );
+  });
+
+  it("freezes smooth scroll while open and releases it on close (#307)", () => {
+    // Every close path — button, backdrop, Escape, unmount — goes through the
+    // parent flipping `open`, so the lock lives in an effect keyed on it. This
+    // pins the stop/start pair: stop once on open, start once on close.
+    const lenis = { stop: vi.fn(), start: vi.fn() } as unknown as Lenis;
+    registerSmoothScroll(lenis);
+    try {
+      const { rerender } = renderDialog();
+      expect(lenis.stop).toHaveBeenCalledTimes(1);
+      expect(lenis.start).not.toHaveBeenCalled();
+
+      rerender(<RaceDateDialog {...BASE_PROPS} open={false} />);
+      expect(lenis.start).toHaveBeenCalledTimes(1);
+    } finally {
+      unregisterSmoothScroll(lenis);
+    }
+  });
+
+  it("stays a no-op for smooth scroll when no Lenis instance is registered (#307)", () => {
+    // The dialog's home page (plan) never mounts the smooth-scroll provider;
+    // the lock helpers must not throw there.
+    expect(() => renderDialog()).not.toThrow();
   });
 });

@@ -12,6 +12,7 @@ import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
 import { Wordmark } from "@/components/cobalt/Wordmark";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
+import { lockSmoothScroll, unlockSmoothScroll } from "@/lib/smooth-scroll";
 import { cn } from "@/lib/utils";
 
 // Floating-pill navigation (#308). A full-width fixed strip that only centres
@@ -105,6 +106,18 @@ export function NavBar({
     },
     []
   );
+
+  // #307: an open menu freezes the smooth-scrolled page behind it. This is the
+  // account dropdown — Stride's only menu (mobile navigation is the always-on
+  // BottomTabBar, there is no hamburger). Pairing is effect-based, so the
+  // delayed close, a click-toggle close and an unmount all restart scrolling.
+  // No-op where Lenis is not running, which is everywhere the NavBar renders
+  // today: the landing and login own Lenis and carry no NavBar.
+  useEffect(() => {
+    if (!menuOpen) return;
+    lockSmoothScroll();
+    return () => unlockSmoothScroll();
+  }, [menuOpen]);
 
   // #308 scroll listener: accumulate downward travel past the thresholds to
   // hide, return on the first upward pixel (or back near the top). A client

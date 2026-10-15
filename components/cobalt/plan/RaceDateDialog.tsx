@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { saveRacePlan } from "@/actions/race";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { getCurrentPhase } from "@/lib/coach/engine";
+import { lockSmoothScroll, unlockSmoothScroll } from "@/lib/smooth-scroll";
 
 const DAY_MS = 86_400_000;
 /** Below this many weeks to race, the dialog warns that the plan starts mid-build. */
@@ -196,6 +197,17 @@ export function RaceDateDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // #307: a modal must freeze the smooth-scrolled page behind it, not merely
+  // paint over it — `body { overflow: hidden }` alone does not stop Lenis.
+  // Effect-based, so the stop/start pair holds on every close path (button,
+  // backdrop, Escape, unmount on navigation). No-op off the landing/login,
+  // where no Lenis instance is registered.
+  useEffect(() => {
+    if (!open) return;
+    lockSmoothScroll();
+    return () => unlockSmoothScroll();
+  }, [open]);
 
   // Advisory lines, recomputed as the user picks a date: a short-runway warning
   // under 6 weeks, and a note when the switch moves today's training phase (the

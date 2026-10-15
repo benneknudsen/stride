@@ -477,3 +477,30 @@
       var(--flip-iteration, infinite) ease;
   }
 }
+
+/* ── Lenis smooth scroll (components/providers/smooth-scroll-provider.tsx, #307) ──
+   The structural rules from lenis@1.3.27's own `dist/lenis.css`: Lenis adds its
+   classes to <html>, `.lenis-stopped` is what makes `lenis.stop()` freeze the
+   page, and `[data-lenis-prevent]` regions — the route map — get
+   `overscroll-behavior: contain` so a gesture inside them never chains back
+   into Lenis-driven scrolling. The library's `scroll-behavior: auto !important`
+   guard is deliberately omitted: nothing in Stride sets `scroll-behavior:
+   smooth`, so there is no conflict to guard, and Biome's noImportantStyles
+   warning would ride along for nothing. No colors, no transitions; anything
+   visual stays in the components. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
