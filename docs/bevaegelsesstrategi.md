@@ -21,7 +21,7 @@ De målte priser (minificeret bundle, gzip-9, React holdt udenfor — metode i a
 | Lenis | 5,3 kB gzip |
 | CSS-keyframes (anbefalingen) | 0 kB JavaScript |
 
-Reference-templaten Project One bruger **både** Motion og GSAP. Dens pille-navbar er implementeret med Motion — men selve effekten (en glas-pille der skalerer ind ved load og skjules ved scroll-ned) kan genskabes med CSS plus en lille scroll-lytter, uden bibliotek. ObsidianUI's `flip-text` (kandidat til #306) bruger slet ingen bevægelsesafhængighed — dens `dependencies` er kun `clsx` og `tailwind-merge` — og dens CSS følger ikke med i leverancen, så keyframes skal skrives lokalt uanset valg. ObsidianUI's `text-stream` kræver `gsap` (44,0 kB gzip), men Stride har ikke brug for den blok.
+Reference-templaten Project One bruger **både** Motion og GSAP. Dens pille-navbar er implementeret med Motion — men selve effekten (en pille der skalerer ind ved load og skjules ved scroll-ned) kan genskabes med CSS plus en lille scroll-lytter, uden bibliotek. ObsidianUI's `flip-text` (kandidat til #306) bruger slet ingen bevægelsesafhængighed — dens `dependencies` er kun `clsx` og `tailwind-merge` — og dens CSS følger ikke med i leverancen, så keyframes skal skrives lokalt uanset valg. ObsidianUI's `text-stream` kræver `gsap` (44,0 kB gzip), men Stride har ikke brug for den blok.
 
 Rækkefølge for det øvrige arbejde: **#304 → #306 → #308**, og **#307 (Lenis) sidst** som sin helt egen, separate beslutning.
 
@@ -29,14 +29,15 @@ Rækkefølge for det øvrige arbejde: **#304 → #306 → #308**, og **#307 (Len
 
 ## Sådan læser du dette dokument (ærlighedsgrænse)
 
-Dette dokument er skrevet uden browser og uden skærm. Alt nedenstående er læst statisk. Hver påstand er mærket med sin evidensform:
+Dette dokument er skrevet uden skærm. Det meste er læst statisk eller i kildekode; afsnit a.5 er undtagelsen — en runtime-måling i en rigtig browser. Hver påstand er mærket med sin evidensform:
 
 - **[observeret-HTML]** — læst i statiske filer fra siden (HTML, CSS og JS-chunks) hentet med `curl`. Ingen rendering, ingen interaktion.
 - **[observeret-kilde]** — læst i kildekoden i det repo, som projekt-one-siden selv linker til (klonet med `git clone --depth 1`). Stadig ikke set i en browser.
+- **[observeret-runtime]** — målt i en rigtig browser (headless Chromium via Playwright, samme browser som Strides e2e-suite bruger) mod den deployede side, 2026-10-15. Stærkere evidens end statisk læsning, men dækker kun det målte tidsvindue og de målte egenskaber.
 - **[udledt]** — en slutning fra det observerede. Kan være forkert.
 - **[ikke undersøgt]** — kræver visuel undersøgelse eller runtime-test. Der er ingen påstand at trække på her.
 
-Alt der handler om *hvordan* noget føles — fart, blødhed, parallakse, blur, om pillen reagerer pænt ved scroll, om en easing virker dyr eller billig — er **[ikke undersøgt]** i dette dokument. Det er et krav fra issue #305, ikke en formulering.
+Alt der handler om *hvordan* noget føles — fart, blødhed, parallakse, blur, om pillen reagerer pænt ved scroll, om en easing virker dyr eller billig — er fortsat **[ikke undersøgt]** i dette dokument. Runtime-målingen i a.5 ændrer ikke dette: den måler tal, ikke oplevelse. Det er et krav fra issue #305, ikke en formulering.
 
 ---
 
@@ -61,11 +62,11 @@ curl -sL --compressed "https://www.project-one.obsidianui.dev/_next/static/chunk
 
   Pillen er altså server-renderet i en **starttilstand hvor den er usynlig og skaleret til nul** (`opacity:0;transform:scaleX(0) scaleY(0)`). Noget skal animere den ind — men *hvad* og *hvordan* kan HTML'en alene ikke sige.
 
-- **[observeret-HTML]** Forespørgslen indeholder i alt 17 inline-starttilstande af denne type: 6× `opacity:0;transform:rotate(-90deg)`, 5× `opacity:0;transform:translateY(30px)`, 3× `opacity:0`, 1× `opacity:0;transform:translateY(20px) scale(0.96)`, 1× `opacity:0;transform:scaleX(0) scaleY(0)` (pillen), 1× `opacity:0;transform:scale(0)`. Desuden står én understregning med `style="width:0px"`, og et par elementer står med `style="opacity:1;transform:none"` — dvs. en blanding af "afventer animation" og "allerede animeret ind".
+- **[observeret-HTML]** Forespørgslen indeholder i alt 17 inline-starttilstande af denne type: 6× `opacity:0;transform:rotate(-90deg)`, 5× `opacity:0;transform:translateY(30px)`, 3× `opacity:0`, 1× `opacity:0;transform:translateY(20px) scale(0.96)`, 1× `opacity:0;transform:scaleX(0) scaleY(0)` (pillen), 1× `opacity:0;transform:scale(0)`. Desuden står to understregninger med `style="width:0px"`, og et par elementer står med `style="opacity:1;transform:none"` — dvs. en blanding af "afventer animation" og "allerede animeret ind".
 
 - **[observeret-HTML]** Bevægelsesbibliotekerne kan delvist genfindes i de udleverede scriptchunks (17 filer, 1,2 MB, hentet og greppet): ét chunk indeholder læsbare GSAP-markører (`gsapVersions`, `registerPlugin`, gentagne `matchMedia(`-kald). Der findes til gengæld **ingen** læsbare `framer-motion`/`motion-dom`-strenge i chunks — minificering fjerner typisk den slags navne — så Motion-brugen på den kørende side er bekræftet via kildekoden (a.2), ikke via bundlen.
 
-- **[observeret-HTML]** De to CSS-chunks indeholder kun disse `@keyframes`: `enter`, `exit`, `fadeIn`, `ping`, `pulse`, `slideUp`, `spin` (Tailwind-/tw-animate-navne). Der findes **ingen** `prefers-reduced-motion`-media query i nogen af de to CSS-filer (søgt med `rg -c 'prefers-reduced-motion'` — nul træf).
+- **[observeret-HTML]** De to CSS-chunks indeholder kun disse `@keyframes`: `enter`, `exit`, `fadeIn`, `ping`, `pulse`, `slideUp`, `spin` (Tailwind-/tw-animate-navne). Der er **nul** træf af `prefers-reduced-motion` i de to hentede CSS-filer (søgt med `rg -c 'prefers-reduced-motion'`), men målt i browseren på tværs af **alle** stylesheets findes der **1** regel (a.5) — nul-træffet gælder altså kun de to chunks.
 
 ### a.2 Observeret (kildekode i det linkede repo)
 
@@ -80,14 +81,80 @@ Siden linker selv til sit kilderepo (`https://github.com/Atharvsinh-codez/Projec
 ### a.3 Udledt
 
 - **[udledt]** Den deployede side kører sandsynligvis tæt på repoets `main`, fordi starttilstandene i den server-renderede HTML matcher `navbar.tsx`'s `initial`-props eksakt (inkl. `scaleX(0) scaleY(0)`). Den præcise revision er ikke verificeret.
-- **[udledt]** Pille-entréen på den kørende side har omkring 0,8 s varighed og en eksponentielt aftagende kurve (`cubic-bezier(0.23, 1, 0.32, 1)`), og pillen skjuler sig efter ca. 120 px akkumuleret scroll-ned. Det er *udledt af kilden*, ikke observeret. Hvordan det føles, er ikke undersøgt.
+- **[udledt]** Pille-entréen på den kørende side har omkring 0,8 s varighed og en eksponentielt aftagende kurve (`cubic-bezier(0.23, 1, 0.32, 1)`), og pillen skjuler sig efter ca. 120 px akkumuleret scroll-ned. Det er *udledt af kilden*, ikke observeret — men runtime-målingen (a.5) [observeret-runtime] er konsistent med billedet: 0,496 ved 300 ms, 0,987 ved 600 ms og fuld ved 1000 ms, og skjul målt ved 900 px scroll-ned. Hvordan det føles, er fortsat ikke undersøgt.
 
-### a.4 Ikke undersøgt — kræver visuel undersøgelse
+### a.4 Ikke undersøgt — hvad der fortsat mangler
 
-- **[ikke undersøgt]** Hvordan entrance-choreografien faktisk tager sig ud: timing-følelse, stagger-rækkefølge, om noget flasher eller hopper ved load.
-- **[ikke undersøgt]** Parallakse, blur-reaktioner, scroll-effekter ud over pillens show/hide — om de findes *på den kørende side* og hvordan de opfører sig. Kildekoden antyder mest entré-animationer og ikke meget parallakse (ingen `useScroll`/`useTransform` fundet i hero/FAQ/loops — men det er en negativ søgning i kilden, ikke en observation af siden).
+Runtime-målingen i a.5 har flyttet pillens entré, dens skjul/vis ved scroll, baggrundsdriften og mobil-layoutet fra "ikke undersøgt" til målt. Tilbage står:
+
+- **[ikke undersøgt]** Hvordan bevægelsen *opleves*: jank, blødhed, om entréen og pillen er distraherende. Tallene i a.5 er tal, ikke en bedømmelse. Det gælder også den præcise stagger-rækkefølge og om noget flasher eller hopper ved load.
+- **[ikke undersøgt]** Om der ud over pillens show/hide findes scroll-koblet bevægelse (parallakse) på siden. Målingen dækkede pillen og de fire tidsdrevne baggrundelementer — ikke om baggrundselementerne selv reagerer på scroll.
 - **[ikke undersøgt]** Om pillen opleves som hjælpsom eller distraherende på Strides sider, og hvordan den bør opføre sig på mobil hvor Stride allerede har `BottomTabBar`.
-- **[ikke undersøgt]** Ydeevne på rigtige enheder (jank, paint, batteri) — hverken for Motion eller CSS.
+- **[ikke undersøgt]** Ydeevne på rigtige telefoner (jank, paint, batteri) — hverken for Motion eller CSS.
+- **[ikke undersøgt]** Om den deployede revision, som a.5 er målt mod, matcher repoets `main` (jf. a.3).
+
+### a.5 Observeret i browser (runtime-måling)
+
+**Alt i dette afsnit er [observeret-runtime].** Målt 2026-10-15 mod den kørende deployede side med headless Chromium via Playwright (samme browser som Strides e2e-suite bruger, hentet fra repoets `node_modules`). Metode: tre scratch-probes kørt fra `/tmp/po`, viewport 1440×900, `waitUntil: "load"`, sampling ved t = 120/300/600/1000/1600/2600 ms af computed style (opacity, scale, størrelse, position) og antal aktive animationer; derefter 900 px scroll ned og 400 px op. En tredje probe samplede de fire baggrundselementer tre gange over 2,2 s (første sample umiddelbart efter `load`, derefter efter +0,9 s og +2,2 s) for at afgøre, om filter og transform er konstante — det er de ikke, og derfor viser tabellen intervaller. Repoet blev ikke ændret under målingen. Sidefejl i konsollen: 0.
+
+#### Nav-pillens entré (opacity + scale, begge samtidigt)
+
+| t (ms) | opacity | scale | bredde (px) | højde (px) | top (px) | kørende animationer |
+| --- | --- | --- | --- | --- | --- | --- |
+| 120 | 0 | 0,0 | 0 | 0 | 50 | 27 |
+| 300 | 0,496 | 0,497 | 354,2 | 34,8 | 32,6 | 27 |
+| 600 | 0,987 | 0,989 | 704,3 | 69,2 | 15,4 | 16 |
+| 1000 | 1 | none | 712,3 | 70 | 15 | 9 |
+| 1600 | 1 | none | 712,3 | 70 | 15 | 7 |
+| 2600 | 1 | none | 712,3 | 70 | 15 | 6 |
+
+- Pillen vokser fra **nul** (scale 0 + opacity 0) til **712×70 px** på omkring 600–1000 ms og ender centreret med `top: 15 px`. Det er ikke en fade — størrelsen animeres.
+- `border-radius` er `rounded-full` (målt som 3,36e+07 px = clampet). Baggrunden er **opak sort** (`rgb(0, 0, 0)`), og `backdrop-filter` er **`none`** — pillen er altså **ikke** glas/blur, den er massiv sort. Det er en relevant detalje her, fordi Strides egen nav er glas-pille (`cg-glass`).
+- Elementer med inline `opacity: 0` falder fra 18 (t=120 ms) til 0 (t=2600 ms) — indholdet kommer ind trinvist.
+
+#### Skjul/vis ved scroll
+
+| Handling | opacity | scale | top (px) | scrollY |
+| --- | --- | --- | --- | --- |
+| efter 900 px ned | 0,0014 | 0,0011 | 50,0 | 900 |
+| efter 400 px op | 0,9957 | 0,9957 | 15,1 | 500 |
+
+Skjul er altså **samme bevægelse som entréen, kørt baglæns** (scale+opacity mod nul, og pillen flytter tilbage til `top: 50`), ikke en translate-væk. At en scroll-lytter toggler en boolean, og at animationen kører i JS, er ikke målt her, men konsistent med kildekode-læsningen i a.2. [udledt]
+
+#### De svævende baggrundselementer (4 stk.)
+
+Alle fire er `<img>`, absolut positioneret, med Tailwind-klasser og præcis **én** kørende animation hver, som stadig kører efter 2,6 s (dvs. uendelig drift):
+
+| # | klasser (forkortet) | målt størrelse | position | varighed | easing | rotation (z, grader) | translate (x, y) px |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `absolute h-[60px] md:h-[120px] top-[15%] left-[5%] md:top-[18%] md:left-[12%]` | 144×150 px | top 126, left 167 | 4000 ms | ease-in-out | 13,54 → 20,22 → 20,59 | (0,9, −2,6) → (7,6, −21,3) → (8,0, −22,3) |
+| 2 | `absolute h-[50px] md:h-[100px] top-[10%] right-[5%] md:top-[8%] md:right-[14%]` | 126×132 px | top 25, left 1115 | 5000 ms | ease-in-out | 17,20 → 22,11 → 26,57 | (−0,7, −1,9) → (−6,6, −17,6) → (−11,9, −31,9) |
+| 3 | `absolute h-[65px] md:h-[130px] top-[55%] left-[2%] md:top-[62%] md:left-[6%]` | 170×176 px | top 500, left 80 | 4500 ms | ease-in-out | 21,34 → 27,10 → 30,06 | (1,0, −2,8) → (9,1, −24,6) → (13,2, −35,9) |
+| 4 | `absolute h-[70px] md:h-[135px] top-[60%] right-[2%] md:top-[70%] md:right-[3%]` | 177×185 px | top 564, left 1225 | 6000 ms | ease-in-out | 23,02 → 26,60 → 32,30 | (−0,6, −1,7) → (−6,4, −16,8) → (−15,5, −40,7) |
+
+Værdierne er tre samples pr. element (første sample umiddelbart efter `load`, derefter +0,9 s og +2,2 s). Alle fire har **scale 0,98583** i alle tre samples og en fast 3D-tilt (matrix3d-z-komponenter 0,167731 og 0,258819 — sidstnævnte er sin 15°). Rotationen er z-rotation i grader, translate er i px (x, y). Bemærk retningen: element 1 og 3 bevæger sig mod **højre** (positiv x), element 2 og 4 mod **venstre** — det er spejlet.
+
+Filtrene består af **to drop-shadow-lag pr. element**, og både alpha og blur **ændrer sig over tid** — de følger elementets bevægelse. Et enkelt tal kan derfor ikke læses som en fast værdi; tabellen nedenfor viser første og sidste sample.
+
+**De to skyggelag pr. element** ([observeret-runtime], målt ved første og sidste sample):
+
+| # | lag 1 (først) | lag 1 (sidst) | lag 2 (først) | lag 2 (sidst) |
+| --- | --- | --- | --- | --- |
+| 1 | `rgba(0,0,0,0.455) 0px 20,64px 35,86px` | `rgba(0,0,0,0.498) 0px 27,48px 44,98px` | `rgba(0,0,0,0.306) 0px 8,30px 15,64px` | `rgba(0,0,0,0.35) 0px 11,49px 22,48px` |
+| 2 | `rgba(0,0,0,0.455) 0px 18,33px 30,68px` | `rgba(0,0,0,0.54) 0px 29,03px 52,99px` | `rgba(0,0,0,0.325) 0px 10,14px 20,27px` | `rgba(0,0,0,0.41) 0px 14,60px 29,20px` |
+| 3 | `rgba(0,0,0,0.506) 0px 22,44px 40,84px` | `rgba(0,0,0,0.557) 0px 31,41px 58,09px` | `rgba(0,0,0,0.353) 0px 12,20px 25,34px` | `rgba(0,0,0,0.424) 0px 16,34px 32,24px` |
+| 4 | `rgba(0,0,0,0.52) 0px 24,30px 45,47px` | `rgba(0,0,0,0.584) 0px 36,51px 64,55px` | `rgba(0,0,0,0.38) 0px 15,13px 30,19px` | `rgba(0,0,0,0.46) 0px 20,47px 37,82px` |
+
+Mønstret er altså: **fire store, bløde skygger** (`drop-shadow`, ikke blur), og bevægelsen er en **svajen** — rotation + translate samtidigt, ikke translate alene. Svajen er den primære bevægelse, ikke en bibemærkning. Fire forskellige varigheder (4,0/4,5/5,0/6,0 s) med samme easing — det er den "levende baggrund". Ingen af dem er CSS-keyframes; de kører alle som JS-animationer, og derfor er der 6 JS-animationer i alt i ro (4 baggrund + pillen + én mere).
+
+#### Mobil (390×844)
+
+- Nav-pillen måler **358,8 × 62 px**, placeret `top: 19`, `left: 15,6` — dvs. ~92 % bredde med ca. 16 px luft i siderne, stadig en pille.
+- `document.scrollWidth` = 390 = viewport → **ingen horisontal overflow**.
+
+#### Korrektion af en tidligere påstand
+
+Afsnit a.1's nul-træf for `prefers-reduced-motion` gælder kun de to hentede CSS-chunks. Målt i browseren findes der **1** regel med `prefers-reduced-motion` på tværs af alle stylesheets. Konklusionen kan altså stå, nu afgrænset og målt: projekt-one håndterer ikke reduceret bevægelse systematisk, men siden er ikke helt uden en regel. [observeret-runtime]
 
 ---
 
@@ -165,7 +232,7 @@ To ting, der er værd at vide om metoden:
 
 - *Baggrundsdrift*: bæres allerede i dag (`cg-drift1-3` + `BackgroundBlobs`).
 - *Entré*: `cg-fade-up` findes og bruges 25 steder. Stagger fås med `animation-delay` pr. element; den eksisterende `started`-flag-model (`PreviewShowcase`) dækker de tilfælde hvor koreografien skal vente et beat efter mount.
-- *Pille-navbar*: udseendet og entréen kan bygges i CSS (skalér/opacity-transition på klasse-skift, genbrug af `cg-glass`). **Den ærlige begrænsning:** show/hide ved scroll *retning* kræver JS-state. Men det behov er præcis hvad Project One løser med en passiv scroll-lytter og en boolean — ikke med et animationsbibliotek. I Stride ville det være en lille client-hook (`useScrollDirection`) der toggler en klasse; motionen forbliver CSS.
+- *Pille-navbar*: udseendet og entréen kan bygges i CSS (skalér/opacity-transition på klasse-skift, genbrug af `cg-glass`). Runtime-målingen (a.5, [observeret-runtime]) **bekræfter** det: referencens entré er scale+opacity samtidigt fra nul til fuld størrelse, og skjul er samme bevægelse baglæns — der er intet i selve effekten, CSS ikke kan udtrykke. **Den ærlige begrænsning:** show/hide ved scroll *retning* kræver JS-state. Men det behov er præcis hvad Project One løser — konsistent med a.2: en passiv scroll-lytter og en boolean. I Stride ville det være en lille client-hook (`useScrollDirection`) der toggler en klasse; motionen forbliver CSS. (Referencens pille er i øvrigt målt som opak sort, ikke glas — Stride beholder derfor sit eget `cg-glass`-udseende og kopierer kun adfærden.)
 
 **CSP (`lib/csp.ts`):** ingen ændring nødvendig. Ingen nye origins, ingen inline-scripts, intet `eval`.
 
@@ -229,9 +296,11 @@ Rækkefølgen er bevidst: de tre første kompilerer beslutningen ind i CSS-vokab
 
 ## h) Falsifikator: hvad ville ændre anbefalingen
 
+Runtime-efterprøvelsen i a.5 ændrer **ikke** konklusionen i afsnit f: målingerne bekræfter den — referencens pille-entré og pille-skjul er scale+opacity fra nul til fuld størrelse og baglæns. Også baggrundselementerne trækker i samme retning: deres målte bevægelse er en svajen med rotation + translate, og begge dele kan CSS-keyframes udtrykke direkte (`rotate` + `translate` i keyframes). [udledt] At beslutningsdelen er en passiv scroll-lytter uden bibliotek, der toggler en boolean, er konsistent med kildekode-læsningen i a.2, ikke målt i a.5. Falsifikator 1 indsnævres derfor til oplevelsen, som målingen ikke kan bedømme.
+
 Anbefalingen er forkert, hvis:
 
-1. **Den visuelle efterprøvelse siger, at CSS-entré/Flip/pille ikke rammer referencekvaliteten.** Den afgørende test er visuel, og dette dokument kan den ikke tage (ingen browser brugt). Falder kvaliteten igennem på CSS, er `m`-varianten (5,3 kB gzip) eller fuld Motion (44,1–45,8 kB) standardvalget.
+1. **Den visuelle efterprøvelse siger, at CSS-entré/Flip/pille ikke rammer referencekvaliteten.** Runtime-målingen (a.5) [observeret-runtime] har taget den del, der kan måles: referencens pille-entré er samtidig scale+opacity fra 0 til fuld størrelse, og skjul er samme bevægelse baglæns — dvs. CSS-udtrykkeligt. Tilbage er *oplevelsen* (jank, blødhed, om det distraherer). Falder den igennem, er `m`-varianten (5,3 kB gzip) eller fuld Motion (44,1–45,8 kB) standardvalget.
 2. **#308 viser sig at kræve delt-layout-morfe eller gestus-drevne overgange** som CSS + scroll-lytter ikke kan udtrykke. Så er Motion begrundet — og prisen er allerede målt.
 3. **Route-skift-entré/exit bliver et produktkrav.** CSS kan ikke animere unmount; det kræver `AnimatePresence`.
 4. **#307 (Lenis) bliver godkendt.** Så findes der alligevel et JS-bevægelseslag; genåbn samtidig vurderingen af, om Motion skal med i samme ombæring. (Lenis er dog scroll-smoothing, ikke et generelt animationsbibliotek — det alene gør ikke Motion gratis.)
@@ -248,7 +317,8 @@ Anbefalingen er forkert, hvis:
 - Project One (kilderepo, linket fra siden selv): `https://github.com/Atharvsinh-codez/Project-1` — `git clone --depth 1`; læst: `components/landing-page/navbar/navbar.tsx`, `components/landing-page/hero/hero-text.tsx`, `package.json`.
 - ObsidianUI: `https://obsidianui.dev/llms.txt`; registry-payloads `https://www.obsidianui.dev/r/flip-text.json` og `https://www.obsidianui.dev/r/text-stream.json`; dokumentation `https://www.obsidianui.dev/markdown/docs/flip-text.md`.
 - npm-tarballs (målt): `motion@14.3.0`, `framer-motion@14.3.0`, `motion-dom@14.3.0`, `motion-utils@14.1.1`, `tslib@2.8.1`, `gsap@3.15.0`, `lenis@1.3.27`, hentet med `npm pack` til `/tmp/opencode/packs`; bundlet med esbuild 0.28.2 (via `npx`, uden for repoet) og gzippet med Python `gzip -9`.
+- Runtime-måling (a.5): to scratch-probes i `/tmp/po` med Playwright + Chromium fra repoets `node_modules` mod den deployede side, 2026-10-15; repoet blev ikke ændret.
 
 **Verificeret i Stride-repoet (denne branch):** `app/globals.css`, `components/cobalt/BackgroundBlobs.tsx`, `components/cobalt/velkommen/PreviewShowcase.tsx`, `app/(auth)/login/page.tsx`, `app/(auth)/layout.tsx`, `components/cobalt/NavBar.tsx`, `package.json`, `lib/csp.ts`.
 
-**Uafklaret / ikke undersøgt:** hvordan Project Ones bevægelse *opleves* (kræver visuel undersøgelse); om den deployede revision er identisk med repoets `main`; ObsidianUI's generelle Motion-brug ud over de to læste blokke; Lenis' reduced-motion-håndtering i kilden; Turbopack-chunk-effekten i Stride; runtime-ydeevne på rigtige enheder.
+**Uafklaret / ikke undersøgt:** hvordan Project Ones bevægelse *opleves* — jank, blødhed, om den distraherer (timing og størrelser er nu målt i a.5, bedømmelsen mangler); om den deployede revision (som a.5 er målt mod) er identisk med repoets `main`; om der ud over pillens show/hide findes scroll-koblet bevægelse; ObsidianUI's generelle Motion-brug ud over de to læste blokke; Lenis' reduced-motion-håndtering i kilden; Turbopack-chunk-effekten i Stride; runtime-ydeevne på rigtige telefoner.
