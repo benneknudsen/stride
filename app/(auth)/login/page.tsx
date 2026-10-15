@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import { FlipText } from "@/components/cobalt/FlipText";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
 import { LoginLink } from "@/components/cobalt/velkommen/LoginLink";
 import { DEMO_HOME_ROUTE } from "@/lib/routes";
@@ -74,7 +75,7 @@ export default function LoginPage() {
             className="mx-auto mb-5"
           />
           <h1 className="mb-1 font-cg-sans text-[22px] font-bold leading-tight tracking-tight text-cobalt">
-            Log ind
+            <FlipText>Log ind</FlipText>
           </h1>
         </motion.div>
         <motion.p variants={itemVariants} className="mb-6 text-[14px] leading-relaxed text-ink">

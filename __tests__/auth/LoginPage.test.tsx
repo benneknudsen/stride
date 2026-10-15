@@ -64,6 +64,19 @@ describe("LoginPage — CTA hierarchy and entrance (#304)", () => {
     expect(focusables[1]).toBe(screen.getByRole("link", { name: /Udforsk demoen/i }));
   });
 
+  test("the h1 title is the FlipText component (#306)", () => {
+    render(<LoginPage />);
+
+    // The heading keeps its accessible one-string name while the visible copy
+    // is the animated, aria-hidden FlipText markup.
+    const heading = screen.getByRole("heading", { level: 1, name: "Log ind" });
+    const chars = heading.querySelectorAll("[data-char]");
+    expect(chars.length).toBe("Log ind".replace(" ", "").length);
+    for (const char of chars) {
+      expect(char.closest('[aria-hidden="true"]')).not.toBeNull();
+    }
+  });
+
   test("the card starts hidden and ends visible", async () => {
     render(<LoginPage />);
 
