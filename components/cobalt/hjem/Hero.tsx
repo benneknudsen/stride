@@ -1,4 +1,6 @@
 import { CountUpNumber } from "@/components/cobalt/CountUpNumber";
+import { FlipText } from "@/components/cobalt/FlipText";
+import { TITLE_FLIP } from "@/lib/cobalt/flip";
 
 // Hero band: red mono week-label + two-line serif-italic greeting on the left,
 // the giant weekly-km count-up on the right. Sits on the silver paper (no glass)
@@ -33,9 +35,9 @@ export function Hero({
           Uge {weekNumber} · {planName}
         </div>
         <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
-          {userName ? `${greeting}, ${userName}.` : `${greeting}.`}
-          <br />
-          {note}
+          <FlipText {...TITLE_FLIP}>
+            {`${userName ? `${greeting}, ${userName}` : greeting}.\n${note}`}
+          </FlipText>
         </h1>
       </div>
       <CountUpNumber

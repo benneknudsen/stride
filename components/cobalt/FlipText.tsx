@@ -17,12 +17,21 @@
 //   browser engine.
 // - The wrapper is a <span>, not the source's <div>, so it can nest in a
 //   heading, and the unused default export is dropped (repo convention).
+//
+// Added for #317 (the component now carries every page title):
+// - A `\n` in the string renders a real <br> between the animated lines, so a
+//   two-line headline flips as one title and still reads as one string.
+// - `maxTotalDuration` caps `delay + stagger + duration` — the moment the last
+//   character has finished — so a title that is user data (an activity name)
+//   cannot stretch the flip. `TITLE_FLIP` (lib/cobalt/flip.ts — a plain module,
+//   readable from server components too) is the preset every header uses:
+//   one-shot, fast, capped.
 
-import { type CSSProperties, useMemo } from "react";
+import { type CSSProperties, Fragment, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
 interface FlipTextProps {
-  /** The text to animate — split into words, then characters. */
+  /** The text to animate — split into lines on `\n`, then words, then characters. */
   children: string;
   /** Additional classes for the wrapper. */
   className?: string;
@@ -36,6 +45,25 @@ interface FlipTextProps {
   separator?: string;
   /** Animate every character together instead of staggering. Default false. */
   together?: boolean;
+  /**
+   * Upper bound, in seconds, on `delay + stagger spread + duration` — the
+   * moment the last character has finished flipping. Without it the ported
+   * sine pacing is unbounded by contract; with it a long title can never take
+   * longer than this (#317).
+   */
+  maxTotalDuration?: number;
+}
+
+/**
+ * How much later the last character may start, relative to the first (#317).
+ * The source's pacing spreads a sine curve over the *normalised* character
+ * index, so the spread never grows with length; `maxTotalDuration` clamps it
+ * further so the last character finishes inside the budget.
+ */
+function staggerSpread(duration: number, delay: number, maxTotalDuration?: number): number {
+  const base = duration * 0.25;
+  if (maxTotalDuration === undefined) return base;
+  return Math.max(0, Math.min(base, maxTotalDuration - delay - duration));
 }
 
 export function FlipText({
@@ -46,59 +74,73 @@ export function FlipText({
   loop = true,
   separator = " ",
   together = false,
+  maxTotalDuration,
 }: FlipTextProps) {
-  const words = useMemo(() => children.split(separator), [children, separator]);
-  const totalChars = children.length;
-
-  function charIndex(wordIndex: number, indexInWord: number): number {
-    let index = 0;
-    for (let i = 0; i < wordIndex; i++) {
-      index += words[i].length + separator.length;
-    }
-    return index + indexInWord;
-  }
+  // Lines → words, with each word's start position in the running character
+  // index (a space occupies a slot like a character; a line break animates
+  // nothing, so it does not).
+  const parsedLines = useMemo(() => {
+    let cursor = 0;
+    return children.split("\n").map((line) =>
+      line.split(separator).map((word) => {
+        const start = cursor;
+        cursor += word.length + separator.length;
+        return { word, start };
+      })
+    );
+  }, [children, separator]);
+  const totalChars = children.replaceAll("\n", "").length;
+  const spread = staggerSpread(duration, delay, maxTotalDuration);
 
   return (
     <span className={cn("inline-block leading-none", className)} style={{ perspective: "1000px" }}>
       <span aria-hidden="true">
-        {words.map((word, wordIndex) => (
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: words come from a static string and never reorder
-            key={`${wordIndex}-${word}`}
-            className="inline-block whitespace-nowrap"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            {word.split("").map((char, indexInWord) => {
-              const normalizedIndex = charIndex(wordIndex, indexInWord) / totalChars;
-              const sine = Math.sin(normalizedIndex * (Math.PI / 2));
-              const charDelay = together ? delay : sine * (duration * 0.25) + delay;
+        {parsedLines.map((words, lineIndex) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: lines come from a static string and never reorder
+          <Fragment key={lineIndex}>
+            {lineIndex > 0 && <br />}
+            {words.map(({ word, start }, wordIndex) => (
+              <span
+                key={`${start}-${word}`}
+                className="inline-block"
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                {word.split("").map((char, indexInWord) => {
+                  const normalizedIndex = (start + indexInWord) / totalChars;
+                  const sine = Math.sin(normalizedIndex * (Math.PI / 2));
+                  const charDelay = together ? delay : sine * spread + delay;
 
-              return (
-                <span
-                  // biome-ignore lint/suspicious/noArrayIndexKey: characters come from a static string and never reorder
-                  key={indexInWord}
-                  className="cg-flip-char relative inline-block"
-                  data-char={char}
-                  style={
-                    {
-                      "--flip-duration": `${duration}s`,
-                      "--flip-delay": `${charDelay.toFixed(2)}s`,
-                      "--flip-iteration": loop ? "infinite" : "1",
-                      transformStyle: "preserve-3d",
-                    } as CSSProperties
-                  }
-                >
-                  {char}
-                </span>
-              );
-            })}
-            {wordIndex < words.length - 1 && (
-              <span className="inline-block">{separator === " " ? "\u00a0" : separator}</span>
-            )}
-          </span>
+                  return (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: characters come from a static string and never reorder
+                      key={indexInWord}
+                      className="cg-flip-char relative inline-block"
+                      data-char={char}
+                      style={
+                        {
+                          "--flip-duration": `${duration}s`,
+                          "--flip-delay": `${charDelay.toFixed(2)}s`,
+                          "--flip-iteration": loop ? "infinite" : "1",
+                          transformStyle: "preserve-3d",
+                        } as CSSProperties
+                      }
+                    >
+                      {char}
+                    </span>
+                  );
+                })}
+                {wordIndex < words.length - 1 && (
+                  <span className="inline-block">{separator === " " ? "\u00a0" : separator}</span>
+                )}
+              </span>
+            ))}
+          </Fragment>
         ))}
       </span>
-      <span className="sr-only">{children}</span>
+      {/* The line break becomes a space, not a literal `\n`: engines differ on
+          whether they collapse whitespace while flattening the accessible
+          name, and "one string" should read the same everywhere (#317). */}
+      <span className="sr-only">{children.replaceAll("\n", " ")}</span>
     </span>
   );
 }

@@ -8,6 +8,7 @@ import { VolumeTrendChart } from "@/components/cobalt/coach-dashboard/VolumeTren
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import { WorkoutTraceCard } from "@/components/cobalt/coach-dashboard/WorkoutTraceCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
+import { FlipText } from "@/components/cobalt/FlipText";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { RunnerLoader } from "@/components/cobalt/RunnerLoader";
 import { SectionHeading } from "@/components/cobalt/SectionHeading";
@@ -17,6 +18,7 @@ import { computeCoachDashboard, getProgressionCharts } from "@/lib/coach/dashboa
 import type { CoachFeedActivityInput } from "@/lib/coach/feed";
 import { buildRunReviewContext } from "@/lib/coach/run-review";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
+import { TITLE_FLIP } from "@/lib/cobalt/flip";
 import { getDashboardActivities, getRacePlan } from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
 
@@ -198,7 +200,9 @@ export default async function CoachPage() {
     <main className="flex flex-col gap-8 pt-4 pb-4">
       <header className="flex flex-col gap-1">
         <span className="cg-label text-[11px] tracking-[0.2em] text-red">Træner</span>
-        <h1 className="m-0 font-cg-display text-[32px] leading-none text-cobalt">Coach</h1>
+        <h1 className="m-0 font-cg-display text-[32px] leading-none text-cobalt">
+          <FlipText {...TITLE_FLIP}>Coach</FlipText>
+        </h1>
         <p className="m-0 text-[13.5px] text-ink">
           Dit næste pas, din progression og din træning — samlet på ét sted.
         </p>

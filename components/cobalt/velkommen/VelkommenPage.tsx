@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { FlipText } from "@/components/cobalt/FlipText";
 import { GlassCard } from "@/components/cobalt/GlassCard";
 import { Logo } from "@/components/cobalt/Logo";
 import { RunnerGlyph } from "@/components/cobalt/RunnerGlyph";
@@ -8,6 +9,7 @@ import { CoachTeaser } from "@/components/cobalt/velkommen/CoachTeaser";
 import { LoginLink } from "@/components/cobalt/velkommen/LoginLink";
 import { PreviewShowcase } from "@/components/cobalt/velkommen/PreviewShowcase";
 import { Wordmark } from "@/components/cobalt/Wordmark";
+import { TITLE_FLIP } from "@/lib/cobalt/flip";
 import { buildHomeView } from "@/lib/cobalt/hjem";
 import { DEMO_HOME_ROUTE } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -51,9 +53,7 @@ export function VelkommenPage() {
         </Reveal>
         <Reveal delay={0.08}>
           <h1 className="mx-auto m-0 max-w-[820px] font-cg-serif text-[44px] italic leading-[1.04] tracking-[-0.015em] text-cobalt sm:text-[60px] md:text-[68px]">
-            Al din løbedata.
-            <br />
-            Én coach, der forstår den.
+            <FlipText {...TITLE_FLIP}>{"Al din løbedata.\nÉn coach, der forstår den."}</FlipText>
           </h1>
         </Reveal>
         <Reveal delay={0.16}>
