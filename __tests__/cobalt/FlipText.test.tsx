@@ -1,10 +1,11 @@
 /** @vitest-environment jsdom */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { FlipText } from "@/components/cobalt/FlipText";
+import { TITLE_FLIP } from "@/lib/cobalt/flip";
 
 // Issue #306: the login heading adopts ObsidianUI's Flip Text (MIT) as a local
 // component. The registry source has no reduced-motion handling and no screen
@@ -17,6 +18,9 @@ import { FlipText } from "@/components/cobalt/FlipText";
 
 const ROOT = join(__dirname, "..", "..");
 const GLOBALS = readFileSync(join(ROOT, "app", "globals.css"), "utf8");
+
+const delayList = (html: string): number[] =>
+  [...html.matchAll(/--flip-delay:([\d.]+)s/g)].map((match) => Number(match[1]));
 
 /** Extract the body of an `@media (…)` block, brace-matched. */
 function mediaBody(css: string, query: string): string {
@@ -86,9 +90,6 @@ describe("FlipText — SSR determinism (#306)", () => {
 // lines, and `maxTotalDuration` caps delay + stagger + duration so the whole
 // flip finishes on schedule no matter how long the string is.
 describe("FlipText — bounded flip for long titles (#317)", () => {
-  const delayList = (html: string): number[] =>
-    [...html.matchAll(/--flip-delay:([\d.]+)s/g)].map((match) => Number(match[1]));
-
   test("a cap bounds the last character's delay and the flip's end", () => {
     const LONG = "Morgenløb langs åen i Silkeborg";
     const html = renderToStaticMarkup(
@@ -130,6 +131,107 @@ describe("FlipText — bounded flip for long titles (#317)", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Alle dine ture, samlet ét sted." })
     ).toBeTruthy();
+  });
+});
+
+// Issue #323: the 1.2 s preset was too fast to register ("man når næsten ikke at
+// se det"). The tempo is now 2.2 s per character cycle, and the cap arithmetic
+// in `staggerSpread` is re-derived for it: spread = min(duration × 0.25, cap −
+// delay − duration), floored at zero, so no character delay can go negative and
+// the run still ends inside the cap.
+describe("FlipText — the entrance tempo reads (#323)", () => {
+  test("the preset is slower, readable early in the run, and inside its cap", () => {
+    // A 40-character title — the length the #317 comment budgeted for.
+    const LONG = "Morgenløb langs åen i Silkeborg bymidten";
+    expect(LONG).toHaveLength(40);
+    const html = renderToStaticMarkup(<FlipText {...TITLE_FLIP}>{LONG}</FlipText>);
+    const delays = delayList(html);
+
+    // The issue's suggested tempo band, with "overdriv ikke" as the lower bar.
+    expect(TITLE_FLIP.duration).toBeGreaterThanOrEqual(2);
+    expect(TITLE_FLIP.duration).toBeLessThanOrEqual(2.4);
+
+    const lastStart = Math.max(...delays);
+    // The sine pacing runs over the normalised character index, so the last
+    // character of a 40-character title starts at ~0.999 × spread.
+    expect(lastStart).toBeLessThanOrEqual(TITLE_FLIP.duration * 0.25 + 0.01);
+    // The last character's face-swap completes at 30 % of its cycle (the
+    // cg-flip-fade keyframes): past that moment the title is fully readable,
+    // and the whole entrance must land well before the run ends.
+    expect(lastStart + TITLE_FLIP.duration * 0.3).toBeLessThan(1.5);
+    // The run — last delay + one full cycle — ends inside the cap.
+    expect(lastStart + TITLE_FLIP.duration).toBeLessThanOrEqual(TITLE_FLIP.maxTotalDuration);
+    // And the cap leaves room for the whole sine spread (0.25 × duration), so
+    // it never silently clamps the stagger.
+    expect(TITLE_FLIP.maxTotalDuration).toBeGreaterThanOrEqual(TITLE_FLIP.duration * 1.25);
+  });
+
+  test("a cap that cannot fit the stagger floors every delay at zero", () => {
+    const html = renderToStaticMarkup(
+      <FlipText duration={2} maxTotalDuration={1.5}>
+        Log ind
+      </FlipText>
+    );
+
+    const delays = delayList(html);
+    expect(delays.length).toBeGreaterThan(0);
+    expect(Math.min(...delays)).toBe(0);
+    expect(Math.max(...delays)).toBe(0);
+  });
+});
+
+// Issue #323: the Hjem hero swaps its greeting placeholder for the real,
+// local-clock greeting in an effect right after mount (#134). Every text swap
+// used to remount every character span — the running flip restarted from zero
+// mid-entrance, which a multi-second tempo makes visible. A swap that arrives
+// while the entrance is still running now rides the same run: the existing
+// character nodes (and their running CSS animations) stay, and the new glyphs
+// appear in place. Once the entrance is over, a swap is a new run again.
+describe("FlipText — a mid-entrance text swap rides the same run (#323)", () => {
+  test("the greeting swap keeps every character node and its delay", () => {
+    const swap = (greeting: string) => <FlipText {...TITLE_FLIP}>{`${greeting}, Benne.`}</FlipText>;
+    const { container, rerender } = render(swap("Goddag"));
+    const charsBefore = [...container.querySelectorAll<HTMLElement>(".cg-flip-char")];
+    const delaysBefore = charsBefore.map((char) => char.style.getPropertyValue("--flip-delay"));
+    expect(charsBefore.length).toBeGreaterThan(0);
+
+    rerender(swap("Godaften"));
+
+    // Same nodes, same delays: the animation properties of the running flip are
+    // untouched, so the browser cannot restart it. A remount (the old behavior)
+    // would leave the "before" nodes detached from the document.
+    for (const char of charsBefore) expect(container.contains(char)).toBe(true);
+    expect(charsBefore.map((char) => char.style.getPropertyValue("--flip-delay"))).toEqual(
+      delaysBefore
+    );
+    // The heading now reads the new greeting as one string.
+    expect(container.querySelector(".sr-only")?.textContent).toBe("Godaften, Benne.");
+    // The two characters "Godaften" adds joined the same run with real delays.
+    const charsAfter = [...container.querySelectorAll<HTMLElement>(".cg-flip-char")];
+    expect(charsAfter.length).toBe(charsBefore.length + 2);
+    for (const char of charsAfter) {
+      expect(char.style.getPropertyValue("--flip-delay")).toMatch(/^\d+\.\d{2}s$/);
+    }
+  });
+
+  test("a swap after the entrance is done starts a fresh run", () => {
+    vi.useFakeTimers();
+    try {
+      const { container, rerender } = render(<FlipText {...TITLE_FLIP}>Morgenløb</FlipText>);
+      const before = container.querySelector<HTMLElement>(".cg-flip-char");
+      expect(before).not.toBeNull();
+
+      // Past delay + stagger + duration for the preset (0 + 0.55 + 2.2 s).
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      rerender(<FlipText {...TITLE_FLIP}>Aftentur</FlipText>);
+
+      expect(container.querySelector(".cg-flip-char")).not.toBe(before);
+      expect(container.contains(before as HTMLElement)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
