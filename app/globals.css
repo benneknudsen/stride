@@ -223,10 +223,21 @@
    multi-part shadows/gradients read cleaner here than inside utilities.
    No surface carries a border or a white inset highlight any more (#322):
    the white edge read as a separate band on top of the glass instead of
-   part of it. The edge is now carried entirely by the outer shadow, which
-   is why the default recipe has a slightly stronger ambient layer plus a
-   tight near-edge layer — without them the frosted white plate loses its
-   outline against the silver page. */
+   part of it. The edge is now carried by the shadow, split in two roles:
+   the outer layers darken the first pixels just outside the edge enough to
+   clear 2.5:1 against plain silver, while the 32px ambient layer keeps the
+   falloff a soft shadow over ~40px rather than a line.
+   The 2px/5px near-edge layer alone jumped from the card fill (Y 0.89 over
+   silver) to the rim (Y 0.25) in a single pixel row — measured maxStep
+   0.64, which read as a drawn line under every card. Spreading the outer
+   layers cannot fix that jump: a blurred-shadow field is monotonic, so the
+   first pixel outside the edge is always the darkest one, and the step
+   stays fill-minus-rim however soft the rim is made (candidates with
+   lighter rims measured maxStep 0.55–0.59 and fell below 2.5:1). The
+   inset seat below is the cobalt counterpart of the outer shadow — a 2px
+   inner shade in the same shadow colour, not a white highlight. It turns
+   the rows just inside the edge into the transition shoulder: edgeC stays
+   2.84 (the rim is untouched) and maxStep falls to 0.27. */
 :root {
   --cg-glass-bg: rgba(255, 255, 255, 0.42);
   --cg-glass-blur: blur(24px);
@@ -234,10 +245,20 @@
      hero text and figures while scrolling, where the card recipe reads as a
      flat plate: heavier blur + saturation pulls the backdrop into a gel, and
      the higher alpha keeps the pill's own links legible over the darkest
-     backdrop behind it. Cards deliberately keep the cg-glass values above. */
-  --cg-glass-nav-bg: rgba(255, 255, 255, 0.6);
+     backdrop behind it. #316 raised the alpha for the ink links; the
+     contrast pass moved the inactive links to cobalt and nudged the alpha
+     to 0.64, so the measured worst case over cobalt content under the pill
+     is now above 5:1. Cards deliberately keep the cg-glass values above. */
+  --cg-glass-nav-bg: rgba(255, 255, 255, 0.64);
   --cg-glass-nav-blur: blur(40px) saturate(1.8);
-  --cg-glass-shadow: 0 8px 32px rgba(27, 41, 192, 0.16), 0 2px 6px rgba(27, 41, 192, 0.12);
+  /* Demo banner veil. The banner is sticky on every public page and scrolls
+     over the hero blob and the cobalt cards — at the card alpha its text
+     could not hold 4.5:1 over either; at 0.68 the cobalt label measures
+     ≥5:1 over the worst backdrop found. */
+  --cg-glass-banner-bg: rgba(255, 255, 255, 0.68);
+  --cg-glass-shadow:
+    0 8px 32px rgba(27, 41, 192, 0.16), 0 2px 5px rgba(27, 41, 192, 0.45),
+    0 6px 16px rgba(27, 41, 192, 0.28), inset 0 -2px 2px rgba(27, 41, 192, 0.28);
   --cg-glass-shadow-red: 0 12px 36px rgba(238, 36, 24, 0.28);
   --cg-glass-shadow-cobalt: 0 12px 36px rgba(27, 41, 192, 0.35);
   --cg-surface-red: linear-gradient(150deg, rgba(238, 36, 24, 0.85), rgba(238, 36, 24, 0.65));
@@ -263,6 +284,16 @@
   backdrop-filter: var(--cg-glass-nav-blur);
   box-shadow: var(--cg-glass-shadow);
 }
+/* Demo banner: same blur and shadow as the cards, only the veil alpha
+   differs — it scrolls over the darkest content and needs the stronger
+   plate for its text to stay readable. */
+@utility cg-glass-banner {
+  background: var(--cg-glass-banner-bg);
+  /* Same merge rule as cg-glass: standard last (#315). */
+  -webkit-backdrop-filter: var(--cg-glass-blur);
+  backdrop-filter: var(--cg-glass-blur);
+  box-shadow: var(--cg-glass-shadow);
+}
 @utility cg-glass-red {
   background: var(--cg-surface-red);
   /* Same merge rule as cg-glass: standard last (#315). */
@@ -284,7 +315,8 @@
    these rules must beat the layered `@utility` output. */
 @media (prefers-reduced-transparency: reduce) {
   .cg-glass,
-  .cg-glass-nav {
+  .cg-glass-nav,
+  .cg-glass-banner {
     background: rgb(255 255 255 / 0.94);
     /* Prefixed first, standard last — same load-bearing order as above. */
     -webkit-backdrop-filter: none;

@@ -497,9 +497,12 @@ export function NavBar({
                   onClick={() => track("navigeret_til_side", { side: link.label })}
                   style={glassTabStyle(active)}
                   className={cn(
-                    "cg-interactive flex items-center gap-1.5 rounded-pill border border-solid px-[18px] py-2.5",
+                    "cg-interactive flex items-center gap-1.5 rounded-pill border border-solid px-[18px] py-2.5 text-cobalt",
                     "transition-all duration-300 ease-out motion-reduce:transition-none",
-                    active ? "font-semibold text-cobalt" : "text-ink hover:text-cobalt"
+                    // Both states read cobalt: the pill travels over cobalt
+                    // cards and the hero blob, where ink could not hold 4.5:1.
+                    // Active is marked by the glass tile + weight, not by hue.
+                    active ? "font-semibold" : "hover:text-cobalt-dark"
                   )}
                 >
                   {link.spark ? (

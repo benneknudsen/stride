@@ -103,12 +103,15 @@ export function BottomTabBar({
         aria-hidden="true"
         className="absolute inset-0 -z-10 rounded-widget"
         style={{
-          background: "rgba(255,255,255,0.55)",
-          border: "1px solid rgba(255,255,255,0.85)",
+          // Ren cobalt glass (#322 follow-up): no white edge band, no white
+          // inset layer — the edge is carried by the shared cobalt shadow.
+          // The veil is up from 0.55 to 0.65 because the bar scrolls over
+          // cobalt cards and the labels (cobalt) need the denser plate to
+          // hold 4.5:1 there.
+          background: "rgba(255,255,255,0.65)",
           backdropFilter: "blur(28px)",
           WebkitBackdropFilter: "blur(28px)",
-          boxShadow:
-            "0 12px 36px color-mix(in srgb, var(--color-cobalt) 18%, transparent), inset 0 1px 0 rgba(255,255,255,0.9)",
+          boxShadow: "var(--cg-glass-shadow)",
         }}
       />
       {tabs.map((tab) => {
@@ -136,8 +139,11 @@ export function BottomTabBar({
             {tab.icon}
             <span
               className={cn(
-                "text-[9.5px] transition-colors duration-300 ease-out",
-                active ? "font-semibold text-cobalt" : "font-medium text-ink"
+                "text-[9.5px] text-cobalt transition-colors duration-300 ease-out",
+                // The active tab is marked by the glass tile + weight, not by
+                // hue: cobalt in both states, because ink labels could not
+                // hold 4.5:1 over the cobalt cards the bar floats across.
+                active ? "font-semibold" : "font-medium"
               )}
             >
               {tab.label}
