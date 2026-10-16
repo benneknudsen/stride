@@ -235,6 +235,125 @@ describe("FlipText — a mid-entrance text swap rides the same run (#323)", () =
   });
 });
 
+// User feedback round: the one-shot entrance (#323) was over before the eye
+// landed on it ("title animationen kører kun en gang og er ultra hurtigt").
+// A title with `loop` on and a positive `pause` now repeats, calmly: each run
+// is one-shot again (--flip-iteration:1), and a client timer remounts the
+// characters once `delay + spread + duration + pause` has passed, so the title
+// rests between entrances. `pause = 0` (the component default, and the login
+// heading) keeps the old constant CSS loop untouched.
+describe("FlipText — the title flip repeats at a calm cadence (user feedback)", () => {
+  test("the preset loops, pauses between runs, and lands in the calm band", () => {
+    expect(TITLE_FLIP.loop).toBe(true);
+    expect(TITLE_FLIP.pause).toBeGreaterThan(0);
+
+    // The stagger the cap arithmetic yields for the preset (duration × 0.25 —
+    // the cap leaves room for all of it), then the full cadence between two
+    // run starts.
+    const spread = TITLE_FLIP.duration * 0.25;
+    const cadence = spread + TITLE_FLIP.duration + TITLE_FLIP.pause;
+    expect(cadence).toBeGreaterThanOrEqual(6);
+    expect(cadence).toBeLessThanOrEqual(8);
+  });
+
+  test("a paused run remounts the characters for the next run, every time", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<FlipText {...TITLE_FLIP}>Morgenløb</FlipText>);
+      const first = container.querySelector<HTMLElement>(".cg-flip-char");
+      expect(first).not.toBeNull();
+
+      // Past one full cadence (7.25 s): the second run's characters are new
+      // nodes, so their CSS animations start from zero.
+      act(() => {
+        vi.advanceTimersByTime(7300);
+      });
+      const second = container.querySelector<HTMLElement>(".cg-flip-char");
+      expect(second).not.toBe(first);
+      expect(container.contains(first as HTMLElement)).toBe(false);
+
+      // The timer re-arms per run: the third run replaces the second's nodes
+      // too, so it is not just the first cycle that repeats.
+      act(() => {
+        vi.advanceTimersByTime(7300);
+      });
+      const third = container.querySelector<HTMLElement>(".cg-flip-char");
+      expect(third).not.toBe(second);
+      expect(container.contains(second as HTMLElement)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a swap during the pause restarts the cadence from the swap", () => {
+    vi.useFakeTimers();
+    try {
+      const { container, rerender } = render(<FlipText {...TITLE_FLIP}>Morgenløb</FlipText>);
+      const before = container.querySelector<HTMLElement>(".cg-flip-char");
+
+      // Past the first run's end (2.75 s) but inside the pause: the swap opens
+      // a fresh entrance, and the next restart must be one full cadence later.
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      rerender(<FlipText {...TITLE_FLIP}>Aftentur</FlipText>);
+      const afterSwap = container.querySelector<HTMLElement>(".cg-flip-char");
+      expect(afterSwap).not.toBe(before);
+
+      // The old grid's restart sat at 7.25 s; the swap moved it to
+      // 3.0 + 7.25 = 10.25 s. Before that moment the new run's nodes stand...
+      act(() => {
+        vi.advanceTimersByTime(6750);
+      });
+      expect(container.querySelector<HTMLElement>(".cg-flip-char")).toBe(afterSwap);
+
+      // ...and past it the next run replaces them.
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(container.querySelector<HTMLElement>(".cg-flip-char")).not.toBe(afterSwap);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("reduced motion skips the restart, so no node ever remounts", () => {
+    vi.useFakeTimers();
+    const original = window.matchMedia;
+    // jsdom has no matchMedia — install one that answers `reduce`, matching
+    // the smooth-scroll test's stub shape.
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn((query: string) => ({ matches: true, media: query, addEventListener() {} })),
+    });
+    try {
+      const { container } = render(<FlipText {...TITLE_FLIP}>Morgenløb</FlipText>);
+      const before = container.querySelector<HTMLElement>(".cg-flip-char");
+
+      act(() => {
+        vi.advanceTimersByTime(7300);
+      });
+
+      expect(container.querySelector<HTMLElement>(".cg-flip-char")).toBe(before);
+    } finally {
+      Object.defineProperty(window, "matchMedia", { configurable: true, value: original });
+      vi.useRealTimers();
+    }
+  });
+
+  test("the iteration marker follows the mode: one-shot with a pause, infinite without", () => {
+    // With a pause the characters render one-shot — the timer does the
+    // repeating — so SSR and hydration agree on the same marker.
+    expect(renderToStaticMarkup(<FlipText {...TITLE_FLIP}>Log ind</FlipText>)).toContain(
+      "--flip-iteration:1"
+    );
+    // The unpaused loop keeps the infinite CSS animation it always had.
+    expect(renderToStaticMarkup(<FlipText loop={true}>Log ind</FlipText>)).toContain(
+      "--flip-iteration:infinite"
+    );
+  });
+});
+
 describe("FlipText — reduced motion is CSS-gated (#306)", () => {
   const NO_PREFERENCE = "prefers-reduced-motion: no-preference";
 
