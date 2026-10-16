@@ -25,9 +25,20 @@
 //   character has finished — so a title that is user data (an activity name)
 //   cannot stretch the flip. `TITLE_FLIP` (lib/cobalt/flip.ts — a plain module,
 //   readable from server components too) is the preset every header uses:
-//   one-shot, fast, capped.
+//   one-shot, capped.
+//
+// Added for #323 (a slower tempo, and a text swap rides the run):
+// - `TITLE_FLIP` was retimed so the entrance is actually visible; the pacing
+//   and cap arithmetic are unchanged.
+// - A one-shot run remembers the delays it started with, per character
+//   position. When its text swaps while the entrance is still in flight — the
+//   Hjem hero swaps its greeting placeholder right after mount (#134) — the
+//   character spans keep their nodes and animation properties, so the running
+//   CSS animations are untouched and the new glyphs ride the same run instead
+//   of restarting it mid-flip. A swap after the run has ended is a new
+//   entrance: the spans remount with delays recomputed from the new text.
 
-import { type CSSProperties, Fragment, useMemo } from "react";
+import { type CSSProperties, Fragment, useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 interface FlipTextProps {
@@ -76,39 +87,87 @@ export function FlipText({
   together = false,
   maxTotalDuration,
 }: FlipTextProps) {
-  // Lines → words, with each word's start position in the running character
-  // index (a space occupies a slot like a character; a line break animates
-  // nothing, so it does not).
-  const parsedLines = useMemo(() => {
+  const spread = staggerSpread(duration, delay, maxTotalDuration);
+
+  // Lines → words, each word with its characters and their delays in the
+  // running character order (a space occupies a slot like a character; a line
+  // break animates nothing, so it does not). The per-word shape lets a later
+  // text swap keep the delays position by position while the first run is in
+  // flight.
+  const lines = useMemo(() => {
+    const totalChars = children.replaceAll("\n", "").length;
     let cursor = 0;
     return children.split("\n").map((line) =>
       line.split(separator).map((word) => {
         const start = cursor;
         cursor += word.length + separator.length;
-        return { word, start };
+        const chars = word.split("");
+        const delays = chars.map((_, indexInWord) => {
+          if (together) return delay;
+          const normalizedIndex = (start + indexInWord) / totalChars;
+          const sine = Math.sin(normalizedIndex * (Math.PI / 2));
+          return sine * spread + delay;
+        });
+        return { chars, delays };
       })
     );
-  }, [children, separator]);
-  const totalChars = children.replaceAll("\n", "").length;
-  const spread = staggerSpread(duration, delay, maxTotalDuration);
+  }, [children, separator, together, delay, spread]);
+
+  // #323: the run's delays, captured when the run started. Earlier positions
+  // always resolve from here, so a text swap cannot change an existing
+  // character's animation properties; characters (or whole words) the new text
+  // adds fall back to its own computed delay and join the run's tail. This must
+  // be decided in the very render that carries the new text — a remount cannot
+  // be undone from an effect — hence the render-time bookkeeping.
+  const runLines = useRef(lines);
+  const runText = useRef(children);
+  const runEpoch = useRef(0);
+  // A looping flip never leaves its run; a one-shot flip leaves it when the
+  // last character has finished (delay + spread + duration).
+  const runActive = useRef(!loop);
+
+  if (children !== runText.current) {
+    runText.current = children;
+    if (!runActive.current) {
+      // The entrance is over: this is a new run. The bumped epoch remounts the
+      // character spans, so their animations start over, as they always did.
+      runEpoch.current += 1;
+      runLines.current = lines;
+    }
+  }
+
+  useEffect(() => {
+    if (loop) return;
+    const timer = window.setTimeout(
+      () => {
+        runActive.current = false;
+      },
+      (delay + spread + duration) * 1000
+    );
+    return () => window.clearTimeout(timer);
+  }, [loop, delay, spread, duration]);
 
   return (
     <span className={cn("inline-block leading-none", className)} style={{ perspective: "1000px" }}>
       <span aria-hidden="true">
-        {parsedLines.map((words, lineIndex) => (
+        {lines.map((words, lineIndex) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: lines come from a static string and never reorder
           <Fragment key={lineIndex}>
             {lineIndex > 0 && <br />}
-            {words.map(({ word, start }, wordIndex) => (
+            {words.map(({ chars, delays }, wordIndex) => (
               <span
-                key={`${start}-${word}`}
+                // biome-ignore lint/suspicious/noArrayIndexKey: the key is a stable word slot (+ run epoch) so a text swap can keep the node; words come from a static string and never reorder
+                key={`${lineIndex}-${wordIndex}-${runEpoch.current}`}
                 className="inline-block"
                 style={{ transformStyle: "preserve-3d" }}
               >
-                {word.split("").map((char, indexInWord) => {
-                  const normalizedIndex = (start + indexInWord) / totalChars;
-                  const sine = Math.sin(normalizedIndex * (Math.PI / 2));
-                  const charDelay = together ? delay : sine * spread + delay;
+                {chars.map((char, indexInWord) => {
+                  // #323: while the run is in flight its delays win — on a text
+                  // swap the node and its animation properties stay identical,
+                  // so the browser keeps the animation running.
+                  const charDelay =
+                    runLines.current[lineIndex]?.[wordIndex]?.delays?.[indexInWord] ??
+                    delays[indexInWord];
 
                   return (
                     <span
