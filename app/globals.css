@@ -220,10 +220,15 @@
 }
 
 /* Liquid-glass surface tokens — kept as raw custom props because the
-   multi-part shadows/gradients read cleaner here than inside utilities. */
+   multi-part shadows/gradients read cleaner here than inside utilities.
+   No surface carries a border or a white inset highlight any more (#322):
+   the white edge read as a separate band on top of the glass instead of
+   part of it. The edge is now carried entirely by the outer shadow, which
+   is why the default recipe has a slightly stronger ambient layer plus a
+   tight near-edge layer — without them the frosted white plate loses its
+   outline against the silver page. */
 :root {
   --cg-glass-bg: rgba(255, 255, 255, 0.42);
-  --cg-glass-border: rgba(255, 255, 255, 0.7);
   --cg-glass-blur: blur(24px);
   /* Navigation pill (#316) — its own, stronger veil. The pill travels over
      hero text and figures while scrolling, where the card recipe reads as a
@@ -232,11 +237,9 @@
      backdrop behind it. Cards deliberately keep the cg-glass values above. */
   --cg-glass-nav-bg: rgba(255, 255, 255, 0.6);
   --cg-glass-nav-blur: blur(40px) saturate(1.8);
-  --cg-glass-shadow: 0 8px 32px rgba(27, 41, 192, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  --cg-glass-shadow-red:
-    0 12px 36px rgba(238, 36, 24, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  --cg-glass-shadow-cobalt:
-    0 12px 36px rgba(27, 41, 192, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  --cg-glass-shadow: 0 8px 32px rgba(27, 41, 192, 0.16), 0 2px 6px rgba(27, 41, 192, 0.12);
+  --cg-glass-shadow-red: 0 12px 36px rgba(238, 36, 24, 0.28);
+  --cg-glass-shadow-cobalt: 0 12px 36px rgba(27, 41, 192, 0.35);
   --cg-surface-red: linear-gradient(150deg, rgba(238, 36, 24, 0.85), rgba(238, 36, 24, 0.65));
   --cg-surface-cobalt: rgba(27, 41, 192, 0.9);
 }
@@ -244,7 +247,6 @@
 /* Glass surface utilities — shared by GlassCard + NavBar */
 @utility cg-glass {
   background: var(--cg-glass-bg);
-  border: 1px solid var(--cg-glass-border);
   /* Prefixed first, standard last: Lightning CSS merges the two duplicate
      declarations and keeps the last form, so the standard property must come
      last or it disappears from the built CSS (#315). */
@@ -256,7 +258,6 @@
    floating NavBar pill — every other glass surface stays on cg-glass. */
 @utility cg-glass-nav {
   background: var(--cg-glass-nav-bg);
-  border: 1px solid var(--cg-glass-border);
   /* Same merge rule as cg-glass: standard last (#315). */
   -webkit-backdrop-filter: var(--cg-glass-nav-blur);
   backdrop-filter: var(--cg-glass-nav-blur);
@@ -264,7 +265,6 @@
 }
 @utility cg-glass-red {
   background: var(--cg-surface-red);
-  border: 1px solid rgba(255, 255, 255, 0.45);
   /* Same merge rule as cg-glass: standard last (#315). */
   -webkit-backdrop-filter: var(--cg-glass-blur);
   backdrop-filter: var(--cg-glass-blur);
@@ -272,7 +272,6 @@
 }
 @utility cg-glass-cobalt {
   background: var(--cg-surface-cobalt);
-  border: 1px solid rgba(255, 255, 255, 0.35);
   /* Same merge rule as cg-glass: standard last (#315). */
   -webkit-backdrop-filter: var(--cg-glass-blur);
   backdrop-filter: var(--cg-glass-blur);
