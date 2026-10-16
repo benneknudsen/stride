@@ -25,20 +25,33 @@ type Chip = {
 
 const COBALT_BAR = "w-1 rounded-full bg-cobalt/70";
 
+// Feedback: the hollow 2.5px outline rings read as unfinished next to the
+// solid dot and bars. Each ring is now a painted annulus — one path, outer
+// circle + inner hole carved out with fill-rule evenodd, so the hole is
+// genuine transparency and the chip glass shows through. The 3.5px band sits
+// in the same weight family as the 4px bars, and every mark now shares one
+// 70% fill alpha (the dot used to be full opacity).
+const RING_PATH =
+  "M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20Zm0 3.5a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13Z";
+
 const CHIPS: Chip[] = [
   {
     id: "red-dot",
     className: "flex top-[15%] left-[5%] md:top-[18%] md:left-[12%]",
     baseRotate: -8,
     sway: { rotate: 6, x: 12, y: -16, duration: 4.5 },
-    mark: <span className="size-2.5 rounded-full bg-red" />,
+    mark: <span className="size-3 rounded-full bg-red/70" />,
   },
   {
     id: "cobalt-ring",
     className: "flex top-[9%] right-[6%] md:top-[8%] md:right-[14%]",
     baseRotate: 6,
     sway: { rotate: -7, x: -12, y: -14, duration: 5 },
-    mark: <span className="size-5 rounded-full border-[2.5px] border-cobalt/70" />,
+    mark: (
+      <svg viewBox="0 0 20 20" className="size-5 fill-cobalt/70" aria-hidden="true">
+        <path fillRule="evenodd" clipRule="evenodd" d={RING_PATH} />
+      </svg>
+    ),
   },
   {
     id: "volume-bars",
@@ -58,7 +71,11 @@ const CHIPS: Chip[] = [
     className: "hidden sm:flex top-[66%] right-[3%] md:top-[70%] md:right-[5%]",
     baseRotate: 9,
     sway: { rotate: -6, x: -12, y: -15, duration: 6 },
-    mark: <span className="size-5 rounded-full border-[2.5px] border-red/70" />,
+    mark: (
+      <svg viewBox="0 0 20 20" className="size-5 fill-red/70" aria-hidden="true">
+        <path fillRule="evenodd" clipRule="evenodd" d={RING_PATH} />
+      </svg>
+    ),
   },
 ];
 
@@ -70,6 +87,7 @@ export function AuthBackdrop() {
       {CHIPS.map((chip) => (
         <motion.div
           key={chip.id}
+          data-chip={chip.id}
           style={{ rotate: chip.baseRotate }}
           animate={
             reduceMotion

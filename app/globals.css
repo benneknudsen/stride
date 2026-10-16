@@ -51,6 +51,12 @@
   --radius-pill: 999px;
 
   --shadow-float: 0 24px 60px -20px rgb(0 0 0 / 0.7);
+
+  /* Login card (follow-up to the edge pass): `shadow-glass` was used on
+     app/(auth)/login but never declared, so the card measured box-shadow:
+     none while every cg-glass surface carried the recipe. It aliases the
+     shared card shadow rather than inventing a new value. */
+  --shadow-glass: var(--cg-glass-shadow);
 }
 
 /* ── Stride Light Theme (default before next-themes resolves) ── */
@@ -221,23 +227,21 @@
 
 /* Liquid-glass surface tokens — kept as raw custom props because the
    multi-part shadows/gradients read cleaner here than inside utilities.
-   No surface carries a border or a white inset highlight any more (#322):
-   the white edge read as a separate band on top of the glass instead of
-   part of it. The edge is now carried by the shadow, split in two roles:
-   the outer layers darken the first pixels just outside the edge enough to
-   clear 2.5:1 against plain silver, while the 32px ambient layer keeps the
-   falloff a soft shadow over ~40px rather than a line.
-   The 2px/5px near-edge layer alone jumped from the card fill (Y 0.89 over
-   silver) to the rim (Y 0.25) in a single pixel row — measured maxStep
-   0.64, which read as a drawn line under every card. Spreading the outer
-   layers cannot fix that jump: a blurred-shadow field is monotonic, so the
-   first pixel outside the edge is always the darkest one, and the step
-   stays fill-minus-rim however soft the rim is made (candidates with
-   lighter rims measured maxStep 0.55–0.59 and fell below 2.5:1). The
-   inset seat below is the cobalt counterpart of the outer shadow — a 2px
-   inner shade in the same shadow colour, not a white highlight. It turns
-   the rows just inside the edge into the transition shoulder: edgeC stays
-   2.84 (the rim is untouched) and maxStep falls to 0.27. */
+   No surface carries a border or a white inset highlight: the white edge
+   read as a separate band on top of the glass instead of part of it (#322,
+   and again in the later user feedback round). Every variant carries the
+   same three shadow roles in its own tone — an 8px/32px ambient falloff, a
+   2px/5px near-edge and a 2px bottom inset seat — so the edge has the same
+   shape everywhere and no variant stands without one; only the alphas
+   differ, tuned by measurement so every boundary step lands in one narrow
+   band (~0.19–0.22 ΔL). Deliberately subtle: the previous near-edge/seat
+   pair (0.45/0.28) read as a drawn rim. There is no contrast target beyond
+   "reads as glass": the edge must exist as a soft falloff, not clear a
+   ratio. The nav pill and demo banner get their own ambient (below) because
+   their denser veils otherwise overshoot the band over blob-tinted
+   backdrops; cobalt needs the stronger 0.52 ambient because a 0.9-alpha
+   cobalt fill meets the page with more contrast than the white veils do,
+   and its near-edge sits at 0.28 for the same reason. */
 :root {
   --cg-glass-bg: rgba(255, 255, 255, 0.42);
   --cg-glass-blur: blur(24px);
@@ -257,10 +261,26 @@
      ≥5:1 over the worst backdrop found. */
   --cg-glass-banner-bg: rgba(255, 255, 255, 0.68);
   --cg-glass-shadow:
-    0 8px 32px rgba(27, 41, 192, 0.16), 0 2px 5px rgba(27, 41, 192, 0.45),
-    0 6px 16px rgba(27, 41, 192, 0.28), inset 0 -2px 2px rgba(27, 41, 192, 0.28);
-  --cg-glass-shadow-red: 0 12px 36px rgba(238, 36, 24, 0.28);
-  --cg-glass-shadow-cobalt: 0 12px 36px rgba(27, 41, 192, 0.35);
+    0 8px 32px rgba(27, 41, 192, 0.23), 0 2px 5px rgba(27, 41, 192, 0.3),
+    inset 0 -2px 2px rgba(27, 41, 192, 0.2);
+  /* Nav pill and demo banner carry the same three roles as the cards, but
+     their veils are denser (0.64/0.68 against 0.42), so the card ambient
+     (0.23) overshoots the old recipe's boundary step over blob-tinted
+     backdrops (measured 0.299/0.317 against 0.289/0.302 before). The lighter
+     ambients below bring the steps back under that baseline (0.283/0.299)
+     while the near-edge and seat stay identical to the cards. */
+  --cg-glass-shadow-nav:
+    0 8px 32px rgba(27, 41, 192, 0.17), 0 2px 5px rgba(27, 41, 192, 0.3),
+    inset 0 -2px 2px rgba(27, 41, 192, 0.2);
+  --cg-glass-shadow-banner:
+    0 8px 32px rgba(27, 41, 192, 0.15), 0 2px 5px rgba(27, 41, 192, 0.3),
+    inset 0 -2px 2px rgba(27, 41, 192, 0.2);
+  --cg-glass-shadow-red:
+    0 8px 32px rgba(238, 36, 24, 0.32), 0 2px 5px rgba(238, 36, 24, 0.3),
+    inset 0 -2px 2px rgba(238, 36, 24, 0.14);
+  --cg-glass-shadow-cobalt:
+    0 8px 32px rgba(27, 41, 192, 0.52), 0 2px 5px rgba(27, 41, 192, 0.28),
+    inset 0 -2px 2px rgba(27, 41, 192, 0.14);
   --cg-surface-red: linear-gradient(150deg, rgba(238, 36, 24, 0.85), rgba(238, 36, 24, 0.65));
   --cg-surface-cobalt: rgba(27, 41, 192, 0.9);
 }
@@ -282,17 +302,16 @@
   /* Same merge rule as cg-glass: standard last (#315). */
   -webkit-backdrop-filter: var(--cg-glass-nav-blur);
   backdrop-filter: var(--cg-glass-nav-blur);
-  box-shadow: var(--cg-glass-shadow);
+  box-shadow: var(--cg-glass-shadow-nav);
 }
-/* Demo banner: same blur and shadow as the cards, only the veil alpha
-   differs — it scrolls over the darkest content and needs the stronger
-   plate for its text to stay readable. */
+/* Demo banner: same blur as the cards, its own veil alpha and its own shadow
+   var (see the --cg-glass-shadow-banner note). */
 @utility cg-glass-banner {
   background: var(--cg-glass-banner-bg);
   /* Same merge rule as cg-glass: standard last (#315). */
   -webkit-backdrop-filter: var(--cg-glass-blur);
   backdrop-filter: var(--cg-glass-blur);
-  box-shadow: var(--cg-glass-shadow);
+  box-shadow: var(--cg-glass-shadow-banner);
 }
 @utility cg-glass-red {
   background: var(--cg-surface-red);
