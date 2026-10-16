@@ -6,6 +6,7 @@ import { LandingChromeGate } from "@/components/cobalt/LandingChromeGate";
 import { NavBar } from "@/components/cobalt/NavBar";
 import { auth } from "@/lib/auth";
 import { getStravaTokens } from "@/lib/db/queries";
+import { cn } from "@/lib/utils";
 
 // Shared Cobalt Glass shell for every (app) page.
 // Every page here is public (issue #100): each one falls back to the demo
@@ -27,20 +28,32 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           old bar occupied (18px offset + 56px mobile / 69.5px md height,
           measured on the bar itself) is reserved by a spacer that only renders
           with the chrome — the Velkommen landing page keeps its own layout.
+          #321: below md the pill is gone, so the spacer drops to zero; what
+          still floats there is the account control (signed-in users only),
+          whose band — 12px offset + 44px control = 56px under the safe-area —
+          is reserved on the shell's own top padding. A visitor has no such
+          control and keeps the plain safe-area offset.
           The <noscript> rule is the #304 pattern: Motion server-renders the
           pill in its hidden entrance state, which only JS clears. */}
       <noscript>
         <style>{`[data-testid="nav-pill"]{opacity:1 !important;transform:none !important}`}</style>
       </noscript>
       <BackgroundBlobs />
-      <div className="relative mx-auto max-w-[1360px] px-4 pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)_+_96px)] md:px-7 md:pt-0 md:pb-10">
+      <div
+        className={cn(
+          "relative mx-auto max-w-[1360px] px-4 pb-[calc(env(safe-area-inset-bottom,0px)_+_96px)] md:px-7 md:pt-0 md:pb-10",
+          userName
+            ? "pt-[calc(env(safe-area-inset-top,0px)_+_56px)]"
+            : "pt-[env(safe-area-inset-top,0px)]"
+        )}
+      >
         {/* Velkommen (visitor on "/") is a landing page and drops the app chrome;
             the gate needs the query string, so useSearchParams forces a Suspense
             boundary around each bar. */}
         <Suspense fallback={null}>
           <LandingChromeGate signedIn={user !== undefined}>
             <NavBar userName={userName} userImage={user?.image} stravaConnected={stravaConnected} />
-            <div aria-hidden className="h-[74px] md:h-[87.5px]" />
+            <div aria-hidden className="h-0 md:h-[87.5px]" />
           </LandingChromeGate>
         </Suspense>
         <Suspense fallback={null}>

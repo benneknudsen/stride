@@ -27,8 +27,10 @@ export function DemoBanner() {
     // band (18px offset + 52px/67.5px pill), so the stick position is pushed
     // below the pill's bottom — otherwise this chip slides underneath the glass
     // and the two translucent layers mash. Rides with the page up to the end of
-    // the pill's shadow, then pins just below it.
-    <div className="sticky top-[calc(env(safe-area-inset-top,0px)_+_78px)] z-40 mt-3 flex justify-center sm:mt-4 md:top-[calc(env(safe-area-inset-top,0px)_+_94px)] [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
+    // the pill's shadow, then pins just below it. #321: below md the pill is
+    // gone, so the phone pins the banner at its own in-flow offset (safe-area +
+    // mt-3) — same spot it starts in, no band of empty paper above it.
+    <div className="sticky top-[calc(env(safe-area-inset-top,0px)_+_12px)] z-40 mt-3 flex justify-center sm:mt-4 md:top-[calc(env(safe-area-inset-top,0px)_+_94px)] [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
       <GlassCard className="flex max-w-full items-center gap-3 rounded-pill py-1.5 pr-1.5 pl-4 sm:gap-4 sm:py-2 sm:pr-2">
         <span className="flex-none rounded-pill bg-red px-2.5 py-1 cg-label tracking-[0.18em] font-semibold text-white">
           Demo

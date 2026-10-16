@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/cobalt/Logo";
 import { SyncButton, type SyncState } from "@/components/cobalt/SyncButton";
 import { Wordmark } from "@/components/cobalt/Wordmark";
+import { useIsDesktop } from "@/hooks/useIsDesktop";
 import { glassTabStyle } from "@/lib/cobalt/nav-glass";
 import { DEMO_HOME_ROUTE, ROUTES } from "@/lib/routes";
 import { lockSmoothScroll, unlockSmoothScroll } from "@/lib/smooth-scroll";
@@ -21,10 +22,16 @@ import { cn } from "@/lib/utils";
 // scrolls down — the measured reference movement from docs/bevaegelsesstrategi.md
 // a.5. The (app) layout reserves the height the bar used to occupy in flow, so
 // page content starts where it always did and nothing scrolls underneath it at
-// rest. Active route = a raised liquid-glass pill (issue #100, shared with the
-// BottomTabBar) rather than a flat cobalt fill. Coach carries the red sync
-// spark. Sync POSTs to /api/strava/sync and drives the button from the
-// response — idle → syncing → synced|error|rate_limited → idle — so it can be run again (#97).
+// rest. #321: the pill only exists from md up — below that the BottomTabBar owns
+// navigation, the pill is display:none, and it neither animates nor listens for
+// scroll. What does not vanish below md is the account menu: Log ud has its only
+// UI here, so the phone gets the same chip as a free-standing control in the
+// top-right corner, with the pill's sync/connect entry added to its dropdown
+// (the pill's own SyncButton is hidden down there). Active route = a raised
+// liquid-glass pill (issue #100, shared with the BottomTabBar) rather than a
+// flat cobalt fill. Coach carries the red sync spark. Sync POSTs to
+// /api/strava/sync and drives the button from the response — idle → syncing →
+// synced|error|rate_limited → idle — so it can be run again (#97).
 //
 // For a visitor the Hjem tab points at the demo dashboard (`/demo`) instead of
 // bare "/" — "/" shows the Velkommen landing page without a session, and a tab
@@ -45,6 +52,251 @@ const PILL_DURATION_S = 0.8;
 /** Hide only after a real downward run — the reference listener's thresholds. */
 const HIDE_AFTER_Y = 150;
 const HIDE_AFTER_DELTA = 120;
+
+/** One row shape for both account dropdowns, so the entries cannot drift. */
+const MENU_ROW =
+  "flex w-full items-center gap-2.5 rounded-pill px-3 text-left text-[14px] font-medium";
+
+// The phone dropdown's data entry (#321): what the pill's sync control or
+// connect CTA does on desktop, as one menu row. A connected user gets the
+// manual sync — idle and error are the clickable states, the other three are
+// the status SyncButton would be showing; a signed-in user without Strava gets
+// the same connect CTA that opens the OAuth flow, so neither entry loses its
+// only way in below md. Same words as SyncButton, sentence-cased for the menu.
+function SyncMenuItem({
+  stravaConnected,
+  syncState,
+  onSync,
+}: {
+  stravaConnected: boolean;
+  syncState: SyncState;
+  onSync?: () => void;
+}) {
+  const row = cn(MENU_ROW, "min-h-11");
+
+  if (!stravaConnected) {
+    return (
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => void signIn("strava", { callbackUrl: ROUTES.HOME })}
+        className={cn(row, "text-cobalt transition-colors hover:bg-cobalt/[0.08]")}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M12 5v14M5 12h14"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+        </svg>
+        Forbind Strava
+      </button>
+    );
+  }
+
+  if (syncState === "syncing" || syncState === "synced" || syncState === "rate_limited") {
+    const status = {
+      syncing: {
+        label: "Syncer…",
+        dot: "bg-red animate-[cg-pulse-dot_0.8s_ease-in-out_infinite] motion-reduce:animate-none",
+        text: "text-ink",
+      },
+      synced: { label: "Synced", dot: "bg-success", text: "text-success-ink" },
+      rate_limited: { label: "Kørte for nylig", dot: "bg-ink/50", text: "text-ink" },
+    }[syncState];
+    return (
+      <div role="menuitem" tabIndex={-1} aria-disabled="true" className={cn(row, status.text)}>
+        <span className={cn("size-[7px] rounded-full", status.dot)} />
+        {status.label}
+      </div>
+    );
+  }
+
+  // Idle sync, or the red retry after a failed one (#97) — both start a sync.
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onSync}
+      className={cn(
+        row,
+        "transition-colors",
+        syncState === "error" ? "text-red hover:bg-red/8" : "text-cobalt hover:bg-cobalt/[0.08]"
+      )}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M20 12 A8 8 0 1 1 17.5 6"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
+        <path
+          d="M17.5 2.5 V6.5 H13.5"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {syncState === "error" ? "Prøv igen" : "Synkronisér nu"}
+    </button>
+  );
+}
+
+// The identity chip and its dropdown (#logout-menu, #321), shared by the
+// desktop pill and the phone's free-standing control so Log ud and the data
+// entries can never drift between the two. `mobile` sizes the rows for a
+// finger and adds the data entry; the desktop instance renders exactly what the
+// pill always rendered. Hover open/close is a pointer-only nicety; keyboard and
+// touch users drive the menu through the click toggle.
+function AccountMenu({
+  userName,
+  userImage,
+  testId,
+  mobile = false,
+  stravaConnected = false,
+  syncState = "idle",
+  onSync,
+  className,
+}: {
+  userName: string;
+  userImage?: string | null;
+  testId: string;
+  mobile?: boolean;
+  stravaConnected?: boolean;
+  syncState?: SyncState;
+  onSync?: () => void;
+  className?: string;
+}) {
+  // Opens on hover/click of the identity chip, holds a short grace timer so a
+  // brief pointer slip between chip and menu doesn't snap it shut.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openMenu = useCallback(() => {
+    if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
+    setMenuOpen(true);
+  }, []);
+  // Delay the close so the pointer can travel from chip to menu item.
+  const closeMenu = useCallback(() => {
+    if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
+    menuTimerRef.current = setTimeout(() => setMenuOpen(false), 120);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
+    },
+    []
+  );
+
+  // #307: an open menu freezes the smooth-scrolled page behind it. This is the
+  // account dropdown — Stride's only menu (mobile navigation is the always-on
+  // BottomTabBar, there is no hamburger). Pairing is effect-based, so the
+  // delayed close, a click-toggle close and an unmount all restart scrolling.
+  // No-op where Lenis is not running, which is everywhere the NavBar renders
+  // today: the landing and login own Lenis and carry no NavBar.
+  useEffect(() => {
+    if (!menuOpen) return;
+    lockSmoothScroll();
+    return () => unlockSmoothScroll();
+  }, [menuOpen]);
+
+  const menuItem = cn(MENU_ROW, mobile && "min-h-11");
+
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover is progressive enhancement, button handles interaction
+    <div
+      data-testid={testId}
+      className={cn("relative", className)}
+      // Open on approach for pointers that actually hover. A tap also fires
+      // the compatibility mouse events, so opening on approach there would
+      // have the tap's own click-toggle shut the menu in the same tap (#321);
+      // pointerType separates the two. Leaving still closes on every pointer,
+      // which is what shuts the menu when a finger lands elsewhere.
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") openMenu();
+      }}
+      onMouseLeave={closeMenu}
+    >
+      <button
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label="Kontomenu"
+        className={cn(
+          "cg-interactive flex items-center gap-3 rounded-pill",
+          // Touch target (#321): 32px avatar + 6px padding all round = 44px.
+          mobile && "min-h-11 min-w-11 justify-center p-1.5"
+        )}
+      >
+        <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
+          {userName.toUpperCase()}
+        </span>
+        {userImage ? (
+          <Image
+            src={userImage}
+            alt={userName}
+            width={32}
+            height={32}
+            className="size-8 flex-none rounded-full object-cover ring-1 ring-white/70"
+          />
+        ) : (
+          <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
+            {userName.slice(0, 1).toUpperCase()}
+          </span>
+        )}
+      </button>
+
+      {menuOpen ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[168px] rounded-card border border-cobalt/15 bg-white/60 p-1.5 shadow-lg backdrop-blur-xl"
+        >
+          {mobile ? (
+            <>
+              <SyncMenuItem
+                stravaConnected={stravaConnected}
+                syncState={syncState}
+                onSync={onSync}
+              />
+              <div aria-hidden className="my-1 h-px bg-cobalt/10" />
+            </>
+          ) : null}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              void signOut({ callbackUrl: ROUTES.HOME });
+            }}
+            className={cn(menuItem, "py-2 text-cobalt transition-colors hover:bg-cobalt/[0.08]")}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            Log ud
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function NavBar({
   userName,
@@ -71,6 +323,9 @@ export function NavBar({
   const router = useRouter();
   const current = activeHref ?? pathname ?? "/";
   const reduceMotion = useReducedMotion();
+  // #321: below md the bar is hidden by CSS (the BottomTabBar owns mobile
+  // navigation), so the entrance and the scroll-hide below stay off there.
+  const isDesktop = useIsDesktop();
   // #308: the pill scoots away on a downward scroll and returns on the first
   // upward one — the reference behaviour, driven by a plain passive listener.
   // Reduced motion turns the whole idea off: the pill stays put and visible.
@@ -81,49 +336,27 @@ export function NavBar({
   // syncState lags a render behind, so two fast clicks would both see "idle".
   // The ref flips synchronously and is what actually guards the fetch.
   const syncingRef = useRef(false);
-  // Account drop-down: opens on hover/click of the identity chip, holds a
-  // short grace timer so a brief pointer slip between chip and menu doesn't
-  // snap it shut (#logout-menu).
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const openMenu = useCallback(() => {
-    if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
-    setMenuOpen(true);
-  }, []);
-  // Delay the close so the pointer can travel from chip to menu item.
-  const closeMenu = useCallback(() => {
-    if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
-    menuTimerRef.current = setTimeout(() => setMenuOpen(false), 120);
-  }, []);
 
   // Drop the pending reset and any in-flight sync when the bar unmounts.
   useEffect(
     () => () => {
       if (timerRef.current) clearTimeout(timerRef.current);
-      if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
       abortRef.current?.abort();
     },
     []
   );
 
-  // #307: an open menu freezes the smooth-scrolled page behind it. This is the
-  // account dropdown — Stride's only menu (mobile navigation is the always-on
-  // BottomTabBar, there is no hamburger). Pairing is effect-based, so the
-  // delayed close, a click-toggle close and an unmount all restart scrolling.
-  // No-op where Lenis is not running, which is everywhere the NavBar renders
-  // today: the landing and login own Lenis and carry no NavBar.
-  useEffect(() => {
-    if (!menuOpen) return;
-    lockSmoothScroll();
-    return () => unlockSmoothScroll();
-  }, [menuOpen]);
-
   // #308 scroll listener: accumulate downward travel past the thresholds to
   // hide, return on the first upward pixel (or back near the top). A client
   // navigation scrolls back to the top, and that programmatic scroll fires the
   // same event, so the pill can never stay hidden across pages.
+  // #321: only arms with the bar on screen (md+). Below md it stays unarmed and
+  // drops any stale hidden state, so nothing invisible reacts to scrolling.
   useEffect(() => {
+    if (!isDesktop) {
+      setScrolledAway(false);
+      return;
+    }
     if (reduceMotion) return;
     let lastY = window.scrollY;
     let downward = 0;
@@ -143,7 +376,7 @@ export function NavBar({
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [reduceMotion]);
+  }, [isDesktop, reduceMotion]);
 
   const pillHidden = !reduceMotion && scrolledAway;
 
@@ -206,18 +439,42 @@ export function NavBar({
     // the strip itself is visible or clickable (`pointer-events-none` lets
     // content behind it work; the pill re-enables its own events). The top
     // offset matches the old in-flow bar (`mt-[18px]` under the safe-area).
-    // Through md the pill spans the shell (phone ~92%, tablet full column): at
-    // those widths a content-fit pill would overflow once the identity chip and
-    // sync control are on screen. From lg it is content-sized and centred —
-    // the reference geometry (a centred pill, not a full-width bar) — with the
-    // measured natural width (~700px at 1440px) coming from `lg:gap-16`/
-    // `xl:gap-24` between the three groups.
+    // #321: below md there is no pill — the BottomTabBar owns mobile
+    // navigation and the layout reserves no space up here — but the strip
+    // stays mounted for the free-standing account control in the top-right,
+    // which is all the phone gets. Through md the pill spans the shell (phone
+    // ~92%, tablet full column): at those widths a content-fit pill would
+    // overflow once the identity chip and sync control are on screen. From lg
+    // it is content-sized and centred — the reference geometry (a centred
+    // pill, not a full-width bar) — with the measured natural width (~700px at
+    // 1440px) coming from `lg:gap-16`/`xl:gap-24` between the three groups.
     <nav className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center">
-      <div className="w-full max-w-[1360px] px-4 md:px-7">
+      {/* The phone's whole top chrome (#321): the account menu, nothing else.
+          Same 16px gutter as the shell's px-4. It floats above the page, so
+          the (app) shell reserves its band (safe-area + 56px) on the top
+          padding below md — the page's first line starts under the chip at
+          every phone width. */}
+      {userName ? (
+        <AccountMenu
+          testId="nav-account-mobile"
+          mobile
+          userName={userName}
+          userImage={userImage}
+          stravaConnected={stravaConnected}
+          syncState={syncState}
+          onSync={handleSync}
+          className="pointer-events-auto absolute top-[calc(env(safe-area-inset-top,0px)_+_12px)] right-4 md:hidden"
+        />
+      ) : null}
+      <div className="hidden w-full max-w-[1360px] px-4 md:block md:px-7">
         <motion.div
           data-testid="nav-pill"
           initial={{ opacity: 0, scale: 0 }}
-          animate={pillHidden ? { opacity: 0, scale: 0 } : { opacity: 1, scale: 1 }}
+          // #321: below md the entrance stays at its initial hidden state — the
+          // CSS-hidden bar has nothing to animate for. The class flip at md and
+          // the snapshot flip land together, so crossing up still plays the
+          // grow-in exactly as it does on a desktop load.
+          animate={!isDesktop || pillHidden ? { opacity: 0, scale: 0 } : { opacity: 1, scale: 1 }}
           transition={
             reduceMotion ? { duration: 0 } : { duration: PILL_DURATION_S, ease: PILL_EASE }
           }
@@ -287,70 +544,7 @@ export function NavBar({
               <SyncButton state={syncState} onSync={handleSync} />
             )}
             {userName ? (
-              // Hover open/close is a pointer-only nicety; keyboard and touch users
-              // drive the menu through the button's click toggle below.
-              // biome-ignore lint/a11y/noStaticElementInteractions: hover is progressive enhancement, button handles interaction
-              <div className="relative" onMouseEnter={openMenu} onMouseLeave={closeMenu}>
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen((open) => !open)}
-                  aria-haspopup="menu"
-                  aria-expanded={menuOpen}
-                  aria-label="Kontomenu"
-                  className="cg-interactive flex items-center gap-3 rounded-pill"
-                >
-                  <span className="hidden font-cg-mono text-[11px] tracking-[0.12em] text-ink sm:inline">
-                    {userName.toUpperCase()}
-                  </span>
-                  {userImage ? (
-                    <Image
-                      src={userImage}
-                      alt={userName}
-                      width={32}
-                      height={32}
-                      className="size-8 flex-none rounded-full object-cover ring-1 ring-white/70"
-                    />
-                  ) : (
-                    <span className="flex size-8 flex-none items-center justify-center rounded-full bg-cobalt text-[12px] font-semibold text-silver">
-                      {userName.slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
-                </button>
-
-                {menuOpen ? (
-                  <div
-                    role="menu"
-                    className="absolute right-0 top-[calc(100%+8px)] z-50 min-w-[168px] rounded-card border border-cobalt/15 bg-white/60 p-1.5 shadow-lg backdrop-blur-xl"
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        void signOut({ callbackUrl: ROUTES.HOME });
-                      }}
-                      className="flex w-full items-center gap-2.5 rounded-pill px-3 py-2 text-left text-[14px] font-medium text-cobalt transition-colors hover:bg-cobalt/[0.08]"
-                    >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                        <path d="M16 17l5-5-5-5" />
-                        <path d="M21 12H9" />
-                      </svg>
-                      Log ud
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              <AccountMenu testId="nav-account-desktop" userName={userName} userImage={userImage} />
             ) : null}
           </div>
         </motion.div>
