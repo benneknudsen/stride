@@ -187,12 +187,15 @@ describe("liquid glass tab style (#100)", () => {
     const inactive = glassTabStyle(false);
 
     expect(active.backdropFilter).toBe("blur(12px)");
-    expect(active.background).toBe("rgba(255,255,255,0.7)");
-    expect(active.boxShadow).toContain("rgba(27,41,192,0.10)");
+    expect(active.background).toBe("rgba(255,255,255,0.75)");
+    expect(active.boxShadow).toContain("rgba(27,41,192,0.16)");
 
     expect(inactive.backdropFilter).toBe("none");
     expect(inactive.background).toBe("rgba(255,255,255,0)");
-    expect(inactive.borderColor).toBe("rgba(255,255,255,0)");
+    // Transparent in both states — the border is kept only for layout and
+    // interpolation; the white edge band is gone (#322 follow-up).
+    expect(active.borderColor).toBe("transparent");
+    expect(inactive.borderColor).toBe("transparent");
   });
 
   test("both states declare the same properties, so the glass can flow", () => {

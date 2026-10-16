@@ -183,8 +183,9 @@ export function PaceTrendCard({
               style={{
                 left: `${Math.min(84, Math.max(16, (coords[hovered ?? 0][0] / W) * 100))}%`,
                 top: `${(coords[hovered ?? 0][1] / H) * 100}%`,
+                // No white border (#322 follow-up): it only ever read as a
+                // faint band on the chip's own white background.
                 background: "rgba(255,255,255,0.92)",
-                border: "1px solid rgba(255,255,255,0.9)",
                 boxShadow: "0 6px 20px color-mix(in srgb, var(--color-cobalt) 16%, transparent)",
               }}
             >

@@ -31,11 +31,17 @@ export function DemoBanner() {
     // gone, so the phone pins the banner at its own in-flow offset (safe-area +
     // mt-3) — same spot it starts in, no band of empty paper above it.
     <div className="sticky top-[calc(env(safe-area-inset-top,0px)_+_12px)] z-40 mt-3 flex justify-center sm:mt-4 md:top-[calc(env(safe-area-inset-top,0px)_+_94px)] [animation:cg-fade-up_0.6s_ease_both] motion-reduce:[animation:none]">
-      <GlassCard className="flex max-w-full items-center gap-3 rounded-pill py-1.5 pr-1.5 pl-4 sm:gap-4 sm:py-2 sm:pr-2">
+      <GlassCard
+        variant="banner"
+        className="flex max-w-full items-center gap-3 rounded-pill py-1.5 pr-1.5 pl-4 sm:gap-4 sm:py-2 sm:pr-2"
+      >
         <span className="flex-none rounded-pill bg-red px-2.5 py-1 cg-label tracking-[0.18em] font-semibold text-white">
           Demo
         </span>
-        <p className="m-0 min-w-0 truncate text-[13px] leading-snug text-ink">
+        {/* Cobalt, not ink: the banner sticks over the hero blob and the cobalt
+            cards while scrolling, where ink could not hold 4.5:1 — see the
+            --cg-glass-banner-bg note. */}
+        <p className="m-0 min-w-0 truncate text-[13px] leading-snug text-cobalt">
           <span className="sm:hidden">Du kigger på eksempeldata</span>
           <span className="hidden sm:inline">Dette er en demo med eksempeldata</span>
         </p>
