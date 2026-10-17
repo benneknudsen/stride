@@ -139,6 +139,28 @@ function classifyRisk(ratio: number): LoadRisk {
 }
 
 /**
+ * How many consecutive rest days it takes for a high acute:chronic ratio to
+ * leave the high-risk band, assuming no further load (#330).
+ *
+ * Both EWMA series decay toward zero on a rest day, but the acute series (7-day
+ * tau) decays faster than the chronic one (42-day tau), so the ratio falls by a
+ * fixed factor per day: `(1 - 1/TAU_ACUTE) / (1 - 1/TAU_CHRONIC)` ≈ 0.878. This
+ * is a deterministic countdown, not a readiness prediction — it says when the
+ * *risk classification* changes, not when the runner is recovered. Null when
+ * the ratio is already outside the high band (or unknown).
+ */
+export function daysUntilRiskFalls(load: TrainingLoad): number | null {
+  if (load.risk !== "high" || load.ratio === null || load.ratio <= 0) return null;
+  const dailyRatioDecay = (1 - 1 / TAU_ACUTE) / (1 - 1 / TAU_CHRONIC);
+  let ratio = load.ratio;
+  for (let day = 1; day <= 60; day++) {
+    ratio *= dailyRatioDecay;
+    if (classifyRisk(ratio) !== "high") return day;
+  }
+  return null;
+}
+
+/**
  * Median speed-per-heartbeat across the window's HR-carrying runs. Median so a
  * single GPS glitch or HR-strap dropout can't bend the trend.
  */

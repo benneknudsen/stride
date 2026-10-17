@@ -184,6 +184,65 @@ describe("runReviewBlock", () => {
     expect(block?.nextRunLabel).toBe("Næste løb: i dag · recovery-vinduet er klaret");
   });
 
+  it("does not promise a weekday when high load risk says rest (#330)", () => {
+    // Friday evening run, Saturday morning review: the recovery window is still
+    // open, and Saturday is also the plan's next run slot. With high load risk
+    // that slot is not a promise — the label must say the load has to fall first.
+    const runStart = new Date("2026-07-10T18:00:00.000Z");
+    const saturday = new Date("2026-07-11T08:00:00.000Z");
+    const ctx = context({
+      loadRisk: "high",
+      nextPlannedRun: "2026-07-11",
+      lastRun: {
+        startDate: runStart.toISOString(),
+        distanceKm: 10,
+        paceSecPerKm: 267,
+        averageHeartrate: 165,
+        movingTimeSec: 2670,
+      },
+      recommended: {
+        type: "rest",
+        distanceKm: 0,
+        reason: "Høj skadesrisiko — belastningen skal falde, før et nyt pas er forsvarligt.",
+      },
+    });
+
+    const input = buildAnalysisInput([activity(runStart, 10, 267, 165)], "trend", saturday, ctx);
+    const block = runReviewBlock(input, saturday);
+
+    expect(block?.nextRunLabel).toContain("når belastningen falder");
+    expect(block?.nextRunLabel).not.toMatch(/Næste løb: lørdag/);
+    expect(block?.suggestedRun).toBeNull();
+  });
+
+  it("takes the later of the recovery window and the plan's next run (#330)", () => {
+    // Friday evening run + 24 h → Saturday evening. The plan's next run is
+    // Monday, so Monday is the earliest defensible run — not Saturday.
+    const runStart = new Date("2026-07-10T18:00:00.000Z");
+    const saturday = new Date("2026-07-11T08:00:00.000Z");
+    const ctx = context({
+      loadRisk: "optimal",
+      nextPlannedRun: "2026-07-13",
+      lastRun: {
+        startDate: runStart.toISOString(),
+        distanceKm: 10,
+        paceSecPerKm: 267,
+        averageHeartrate: 165,
+        movingTimeSec: 2670,
+      },
+      recommended: {
+        type: "easy",
+        distanceKm: 8,
+        reason: "Distance fra burn-fasens bånd (8–10 km).",
+      },
+    });
+
+    const input = buildAnalysisInput([activity(runStart, 10, 267, 165)], "trend", saturday, ctx);
+    const block = runReviewBlock(input, saturday);
+
+    expect(block?.nextRunLabel).toBe("Næste løb: mandag · næste planlagte pas");
+  });
+
   it("falls back to the reason when the recommended type is not among the suggestions", () => {
     const ctx = context({
       suggestions: context().suggestions.filter((s) => s.type !== "long"),

@@ -138,6 +138,19 @@ export interface RunReviewPlanContext {
   daysToRace: number | null;
   /** The readiness band the Hjem gauge and the recommender show for the ratio. */
   readiness: { pct: number; band: "ready" | "easy" | "rest"; note: string };
+  /**
+   * The dashboard's load-risk band for the same ratio the readiness was read
+   * from (#330). Optional so older payloads keep validating; when present it
+   * makes the review's "Næste løb" honest about high injury risk.
+   */
+  loadRisk?: LoadRisk | null;
+  /**
+   * The first non-rest day in the engine's week plan at/after the recovery
+   * window, as a local calendar date (`YYYY-MM-DD`), or null (#330). The review
+   * takes max(recovery expiry, this slot) — the plan's next run is not promised
+   * sooner than the plan says.
+   */
+  nextPlannedRun?: string | null;
   /** Hours of recovery the engine requires before the recommended run. */
   recoveryHours: number;
   /** The three phase-aware suggestions from `getPlanSuggestions`. */
@@ -324,6 +337,15 @@ export function coachInsightBlock(input: AnalysisInput): AnalysisBlockOf<"coachI
 
 const HOUR_MS = 3_600_000;
 
+/** Parse the plan's local calendar day (`YYYY-MM-DD`) without a timezone shift. */
+function parsePlannedDay(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const day = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(day.getTime()) ? null : day;
+}
+
 /** Days until the race as a Danish time phrase — "i morgen", "om 74 dage". */
 function daysToRaceText(days: number): string {
   if (days <= 0) return "på racedagen";
@@ -392,9 +414,14 @@ export function runReviewBlock(
         context.daysToRace !== null ? ` ${daysToRaceText(context.daysToRace)}` : ""
       }`
     : "";
-  const planSentence = `Du er i ${context.phaseLabel}-fasen${raceClause}, og din readiness er ${
-    context.readiness.pct
-  }% (${context.readiness.note.toLowerCase()}).`;
+  const highLoadRisk = context.loadRisk === "high";
+  // On a high-risk rest card the readiness note must not say "let træning
+  // anbefalet" beside "nyt pas venter" — keep the number, drop the conflicting
+  // recommendation. The readiness mapping itself is unchanged (#241/#330).
+  const readinessClause = highLoadRisk
+    ? `din readiness er ${context.readiness.pct}%, men belastningen er i høj skadesrisiko, så et nyt pas venter`
+    : `din readiness er ${context.readiness.pct}% (${context.readiness.note.toLowerCase()})`;
+  const planSentence = `Du er i ${context.phaseLabel}-fasen${raceClause}, og ${readinessClause}.`;
 
   const recommendation = resting
     ? `I dag holder vi hviledag: ${context.recommended.reason}`
@@ -404,18 +431,46 @@ export function runReviewBlock(
         )} km): ${context.recommended.reason}`
       : context.recommended.reason;
 
-  const earliest = new Date(runDate.getTime() + context.recoveryHours * HOUR_MS);
-  const windowActive = now.getTime() < earliest.getTime();
-  const nextRunDay = DA_WEEKDAYS[getLocalDate(earliest).getDay()].toLowerCase();
+  // #330: the next run is constrained by BOTH the recovery window and the
+  // engine's plan. `nextPlannedRun` is the first non-rest slot at/after the
+  // recovery expiry, so the label can no longer promise a day the plan does not
+  // run — or, under high load risk, promise a day at all.
+  const recoveryEnd = new Date(runDate.getTime() + context.recoveryHours * HOUR_MS);
+  const windowActive = now.getTime() < recoveryEnd.getTime();
+  const plannedDay = parsePlannedDay(context.nextPlannedRun);
+  const plannedLaterDay =
+    plannedDay !== null && plannedDay.getTime() > recoveryEnd.getTime() ? plannedDay : null;
+  const constraint = plannedLaterDay ?? recoveryEnd;
+  // Never label a day that is already behind us.
+  const earliest = constraint.getTime() > now.getTime() ? constraint : now;
+  const today = getLocalDate(now);
+  const earliestDay = getLocalDate(earliest);
+  const isToday = earliestDay.getTime() === today.getTime();
+  const nextRunDay = DA_WEEKDAYS[earliestDay.getDay()].toLowerCase();
   let nextRunLabel: string;
-  if (windowActive) {
-    nextRunLabel = resting
-      ? `Næste løb: ${nextRunDay} · hviledag nu — tidligst ${context.recoveryHours} timer efter turen`
+  if (highLoadRisk) {
+    // High injury risk is not a scheduling problem: the load has to fall before
+    // any day can be named. The earliest day is still useful as a floor, but the
+    // label never promises that the runner will be out then.
+    nextRunLabel = isToday
+      ? "Næste løb: når belastningen falder."
+      : `Næste løb: når belastningen falder — tidligst ${nextRunDay}.`;
+  } else if (resting) {
+    if (windowActive) {
+      nextRunLabel = plannedLaterDay
+        ? `Næste løb: ${nextRunDay} · næste planlagte pas`
+        : `Næste løb: ${nextRunDay} · hviledag nu — tidligst ${context.recoveryHours} timer efter turen`;
+    } else {
+      nextRunLabel = `Næste løb: hviledag i dag — ${context.recommended.reason}`;
+    }
+  } else if (windowActive) {
+    nextRunLabel = plannedLaterDay
+      ? `Næste løb: ${nextRunDay} · næste planlagte pas`
       : `Næste løb: ${nextRunDay} · tidligst ${context.recoveryHours} timer efter turen`;
   } else {
-    nextRunLabel = resting
-      ? `Næste løb: hviledag i dag — ${context.recommended.reason}`
-      : "Næste løb: i dag · recovery-vinduet er klaret";
+    nextRunLabel = isToday
+      ? "Næste løb: i dag · recovery-vinduet er klaret"
+      : `Næste løb: ${nextRunDay} · næste planlagte pas`;
   }
 
   const suggestedRun = suggestion
@@ -505,19 +560,34 @@ export function heuristicBlocks(input: AnalysisInput, now?: Date): AnalysisBlock
     }`,
   });
 
-  // 4) A concrete next session, tuned to the volume trend.
+  // 4) A concrete next session, tuned to the volume trend and the load risk.
+  // High acute:chronic risk must not sit beside a tempo prescription (or even a
+  // recovery run) on the same feed: the risk guard in the recommender has
+  // already put today on hvile, so the generic block says the same here (#330).
   const recoveryPace =
     input.avgPaceLast7 !== null ? formatPaceSecPerKm(Math.round(input.avgPaceLast7 * 1.12)) : null;
   const tempoPace =
     input.avgPaceLast7 !== null ? formatPaceSecPerKm(Math.round(input.avgPaceLast7 * 0.92)) : null;
-  if (volDirection === "up") {
+  const loadRisk = input.progression.loadRisk;
+  if (loadRisk === "high") {
+    blocks.push({
+      tool: "workoutRecommendation",
+      title: "Hviledag",
+      workoutType: "Hvile",
+      details: "Ingen løbetur — belastningen skal falde først.",
+      rationale:
+        "Høj skadesrisiko: den akutte belastning er for høj til et nyt pas. Restitution er den næste session.",
+    });
+  } else if (volDirection === "up" || loadRisk === "elevated") {
     blocks.push({
       tool: "workoutRecommendation",
       title: "Rolig restitutions-tur",
       workoutType: "Restitution",
       details: `40 min afslappet${recoveryPace ? ` omkring ${recoveryPace} /km` : ""}`,
       rationale:
-        "Du øger mængden — læg en rolig dag ind for at absorbere belastningen før næste hårde pas.",
+        loadRisk === "elevated"
+          ? "Belastningen er forhøjet — en rolig dag holder ugen stabil uden at lægge et hårdt pas oven i."
+          : "Du øger mængden — læg en rolig dag ind for at absorbere belastningen før næste hårde pas.",
       ...(recoveryPace ? { targetPace: `${recoveryPace} /km` } : {}),
       distanceKm: 7,
     });
