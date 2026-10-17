@@ -19,6 +19,7 @@ import type { CoachFeedActivityInput } from "@/lib/coach/feed";
 import { buildRunReviewContext } from "@/lib/coach/run-review";
 import { buildCoachView, buildLiveCoachView } from "@/lib/cobalt/coach";
 import { TITLE_FLIP } from "@/lib/cobalt/flip";
+import { PAGE_TITLE_CLASS } from "@/lib/cobalt/title";
 import { getDashboardActivities, getRacePlan } from "@/lib/db/queries";
 import { demoActivities } from "@/lib/demo/data";
 
@@ -200,7 +201,7 @@ export default async function CoachPage() {
     <main className="flex flex-col gap-8 pt-4 pb-4">
       <header className="flex flex-col gap-1">
         <span className="cg-label text-[11px] tracking-[0.2em] text-red">Træner</span>
-        <h1 className="m-0 font-cg-display text-[32px] leading-none text-cobalt">
+        <h1 className={PAGE_TITLE_CLASS}>
           <FlipText {...TITLE_FLIP}>Coach</FlipText>
         </h1>
         <p className="m-0 text-[13.5px] text-ink">

@@ -5,6 +5,7 @@ import { SourceBadge } from "@/components/cobalt/SourceBadge";
 import type { ActivityDetailView } from "@/lib/cobalt/aktivitet";
 import { TITLE_FLIP } from "@/lib/cobalt/flip";
 import { formatDanish } from "@/lib/cobalt/format";
+import { PAGE_TITLE_CLASS } from "@/lib/cobalt/title";
 import { zoneBadgeText } from "@/lib/cobalt/zones";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -31,7 +32,7 @@ export function ActivityDetailHeader({ view }: { view: ActivityDetailView }) {
             <SourceBadge source={view.source} />
           </div>
 
-          <h1 className="m-0 flex items-center gap-4 font-cg-serif text-[36px] italic leading-[1.05] tracking-[-0.015em] text-cobalt sm:text-[48px]">
+          <h1 className={cn(PAGE_TITLE_CLASS, "flex items-center gap-4")}>
             {view.zone ? (
               <IntensityMeter
                 level={view.zone.level}

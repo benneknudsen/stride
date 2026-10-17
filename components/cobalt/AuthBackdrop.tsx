@@ -23,58 +23,78 @@ type Chip = {
   mark: ReactNode;
 };
 
-const COBALT_BAR = "w-1 rounded-full bg-cobalt/70";
+function Mark({ fill, children }: { fill: "fill-red/70" | "fill-cobalt/70"; children: ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" className={cn("size-6", fill)} aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
 
-// Feedback: the hollow 2.5px outline rings read as unfinished next to the
-// solid dot and bars. Each ring is now a painted annulus — one path, outer
-// circle + inner hole carved out with fill-rule evenodd, so the hole is
-// genuine transparency and the chip glass shows through. The 3.5px band sits
-// in the same weight family as the 4px bars, and every mark now shares one
-// 70% fill alpha (the dot used to be full opacity).
-const RING_PATH =
-  "M10 0a10 10 0 1 0 0 20a10 10 0 1 0 0-20Zm0 3.5a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13Z";
-
+// Four running/training motifs, one per chip: a stopwatch (intervals/tempo), a
+// route pin (where the run goes), a running shoe (the run itself) and a pulse
+// (heart-rate effort). They are solid, painted silhouettes rather than thin
+// outlines, so all four carry the same visual weight as the old filled dot and
+// bars, and every mark uses the same 70% brand alpha.
 const CHIPS: Chip[] = [
   {
-    id: "red-dot",
+    id: "stopwatch",
     className: "flex top-[15%] left-[5%] md:top-[18%] md:left-[12%]",
     baseRotate: -8,
     sway: { rotate: 6, x: 12, y: -16, duration: 4.5 },
-    mark: <span className="size-3 rounded-full bg-red/70" />,
+    mark: (
+      <Mark fill="fill-red/70">
+        <path d="M10.2 1.6h3.6a1.1 1.1 0 0 1 1.1 1.1v1.6a1.1 1.1 0 0 1-1.1 1.1h-3.6a1.1 1.1 0 0 1-1.1-1.1V2.7a1.1 1.1 0 0 1 1.1-1.1Z" />
+        <path d="M11.1 5.2h1.8v2.2h-1.8z" />
+        <path d="M18.1 5.5l2 2-2 2-2-2z" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M12 6.4a8 8 0 1 0 0 16 8 8 0 0 0 0-16ZM11.1 8.2h1.8v6.2h-1.8z"
+        />
+      </Mark>
+    ),
   },
   {
-    id: "cobalt-ring",
+    id: "route-pin",
     className: "flex top-[9%] right-[6%] md:top-[8%] md:right-[14%]",
     baseRotate: 6,
     sway: { rotate: -7, x: -12, y: -14, duration: 5 },
     mark: (
-      <svg viewBox="0 0 20 20" className="size-5 fill-cobalt/70" aria-hidden="true">
-        <path fillRule="evenodd" clipRule="evenodd" d={RING_PATH} />
-      </svg>
+      <Mark fill="fill-cobalt/70">
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M12 2.2c-3.9 0-7 3.1-7 7 0 5.2 7 12.6 7 12.6s7-7.4 7-12.6c0-3.9-3.1-7-7-7Zm0 3.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Z"
+        />
+      </Mark>
     ),
   },
   {
-    id: "volume-bars",
+    id: "running-shoe",
     className: "hidden sm:flex top-[58%] left-[3%] md:top-[62%] md:left-[6%]",
     baseRotate: -5,
     sway: { rotate: 8, x: 12, y: -18, duration: 4 },
     mark: (
-      <span className="flex items-end gap-1">
-        <span className={cn(COBALT_BAR, "h-2")} />
-        <span className={cn(COBALT_BAR, "h-3.5")} />
-        <span className={cn(COBALT_BAR, "h-5")} />
-      </span>
+      <Mark fill="fill-cobalt/70">
+        <path d="M2 14.4h20v1.7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" />
+        <path d="M3 14.5c0-1.6 1.1-2.9 2.7-3.2l4.1-1 2.2-3c.6-.8 1.6-1.1 2.5-.8l1.4.6 2.2-1.5c.9-.6 2.1-.4 2.8.4l.8.9c.5.6.8 1.3.8 2.1V14.5z" />
+      </Mark>
     ),
   },
   {
-    id: "red-ring",
+    id: "heart-rate",
     className: "hidden sm:flex top-[66%] right-[3%] md:top-[70%] md:right-[5%]",
     baseRotate: 9,
     sway: { rotate: -6, x: -12, y: -15, duration: 6 },
     mark: (
-      <svg viewBox="0 0 20 20" className="size-5 fill-red/70" aria-hidden="true">
-        <path fillRule="evenodd" clipRule="evenodd" d={RING_PATH} />
-      </svg>
+      <Mark fill="fill-red/70">
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M12 20C9.9 18.4 4 13.9 4 9.2 4 6.2 6.3 4 9.2 4c1.3 0 2.5.7 3.2 1.8C13.1 4.7 14.3 4 15.6 4c2.9 0 5.2 2.2 5.2 5.2 0 4.7-5.9 9.2-8.8 10.8Zm-5.8-10.5H8.8L9.7 7.3l1.6 6.1 1.4-5.4.7 1.5h4.4v1.4h-3.9l-.7-1.3-1.9 5.4-1.8-6.2-.8 2.1H6.2Z"
+        />
+      </Mark>
     ),
   },
 ];
