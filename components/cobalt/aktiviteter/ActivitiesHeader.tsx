@@ -2,6 +2,7 @@ import { CountUpNumber } from "@/components/cobalt/CountUpNumber";
 import { FlipText } from "@/components/cobalt/FlipText";
 import { formatTimerLabel } from "@/lib/cobalt/aktiviteter";
 import { TITLE_FLIP } from "@/lib/cobalt/flip";
+import { PAGE_TITLE_CLASS } from "@/lib/cobalt/title";
 
 // Activities header: red mono period-label + two-line serif-italic headline on
 // the left, three month-totals (km / ture / timer) count-up on the right. Sits
@@ -26,7 +27,7 @@ export function ActivitiesHeader({
         <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red">
           Aktiviteter · {periodLabel}
         </div>
-        <h1 className="m-0 font-cg-serif text-[42px] italic leading-[1.02] tracking-[-0.015em] text-cobalt sm:text-[54px]">
+        <h1 className={PAGE_TITLE_CLASS}>
           <FlipText {...TITLE_FLIP}>{"Alle dine ture,\nsamlet ét sted."}</FlipText>
         </h1>
       </div>

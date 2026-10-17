@@ -7,7 +7,9 @@ export default function AuthLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center bg-silver font-cg-sans">
+    // The auth surface is a single screen: lock it to the dynamic viewport so
+    // the mobile URL bar changing height can never expose a scrollable strip.
+    <div className="relative flex h-screen flex-col items-center justify-center overflow-hidden overscroll-none bg-silver font-cg-sans supports-[height:100dvh]:h-[100dvh]">
       {/* #304: the login card and its rows are server-rendered in Motion's
           `hidden` state (opacity 0 / translateY(8px)) as inline styles, so
           with scripts disabled the page would show an empty card. `!important`

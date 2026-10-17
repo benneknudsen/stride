@@ -2,7 +2,10 @@ import { cn } from "@/lib/utils";
 
 // The three slowly-drifting liquid blobs behind every Cobalt Glass page.
 // Fixed + pointer-events-none so they sit behind (and bleed through) the glass
-// widgets without ever intercepting clicks. Drift pauses under reduced motion.
+// widgets without ever intercepting clicks. Bound to 100dvh where supported so
+// the layer tracks the mobile URL bar instead of leaving a bare strip at the
+// bottom; html carries the matching silver base colour for any sub-pixel gap.
+// Drift pauses under reduced motion.
 const BLOBS = [
   {
     id: "red",
@@ -44,7 +47,10 @@ const BLOBS = [
 
 export function BackgroundBlobs() {
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-x-0 top-0 h-screen w-full overflow-hidden supports-[height:100dvh]:h-[100dvh]"
+    >
       {BLOBS.map((blob) => (
         <div
           key={blob.id}

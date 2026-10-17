@@ -11,6 +11,7 @@ import { PreviewShowcase } from "@/components/cobalt/velkommen/PreviewShowcase";
 import { Wordmark } from "@/components/cobalt/Wordmark";
 import { TITLE_FLIP } from "@/lib/cobalt/flip";
 import { buildHomeView } from "@/lib/cobalt/hjem";
+import { PAGE_TITLE_CLASS } from "@/lib/cobalt/title";
 import { DEMO_HOME_ROUTE } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +53,7 @@ export function VelkommenPage() {
           </div>
         </Reveal>
         <Reveal delay={0.08}>
-          <h1 className="mx-auto m-0 max-w-[820px] font-cg-serif text-[44px] italic leading-[1.04] tracking-[-0.015em] text-cobalt sm:text-[60px] md:text-[68px]">
+          <h1 className={cn(PAGE_TITLE_CLASS, "mx-auto max-w-[820px]")}>
             <FlipText {...TITLE_FLIP}>{"Al din løbedata.\nÉn coach, der forstår den."}</FlipText>
           </h1>
         </Reveal>
