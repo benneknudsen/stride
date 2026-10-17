@@ -173,6 +173,76 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
     });
   });
 
+  describe("step 3a — load-risk guard (#330)", () => {
+    /** A snapshot whose risk field is the one the dashboard publishes. */
+    function atRisk(ratio: number, risk: ProgressionSnapshot["trainingLoad"]["risk"], date: Date) {
+      return snapshot({ date, trainingLoad: { acute: 30 * ratio, chronic: 30, ratio, risk } });
+    }
+
+    it("rests on high load risk even when the recovery buffer is clear", () => {
+      const friday = anchor("sharpen", 5);
+      const now = new Date(friday.getFullYear(), friday.getMonth(), friday.getDate(), 23, 0);
+      const rec = recommend(
+        {
+          progression: atRisk(1.6, "high", now),
+          lastRun: new Date(now.getTime() - 29 * HOUR_MS),
+        },
+        now
+      );
+
+      expect(rec.type).toBe("rest");
+      expect(rec.distanceKm).toBe(0);
+      expect(rec.reason.join(" ")).toMatch(/skadesrisiko/i);
+      expect(rec.reason.join(" ")).toMatch(/restitution/i);
+    });
+
+    it("keeps the high-risk reason when the recovery buffer also rests", () => {
+      const friday = anchor("sharpen", 5);
+      const now = new Date(friday.getFullYear(), friday.getMonth(), friday.getDate(), 23, 0);
+      const rec = recommend(
+        {
+          progression: atRisk(1.6, "high", now),
+          lastRun: new Date(now.getTime() - 5 * HOUR_MS),
+        },
+        now
+      );
+
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/skadesrisiko/i);
+      expect(rec.reason.join(" ")).toMatch(/24/);
+    });
+
+    it("does not block at elevated risk but downgrades a tempo day to easy", () => {
+      const rec = recommend(
+        { progression: atRisk(1.45, "elevated", SHARPEN_WEDNESDAY) },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toMatch(/forhøjet/i);
+      expect(rec.reason.join(" ")).toMatch(/rolig/i);
+    });
+
+    it("keeps an easy day easy at elevated risk — the guard only softens hard passes", () => {
+      const rec = recommend(
+        { progression: atRisk(1.45, "elevated", BURN_WEDNESDAY) },
+        BURN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).not.toMatch(/skadesrisiko/i);
+    });
+
+    it("leaves the planned slot untouched at optimal risk — the ratio 1.0 regression guard", () => {
+      const rec = recommend(
+        { progression: atRisk(1.0, "optimal", SHARPEN_WEDNESDAY) },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("tempo");
+    });
+  });
+
   describe("step 3c — week-to-date load (#256)", () => {
     /**
      * The exact budget the gate measures against on `now`: the phase week's

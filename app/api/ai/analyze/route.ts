@@ -61,6 +61,14 @@ const requestPlanContextSchema = z.object({
     band: z.enum(["ready", "easy", "rest"]),
     note: z.string().max(80),
   }),
+  // #330: optional so older clients keep validating. `nextPlannedRun` is a
+  // local calendar day only — never a timestamp, so it cannot shift timezone.
+  loadRisk: z.enum(["detraining", "optimal", "elevated", "high"]).nullable().optional(),
+  nextPlannedRun: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
   recoveryHours: z.number().positive().max(168),
   suggestions: z.array(requestSuggestionSchema).min(1).max(3),
   lastRun: z

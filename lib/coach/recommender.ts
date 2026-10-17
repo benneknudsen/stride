@@ -9,6 +9,10 @@
 //   2. Recovery buffer (48 h before tempo, 24 h before easy/long, 72 h with
 //      injury history) — broken → rest day.
 //   3. Football yesterday → no hard session (tempo downgrades to easy).
+//   3a. Load-risk guard (#330) — the same `trainingLoad.risk` the dashboard's
+//      gauge shows: high risk → rest (injury risk beats the planned slot);
+//      elevated → soften a hard tempo to easy but do not block the day. This is
+//      a *different* mechanic from the readiness band below: risk vs. freshness.
 //   3b. Readiness band (#245) — the same asymmetric readiness the Hjem gauge
 //      shows: rest when the body needs restitution, downgrade to easy when
 //      readiness is only moderate. Freshness, distinct from the recovery buffer.
@@ -41,7 +45,11 @@ import {
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
 import type { Goal } from "@/lib/training/goals";
-import type { ProgressionSnapshot } from "@/lib/training/progression";
+import {
+  daysUntilRiskFalls,
+  type ProgressionSnapshot,
+  type TrainingLoad,
+} from "@/lib/training/progression";
 
 export interface WorkoutInput {
   /** Carried for future multi-goal support — not yet wired into the recommender. */
@@ -195,6 +203,38 @@ function restCard(reason: string[], recoveryHours: number): WorkoutRecommendatio
   };
 }
 
+/** " (1,6× dit 4-ugers fundament)" — Danish decimal comma for the load ratio. */
+function loadRatioClause(load: TrainingLoad): string {
+  if (load.ratio === null) return "";
+  const ratio = load.ratio.toFixed(1).replace(".", ",");
+  return ` (${ratio}× dit 4-ugers fundament)`;
+}
+
+/**
+ * The reason a high acute:chronic risk forces rest (#330). This is a *risk*
+ * guard, not a restatement of the readiness band: readiness maps the same ratio
+ * to freshness (and reads only "easy" at ratio 1.6), while the risk band says
+ * the runner is in the injury-risk zone. The countdown comes from the EWMA
+ * decay in `daysUntilRiskFalls` — deterministic, and it only claims when the
+ * *classification* drops, not when the runner is recovered.
+ */
+function highRiskRestReason(load: TrainingLoad): string {
+  const days = daysUntilRiskFalls(load);
+  const countdown =
+    days === null
+      ? ""
+      : ` Uden løb falder belastningen under høj-risiko om ${days} ${days === 1 ? "dag" : "dage"}.`;
+  return `Høj skadesrisiko${loadRatioClause(load)}: et nyt pas er ikke forsvarligt. Kroppen skal have restitution.${countdown}`;
+}
+
+/**
+ * The softened reason for the elevated band (#330): a caution, not a stop. Only
+ * a hard tempo session is downgraded — easy and long Zone 2 runs stay.
+ */
+function elevatedRiskReason(load: TrainingLoad): string {
+  return `Belastningen er forhøjet${loadRatioClause(load)} — tempopasset bliver en rolig Zone 2-tur, så risikoen ikke stiger.`;
+}
+
 // ── Recommender ─────────────────────────────────────────────────────────────
 
 /**
@@ -215,12 +255,20 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   // leaves this function — no surface renders a Mon–Sun strip (issue #291).
   const weekPlan = getWeekPlan(phase, mondayOfWeek(today), input.raceDate);
   const reason: string[] = [];
+  // #330: the dashboard's own load-risk band is the single source for risk. The
+  // readiness mapping below answers "how fresh is the runner?"; this answers
+  // "is another run safe?". They can disagree at ratio 1.5–1.72 — readiness
+  // says easy, risk says high — and risk must win the prescription.
+  const load = input.progression.trainingLoad;
+  const loadRisk = load.risk;
+  const highRiskReason = loadRisk === "high" ? highRiskRestReason(load) : null;
 
   // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
   const dayOfWeek = (today.getDay() + 6) % 7; // 0 = Mon … 6 = Sun
   const slot = weekPlan[dayOfWeek];
   if (slot.type === "rest") {
     reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
+    if (highRiskReason) reason.push(highRiskReason);
     return restCard(reason, input.injuryHistory ? INJURY_RECOVERY_HOURS : EASY_MIN_RECOVERY_HOURS);
   }
 
@@ -241,6 +289,9 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
       : EASY_MIN_RECOVERY_HOURS;
   const gap = hoursSince(input.lastRun, now);
   if (gap < recoveryHours) {
+    // Even when the buffer is the proximate cause, the high-risk read belongs on
+    // the card: the runner must know the rest is not only about elapsed time.
+    if (highRiskReason) reason.push(highRiskReason);
     if (input.injuryHistory) {
       reason.push(
         `Skadehistorik: kroppen får ${INJURY_RECOVERY_HOURS} timer mellem løbeture — kun ${Math.round(gap)} timer siden sidste tur.`
@@ -251,6 +302,19 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
       );
     }
     return restCard(reason, recoveryHours);
+  }
+
+  // 3a. Load-risk guard (#330): acute:chronic risk is a separate mechanic from
+  // readiness (injury risk vs. freshness). High risk always wins over the slot,
+  // exactly like a broken recovery buffer above. Elevated is a caution, not a
+  // stop: it downgrades the hard tempo session but leaves easy/long Zone 2 runs.
+  if (highRiskReason) {
+    reason.push(highRiskReason);
+    return restCard(reason, recoveryHours);
+  }
+  if (loadRisk === "elevated" && type === "tempo") {
+    type = "easy";
+    reason.push(elevatedRiskReason(load));
   }
 
   // 3. Football yesterday → no hard session.

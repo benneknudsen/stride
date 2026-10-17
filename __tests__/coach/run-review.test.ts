@@ -116,6 +116,23 @@ describe("buildRunReviewContext", () => {
     expect(context.recommended.reason).toBe(workout.reason[0]);
   });
 
+  it("carries the load risk and the plan's next run slot for the review (#330)", () => {
+    const workout = workoutFor(new Date(NOW.getTime() - DAY_MS));
+    const context = buildRunReviewContext({
+      activities: STEADY,
+      now: NOW,
+      raceDate: RACE_DATE,
+      raceName: "Testløbet",
+      raceDistanceKm: 21.0975,
+      ratio: computeSnapshot(STEADY, NOW).trainingLoad.ratio,
+      loadRisk: "high",
+      workout,
+    });
+
+    expect(context.loadRisk).toBe("high");
+    expect(context.nextPlannedRun).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it("inside the recovery window the review excludes the forbidden run", () => {
     const recent = new Date(NOW.getTime() - 4 * HOUR_MS);
     const { workout, context } = contextFor(recent);

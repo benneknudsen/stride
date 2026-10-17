@@ -86,6 +86,17 @@ describe("heuristicBlocks", () => {
     expect(blocks.some((b) => b.tool === "workoutRecommendation")).toBe(true);
   });
 
+  it("prescribes rest, not tempo, while the load risk is high (#330)", () => {
+    const blocks = heuristicBlocks(buildAnalysisInput(SAMPLE, "overall", NOW));
+    const workout = blocks.find((b) => b.tool === "workoutRecommendation");
+
+    expect(workout?.title).toBe("Hviledag");
+    if (workout?.tool === "workoutRecommendation") {
+      expect(workout.workoutType).toBe("Hvile");
+      expect(workout.rationale).toMatch(/skadesrisiko/i);
+    }
+  });
+
   it("never renders a pace delta with 60 in the seconds place", () => {
     // 59.6 s delta used to round the remainder alone and produce "0:60".
     const input = buildAnalysisInput(SAMPLE, "overall", NOW);
@@ -125,13 +136,13 @@ describe("heuristicBlocks", () => {
     expect(titles).toContain("Træningsbelastning");
 
     // workoutType renders raw in the card pill (CoachFeed.tsx), so it too must
-    // be Danish. SAMPLE builds volume this week, so the fallback prescribes a
-    // recovery session.
+    // be Danish. SAMPLE carries a high acute:chronic ratio, so the feed
+    // prescribes the only safe session under that risk: rest.
     const workout = blocks.find((b) => b.tool === "workoutRecommendation");
     expect(workout).toBeDefined();
     if (workout?.tool === "workoutRecommendation") {
-      expect(workout.title).toBe("Rolig restitutions-tur");
-      expect(workout.workoutType).toBe("Restitution");
+      expect(workout.title).toBe("Hviledag");
+      expect(workout.workoutType).toBe("Hvile");
     }
   });
 });

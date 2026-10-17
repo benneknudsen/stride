@@ -304,6 +304,13 @@ export function buildNextActivity({
   const phase = getCurrentPhase(getLocalDate(now), raceDate);
   const rules = getPhaseRules(phase, raceDate);
   const longThresholdKm = roundHalf(rules.longRunMaxKm * LONG_RUN_MIN_FACTOR);
+  // #330: the same load-risk band the recommender and the gauge read. High risk
+  // is a rest day; elevated risk is a caution that only softens fast work.
+  const loadRisk = progression.trainingLoad.risk;
+  const highRiskReason =
+    loadRisk === "high"
+      ? "Høj skadesrisiko — variationen venter, til belastningen er faldet."
+      : null;
 
   const recent = activities
     .filter(isRun)
@@ -339,6 +346,7 @@ export function buildNextActivity({
   if (gapHours < EASY_MIN_RECOVERY_HOURS) {
     const ranToday =
       getLocalDate(ensureDate(recent[0].startDate)).getTime() === getLocalDate(now).getTime();
+    if (highRiskReason) reason.push(highRiskReason);
     reason.push(
       ranToday
         ? `Du har løbet i dag — hviledag for restitution. Kun ${Math.round(
@@ -360,6 +368,15 @@ export function buildNextActivity({
     reason.push(
       'Dagens "Næste pas" er hvile — så variationen venter. Hviledagen er en del af planen, ikke et hul i den.'
     );
+    return restCard(basis, reason);
+  }
+
+  // 3b. Load risk (#330). This is the same guard the recommender applies, read
+  // from the same band: high risk means no run at all, even if today's "Næste
+  // pas" were a run. Elevated is handled after the mix, where only the fast
+  // variations are softened.
+  if (highRiskReason) {
+    reason.push(highRiskReason);
     return restCard(basis, reason);
   }
 
@@ -427,6 +444,14 @@ export function buildNextActivity({
     type = coordinated;
   }
 
+  // Elevated load risk is a caution, not a stop (#330): the fast variations are
+  // softened to a rolig tur, while a long Zone 2 run — already aerobic — stays.
+  const softenedByRisk = loadRisk === "elevated" && (type === "fartlek" || type === "intervals");
+  if (softenedByRisk) {
+    type = "easy";
+    reason.push("Belastningen er forhøjet — fartpasset bliver en rolig Zone 2-tur i dag.");
+  }
+
   // The dæmpet note belongs on the fast variations only — the long Zone 2 tur is
   // aerobic work every phase already prescribes at full værdi.
   if (reduced && (type === "fartlek" || type === "intervals")) {
@@ -437,7 +462,11 @@ export function buildNextActivity({
     );
   }
 
-  reason.push(`Din readiness er på ${readiness.pct}% — du er klar til variationen.`);
+  reason.push(
+    softenedByRisk
+      ? `Din readiness er på ${readiness.pct}% — men belastningen er forhøjet, så variationen holdes rolig i dag.`
+      : `Din readiness er på ${readiness.pct}% — du er klar til variationen.`
+  );
 
   return runCard(type, rules, basis, reason, reduced);
 }

@@ -3,6 +3,7 @@ import type { ProgressionActivityInput } from "../../lib/training/progression";
 import {
   computeProgression,
   computeSnapshot,
+  daysUntilRiskFalls,
   getProgression,
   TAU_ACUTE,
   TAU_CHRONIC,
@@ -267,6 +268,20 @@ describe("computeSnapshot — training load", () => {
     ).trainingLoad;
     expect(acute).toBeCloseTo(60 / TAU_ACUTE, 5);
     expect(chronic ?? 0).toBeCloseTo(60 / TAU_CHRONIC, 5);
+  });
+
+  it("counts the rest days until a high ratio leaves the high-risk band (#330)", () => {
+    // Both series decay at zero load; the acute series decays faster, so the
+    // ratio falls. 1.6 → 1.405 after one rest day, inside the elevated band.
+    expect(daysUntilRiskFalls({ acute: 48, chronic: 30, ratio: 1.6, risk: "high" })).toBe(1);
+    // 1.72 is still high after one day (1.51) and leaves it on day two (1.33).
+    expect(daysUntilRiskFalls({ acute: 51.6, chronic: 30, ratio: 1.72, risk: "high" })).toBe(2);
+  });
+
+  it("has no countdown when the ratio is not high", () => {
+    expect(daysUntilRiskFalls({ acute: 30, chronic: 30, ratio: 1, risk: "optimal" })).toBeNull();
+    expect(daysUntilRiskFalls({ acute: 45, chronic: 30, ratio: 1.5, risk: "elevated" })).toBeNull();
+    expect(daysUntilRiskFalls({ acute: 0, chronic: null, ratio: null, risk: null })).toBeNull();
   });
 });
 

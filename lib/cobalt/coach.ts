@@ -187,6 +187,15 @@ function sameDayNote(readiness: Readiness, hoursSinceRun: number | null): string
   return ranToday && readiness.band === "ready" ? SAME_DAY_RUN_NOTE : undefined;
 }
 
+/**
+ * The form card's note when the separate load-risk band is high (#330). The
+ * readiness mapping is untouched — its percentage and band still come from
+ * `readinessFromRatio` — but a card sitting beside "Høj skadesrisiko" must not
+ * keep saying "Let træning anbefalet". Risk is layered on top as a guard, not
+ * folded into the readiness curve.
+ */
+const HIGH_RISK_FORM_NOTE = "Høj skadesrisiko — prioritér restitution i dag.";
+
 export function buildCoachView(now: Date = new Date()): CoachView {
   const runs = demoActivities.filter(isRunActivity);
 
@@ -276,6 +285,9 @@ export function buildLiveCoachView(
     dashboard.hoursSinceHardEffort ?? null
   );
   const { pct, note } = readiness;
+  // The risk guard is a surface overlay (#330): keep the readiness number, but
+  // don't let the form card recommend "Let træning" beside a high-risk gauge.
+  const formNote = loadGauge.risk === "high" ? HIGH_RISK_FORM_NOTE : note;
 
   const status = loadStatusFromRatio(ratio);
 
@@ -284,7 +296,7 @@ export function buildLiveCoachView(
     focusQuote: liveFocusQuote(workout),
     form: {
       pct,
-      note,
+      note: formNote,
       sameDayNote: sameDayNote(readiness, dashboard.hoursSinceLastRun ?? null),
       ...formTrend(ratio ?? 1),
     },

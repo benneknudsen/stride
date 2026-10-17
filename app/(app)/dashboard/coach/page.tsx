@@ -194,6 +194,7 @@ export default async function CoachPage() {
     raceDistanceKm: racePlan?.raceDistanceKm ?? null,
     goalTimeSeconds: racePlan?.goalTimeSeconds ?? null,
     ratio: dashboard.loadGauge.ratio,
+    loadRisk: dashboard.loadGauge.risk,
     workout: dashboard.workout,
   });
 

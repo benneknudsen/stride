@@ -8,7 +8,7 @@ import {
   VARIETY_PACE_RANGES,
 } from "@/lib/coach/next-activity";
 import { PACE_RANGES, type RecommendedType, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
-import type { ProgressionSnapshot } from "@/lib/training/progression";
+import type { LoadRisk, ProgressionSnapshot } from "@/lib/training/progression";
 
 const HOUR_MS = 3_600_000;
 
@@ -76,11 +76,14 @@ function build(
   activities: CoachActivityInput[],
   now: Date,
   ratio: number | null = READY_RATIO,
-  todayType?: RecommendedType
+  todayType?: RecommendedType,
+  risk: LoadRisk = "optimal"
 ) {
+  const progression = snapshot(ratio);
+  progression.trainingLoad.risk = risk;
   return buildNextActivity({
     activities,
-    progression: snapshot(ratio),
+    progression,
     now,
     raceDate: TEST_RACE_DATE,
     todayType,
@@ -211,6 +214,28 @@ describe("buildNextActivity", () => {
 
     expect(next.type).toBe("easy");
     expect(next.reason.join(" ")).toContain("Hold det roligt");
+  });
+
+  it("rests on high load risk even when today's pas is not hvile (#330)", () => {
+    const next = build(fiveEasyRuns(SHARPEN), SHARPEN, READY_RATIO, undefined, "high");
+
+    expect(next.type).toBe("rest");
+    expect(next.distanceKm).toBe(0);
+    expect(next.reason.join(" ")).toMatch(/skadesrisiko/i);
+  });
+
+  it("softens a fast variation at elevated risk instead of blocking the day (#330)", () => {
+    const activities = [
+      run(SHARPEN, 72, { distance: 16_000 }),
+      run(SHARPEN, 120),
+      run(SHARPEN, 168),
+      run(SHARPEN, 216),
+      run(SHARPEN, 264),
+    ];
+    const next = build(activities, SHARPEN, 1.45, undefined, "elevated");
+
+    expect(next.type).toBe("easy");
+    expect(next.reason.join(" ")).toMatch(/forhøjet/i);
   });
 
   it("lets the fartlek fire on the 24 h buffer alone, without waiting for 48 h", () => {

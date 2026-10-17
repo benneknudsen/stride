@@ -8,6 +8,7 @@ import {
 } from "@/lib/cobalt/coach";
 import { SAME_DAY_RUN_NOTE } from "@/lib/cobalt/readiness";
 import { demoActivities } from "@/lib/demo/data";
+import type { LoadRisk } from "@/lib/training/progression";
 
 /**
  * Unit tests for the Coach view-model (lib/cobalt/coach.ts).
@@ -101,6 +102,7 @@ describe("buildCoachView", () => {
 /** Minimal CoachDashboardData carrying only what buildLiveCoachView reads. */
 function dashboard(over: {
   ratio: number | null;
+  risk?: LoadRisk | null;
   workout?: Partial<CoachDashboardData["workout"]>;
   hoursSinceHardEffort?: number | null;
   hoursSinceLastRun?: number | null;
@@ -120,7 +122,7 @@ function dashboard(over: {
     paceSeries: [],
     zoneSeries: [],
     volumeSeries: [],
-    loadGauge: { ratio: over.ratio, fraction: 0.5, risk: null, label: "" },
+    loadGauge: { ratio: over.ratio, fraction: 0.5, risk: over.risk ?? null, label: "" },
     hoursSinceHardEffort: over.hoursSinceHardEffort ?? null,
     hoursSinceLastRun: over.hoursSinceLastRun ?? null,
     // biome-ignore lint/suspicious/noExplicitAny: partial view-model fixture
@@ -161,6 +163,15 @@ describe("buildLiveCoachView", () => {
     const spiking = buildLiveCoachView(dashboard({ ratio: 1.8 }), liveActivities, NOW);
     expect(balanced.form.pct).toBeGreaterThan(spiking.form.pct);
     expect(balanced.form.pct).toBeLessThanOrEqual(95);
+  });
+
+  it("replaces the easy note when load risk is high, without moving the readiness number (#330)", () => {
+    const easy = buildLiveCoachView(dashboard({ ratio: 1.6 }), liveActivities, NOW);
+    const high = buildLiveCoachView(dashboard({ ratio: 1.6, risk: "high" }), liveActivities, NOW);
+
+    expect(high.form.pct).toBe(easy.form.pct);
+    expect(easy.form.note).toBe("Let træning anbefalet");
+    expect(high.form.note).toBe("Høj skadesrisiko — prioritér restitution i dag.");
   });
 
   it("falls back to a fixed readiness when there is no ratio yet", () => {
