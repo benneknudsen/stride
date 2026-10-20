@@ -90,7 +90,7 @@ export default function LoginPage() {
             type="button"
             disabled={busy}
             onClick={() => handleOAuth("strava")}
-            className="cg-interactive flex w-full items-center justify-center gap-2 rounded-card bg-[#fc4c02] px-4 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="cg-interactive cg-cta cg-cta-strava flex w-full items-center justify-center gap-2 rounded-card bg-[#fc4c02] px-4 py-2.5 text-[14px] font-semibold text-white disabled:opacity-50"
           >
             {oauthLoading === "strava" ? (
               <Loader2 size={16} className="animate-spin" />
@@ -113,7 +113,7 @@ export default function LoginPage() {
           <LoginLink
             href={DEMO_HOME_ROUTE}
             trackEvent="demo_åbnet"
-            className="cg-interactive flex w-full items-center justify-center rounded-card border border-cobalt/20 bg-white/70 px-4 py-2.5 text-[14px] font-semibold text-cobalt transition-colors hover:bg-white"
+            className="cg-interactive cg-cta cg-cta-cobalt flex w-full items-center justify-center rounded-card border border-cobalt/20 bg-white/70 px-4 py-2.5 text-[14px] font-semibold text-cobalt"
           >
             Udforsk demoen
           </LoginLink>

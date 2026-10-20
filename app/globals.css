@@ -145,6 +145,23 @@
     background: var(--color-cobalt);
     color: var(--color-onred);
   }
+  /* Tailwind v4's preflight leaves buttons on the browser's `cursor: default`,
+     so one shared rule gives the pointer to the real controls — `button`,
+     `[role="button"]` and `summary` that are neither disabled nor
+     aria-disabled — instead of a `cursor-pointer` class on each one. It lives
+     in the base layer, so a `cursor-*` utility still wins (RaceDateDialog's
+     backdrop keeps `cursor-default`). Plain links are deliberately absent:
+     the UA stylesheet already gives them the pointer. The second rule makes
+     `[aria-disabled="true"]` explicitly `default` so a link carrying it drops
+     the UA pointer too. */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+  [aria-disabled="true"] {
+    cursor: default;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -371,7 +388,11 @@
 
 /* Shared keyboard-focus + touch-feedback affordance for interactive elements. */
 @utility cg-interactive {
-  transition: transform 150ms ease;
+  /* box-shadow rides along so cg-cta's hover glow stays smooth whichever of
+     the two utilities' `transition` declarations wins the cascade. */
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
   &:focus-visible {
     outline: 2px solid var(--color-cobalt);
     outline-offset: 2px;
@@ -384,6 +405,84 @@
       transform: none;
     }
   }
+}
+
+/* Shared "cheeky" hover for the two login CTAs: one small lift, one soft glow
+   in the button's own colour and one diagonal sheen sweeping across — both
+   buttons move identically because they share this utility. Transform and
+   box-shadow only, so the layout box never moves (no CLS). The sheen is a
+   ::after layer parked off-canvas and swept by a cg- keyframe on hover/focus
+   entry; it sits under the label (z-index -1 inside the button's own stacking
+   context) and pointer-events: none keeps it from swallowing the click. But
+   stacking is not contrast: the sweep still tints the button background
+   behind the label, so each tone picks a tint that raises or only negligibly
+   lowers the label contrast (WCAG 2.x, measured on the composited colours):
+   Strava's dark tint lifts white on #fc4c02 from 3.40:1 at rest to 4.63:1 at
+   the sweep peak; cobalt's tint moves text-cobalt on the glass stack from
+   9.69:1 to 8.11:1. The tone variants below only set the two colours. */
+@utility cg-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: linear-gradient(
+      115deg,
+      transparent 35%,
+      var(--cg-cta-sheen, rgb(255 255 255 / 0.3)) 50%,
+      transparent 65%
+    );
+    transform: translateX(-140%);
+  }
+
+  /* Reduced motion: no sheen, no lift, no glow movement — the static button
+     is the whole interaction. */
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      display: none;
+    }
+  }
+
+  /* motion-safe is Tailwind's prefers-reduced-motion: no-preference variant —
+     written as @variant so this block does not add a second raw no-preference
+     media query ahead of FlipText's (#306); the built CSS is identical. */
+  @variant motion-safe {
+    /* :not(:active) leaves cg-interactive's press scale as the only transform
+       while pressed — one transform owner at any moment. Disabled and
+       aria-disabled controls never lift or sweep. */
+    &:hover:not(:disabled):not([aria-disabled="true"]):not(:active),
+    &:focus-visible:not(:disabled):not([aria-disabled="true"]):not(:active) {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px -10px var(--cg-cta-glow, rgb(27 41 192 / 0.45));
+    }
+
+    &:hover:not(:disabled):not([aria-disabled="true"])::after,
+    &:focus-visible:not(:disabled):not([aria-disabled="true"])::after {
+      animation: cg-cta-sheen 640ms ease-out;
+    }
+  }
+}
+
+/* Tone variants: each CTA glows in its own colour — Strava orange, cobalt.
+   The sheens follow the contrast rule in cg-cta above: the Strava sheen is a
+   dark tint (the sweep raises the label contrast), the cobalt sheen a faint
+   cobalt wash that stays far above AA. Both keep the rgb()/alpha form so the
+   tint blends with the button background. */
+@utility cg-cta-strava {
+  --cg-cta-sheen: rgb(0 0 0 / 0.16);
+  --cg-cta-glow: rgb(252 76 2 / 0.5);
+}
+@utility cg-cta-cobalt {
+  --cg-cta-sheen: rgb(27 41 192 / 0.1);
+  --cg-cta-glow: rgb(27 41 192 / 0.32);
 }
 
 /* ── Cobalt Glass keyframes (cg- prefixed to stay self-contained) ── */
@@ -491,6 +590,16 @@
   }
   to {
     opacity: 0;
+  }
+}
+/* Sheen sweep for cg-cta — the parked ::after travels across the button once
+   per hover/focus entry. */
+@keyframes cg-cta-sheen {
+  from {
+    transform: translateX(-140%);
+  }
+  to {
+    transform: translateX(140%);
   }
 }
 
