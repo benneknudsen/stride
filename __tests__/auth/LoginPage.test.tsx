@@ -106,3 +106,37 @@ describe("LoginPage — CTA hierarchy and entrance (#304)", () => {
     expect(screen.getByRole("button", { name: /Log ind med Strava/i })).toBeTruthy();
   });
 });
+
+describe("LoginPage — shared CTA affordances", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setPrefersReducedMotion(false);
+  });
+
+  // Both CTAs must carry the one shared hover utility (`cg-cta`, defined in
+  // app/globals.css) so neither can silently drift into its own animation.
+  test("both login CTAs carry the shared cg-cta hover utility", () => {
+    render(<LoginPage />);
+
+    const strava = screen.getByRole("button", { name: /Log ind med Strava/i });
+    const demo = screen.getByRole("link", { name: /Udforsk demoen/i });
+    expect(strava.classList.contains("cg-cta")).toBe(true);
+    expect(demo.classList.contains("cg-cta")).toBe(true);
+  });
+
+  // The pointer cursor comes from one base rule in app/globals.css — no CTA
+  // may carry its own `cursor-pointer`, and the superseded hover classes must
+  // not come back and compete with cg-cta.
+  test("no login CTA carries its own cursor class or a superseded hover effect", () => {
+    render(<LoginPage />);
+
+    const ctas = [
+      screen.getByRole("button", { name: /Log ind med Strava/i }),
+      screen.getByRole("link", { name: /Udforsk demoen/i }),
+    ];
+    for (const cta of ctas) {
+      expect(cta.classList.contains("cursor-pointer")).toBe(false);
+      expect(cta.className).not.toMatch(/hover:opacity-90|hover:bg-white/);
+    }
+  });
+});
