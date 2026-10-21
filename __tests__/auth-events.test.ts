@@ -107,7 +107,7 @@ const blobFixture = { iv: "deadbeef", authTag: "cafe", encrypted: "ENCRYPTED_BLO
 beforeEach(() => {
   mocks.encrypt.mockReturnValue(blobFixture);
   mocks.upsertStravaTokens.mockResolvedValue(undefined);
-  mocks.syncStravaActivities.mockResolvedValue(0);
+  mocks.syncStravaActivities.mockResolvedValue({ status: "complete", inserted: 0 });
 
   // db.update(table).set(values).where(cond) resolves once where() is awaited.
   mocks.dbWhere.mockResolvedValue(undefined);
@@ -411,12 +411,36 @@ describe("events.signIn — initial sync", () => {
     });
     mocks.syncStravaActivities.mockImplementationOnce(async () => {
       order.push("sync");
-      return 0;
+      return { status: "complete", inserted: 0 };
     });
 
     await signIn({ user, account: stravaAccount });
 
     expect(order.indexOf("upsert")).toBeLessThan(order.indexOf("sync"));
+  });
+
+  // Issue #338: a sync that only covered part of the history must not be
+  // reported as a complete one — and it must never fail the sign-in.
+  it("records a partial sync and still signs the user in", async () => {
+    mocks.syncStravaActivities.mockResolvedValueOnce({
+      status: "partial",
+      inserted: 100,
+      reason: "paginationCap",
+    });
+
+    await expect(signIn({ user, account: stravaAccount })).resolves.toBeUndefined();
+    expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+    expect(mocks.captureError).toHaveBeenCalledWith(
+      "auth.events.signIn.initialSync.incomplete",
+      expect.any(Error)
+    );
+  });
+
+  it("keeps signing in when another sync is already running", async () => {
+    mocks.syncStravaActivities.mockResolvedValueOnce({ status: "busy", inserted: 0 });
+
+    await expect(signIn({ user, account: stravaAccount })).resolves.toBeUndefined();
+    expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
   });
 });
 

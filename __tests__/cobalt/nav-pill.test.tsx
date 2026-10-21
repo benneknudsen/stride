@@ -210,7 +210,10 @@ describe("mobile account control (#321)", () => {
   });
 
   test("connected: the menu syncs through the same handler and state", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, inserted: 0, partial: false }),
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<NavBar userName="Benne" stravaConnected />);

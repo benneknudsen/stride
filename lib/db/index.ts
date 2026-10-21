@@ -19,15 +19,31 @@ import * as schema from "../../drizzle/schema";
  * `ws` dependency is required.
  */
 let _db: ReturnType<typeof drizzle> | null = null;
+let _pool: Pool | null = null;
 
-export function getDb() {
-  if (!_db) {
+/**
+ * The pooled WebSocket connection itself.
+ *
+ * Exported next to the Drizzle instance because some work needs a dedicated
+ * connection rather than a statement on the shared pool — the Strava sync
+ * holds a session-scoped advisory lock on one connection for the length of
+ * the sync (issue #338). A transaction cannot do that: it would have to stay
+ * open across the whole network paging.
+ */
+export function getPool(): Pool {
+  if (!_pool) {
     const connectionString = process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error("POSTGRES_URL (or DATABASE_URL) is not set");
     }
-    const pool = new Pool({ connectionString });
-    _db = drizzle(pool, {
+    _pool = new Pool({ connectionString });
+  }
+  return _pool;
+}
+
+export function getDb() {
+  if (!_db) {
+    _db = drizzle(getPool(), {
       schema: { ...schema, ...relations },
       casing: "snake_case",
     });
@@ -37,18 +53,17 @@ export function getDb() {
 
 /**
  * Convenience singleton — lazy, won't connect until first use.
- * Justification for `any`: Proxy requires unsafe typing to delegate all properties
- * to the underlying Drizzle instance. The `as ReturnType<typeof getDb>` cast
- * provides type safety at the boundary — consumers see the full typed db object.
+ *
+ * A Proxy forwards every property access to the real Drizzle instance, so
+ * callers get the fully typed db object while the connection itself stays
+ * lazy. The target is an empty object: it is never read, only its property
+ * lookups are intercepted.
  */
-// biome-ignore lint/suspicious/noExplicitAny: Proxy pattern requires unsafe typing, type-safe at boundary
-export const db = new Proxy({} as any, {
-  // biome-ignore lint/suspicious/noExplicitAny: Proxy target type erasure
-  get(_target: any, prop: string | symbol) {
-    // biome-ignore lint/suspicious/noExplicitAny: Property access delegation
-    return (getDb() as any)[prop];
+export const db = new Proxy({} as ReturnType<typeof getDb>, {
+  get(_target, prop) {
+    return Reflect.get(getDb(), prop);
   },
-}) as ReturnType<typeof getDb>;
+});
 
 export type Database = typeof db;
 

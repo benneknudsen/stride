@@ -86,7 +86,16 @@ export async function handleStravaCallback(code: string, codeVerifier: string): 
   // (transient Strava/DB error, rate limit) must not surface as a failed
   // connect. The webhook and the manual re-sync backfill anything missed here.
   try {
-    await syncStravaActivities(userId);
+    const result = await syncStravaActivities(userId);
+    // Issue #338: a sync that only covered part of the history must not pass
+    // for a complete one. Record it, but never fail the connect — the webhook
+    // and a manual re-sync backfill what is missing.
+    if (result.status === "partial") {
+      captureError(
+        "actions.handleStravaCallback.initialSync.incomplete",
+        new Error(`Initial Strava sync for user ${userId} ended as partial (${result.reason})`)
+      );
+    }
   } catch (err) {
     captureError("actions.handleStravaCallback.initialSync", err);
   }

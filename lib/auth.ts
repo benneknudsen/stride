@@ -34,6 +34,38 @@ export function stripAccountTokens(account: AdapterAccount): AdapterAccount {
   return withoutTokens;
 }
 
+/**
+ * The Drizzle adapter with the plaintext OAuth tokens stripped.
+ *
+ * getDb() returns the real Drizzle instance. The exported `db` is a lazy
+ * Proxy, which breaks the adapter's `instanceof` dialect detection.
+ * Session strategy is JWT (see auth.config.ts), so the adapter never reads or
+ * writes `sessionsTable` — it stays wired here only so switching back to
+ * database sessions is a one-line config change. `accountsTable` is still used
+ * for OAuth account linking; `verificationTokensTable` stays wired for the
+ * adapter contract.
+ *
+ * Issue #262/#277: the stock adapter would persist the Strava `access_token`/
+ * `refresh_token` and the Google `id_token` in plaintext on `accounts`, so
+ * they are stripped before delegation — the encrypted `strava_tokens` mirror
+ * is the only at-rest copy.
+ */
+function buildDrizzleAdapter() {
+  const drizzleAdapter = DrizzleAdapter(getDb(), {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  });
+
+  return {
+    ...drizzleAdapter,
+    linkAccount: async (account: AdapterAccount) => {
+      await drizzleAdapter.linkAccount?.(stripAccountTokens(account));
+    },
+  };
+}
+
 const {
   handlers,
   auth: nodeAuth,
@@ -41,39 +73,7 @@ const {
   signOut,
 } = NextAuth({
   ...authConfig,
-  // getDb() returns the real Drizzle instance. The exported `db` is a lazy
-  // Proxy, which breaks the adapter's `instanceof` dialect detection.
-  // Session strategy is JWT (see auth.config.ts), so the adapter never reads or
-  // writes `sessionsTable` — it stays wired here only so switching back to
-  // database sessions is a one-line config change. `accountsTable` is still used
-  // for OAuth account linking; `verificationTokensTable` stays wired for the
-  // adapter contract.
-  adapter: (() => {
-    // getDb() returns the real Drizzle instance. The exported `db` is a lazy
-    // Proxy, which breaks the adapter's `instanceof` dialect detection.
-    // Session strategy is JWT (see auth.config.ts), so the adapter never reads or
-    // writes `sessionsTable` — it stays wired here only so switching back to
-    // database sessions is a one-line config change. `accountsTable` is still used
-    // for OAuth account linking; `verificationTokensTable` stays wired for the
-    // adapter contract.
-    const drizzleAdapter = DrizzleAdapter(getDb(), {
-      usersTable: users,
-      accountsTable: accounts,
-      sessionsTable: sessions,
-      verificationTokensTable: verificationTokens,
-    });
-
-    // Issue #262/#277: the stock adapter would persist the Strava `access_token`/
-    // `refresh_token` and the Google `id_token` in plaintext on `accounts`, so
-    // they are stripped before delegation — the encrypted `strava_tokens` mirror
-    // is the only at-rest copy.
-    return {
-      ...drizzleAdapter,
-      linkAccount: async (account: AdapterAccount) => {
-        await drizzleAdapter.linkAccount?.(stripAccountTokens(account));
-      },
-    };
-  })(),
+  adapter: buildDrizzleAdapter(),
   providers: [...authConfig.providers],
   events: {
     /**
@@ -166,7 +166,17 @@ const {
         // — the tokens are already stored, and the webhook/manual re-sync backfill
         // anything missed here.
         try {
-          await syncStravaActivities(userId);
+          const result = await syncStravaActivities(userId);
+          // Issue #338: a sync that only covered part of the history must not
+          // pass for a complete one. Record it, but never fail the sign-in.
+          if (result.status === "partial") {
+            captureError(
+              "auth.events.signIn.initialSync.incomplete",
+              new Error(
+                `Initial Strava sync for user ${userId} ended as partial (${result.reason})`
+              )
+            );
+          }
         } catch (err) {
           captureError("auth.events.signIn.initialSync", err);
         }
