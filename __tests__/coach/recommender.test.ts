@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { CoachActivityInput } from "@/lib/coach/dashboard";
 import {
   ALL_CONSTRAINTS,
   buildPhases,
   getPhaseRules,
   getWeekPlan,
   type PhaseKey,
+  type WorkoutContext,
 } from "@/lib/coach/engine";
+import { buildNextActivity } from "@/lib/coach/next-activity";
 import {
   recommendWorkout,
   TEMPO_HR_CAP_BPM,
@@ -270,8 +273,24 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       return total * Math.min(1, (dayOfWeek + 1) / 7);
     }
 
-    it("changes nothing on a fresh week — identical to omitting the field", () => {
-      expect(recommend({ weekToDateKm: 5 })).toEqual(recommend());
+    it("closes the week's gap when the tally shows the week is behind (#333)", () => {
+      // #333: a known tally that leaves the week well behind its prorated goal
+      // now raises the distance instead of behaving as if the week were unread.
+      const withTally = recommend({ weekToDateKm: 5 });
+      expect(withTally.distanceKm).toBeGreaterThan(recommend().distanceKm);
+      expect(withTally.reason.join(" ")).toMatch(/bag ugens planlagte volumen/i);
+    });
+
+    it("drops the week-gap line when the raised distance is scaled back down", () => {
+      // Repair R6.1: a tally just short of the budget rounds the target half a
+      // kilometre past it, so the scale-down gate cuts the run to the phase
+      // minimum. The card must not still claim today's run is longer.
+      const budget = intendedWeekKm("burn", BURN_WEDNESDAY);
+      const rec = recommend({ weekToDateKm: budget - 9.96 });
+
+      expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).minDistanceKm);
+      expect(rec.reason.join(" ")).toMatch(/næsten brugt/i);
+      expect(rec.reason.join(" ")).not.toMatch(/bag ugens planlagte volumen/i);
     });
 
     it("keeps the tempo day hard when the week is barely started", () => {
@@ -678,6 +697,282 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
     it("recommends the plan's easy run on a Monday run day", () => {
       const rec = recommend({ progression: snapshot({ date: BURN_MONDAY }) }, BURN_MONDAY);
       expect(rec.type).toBe("easy");
+    });
+  });
+
+  describe("#333 — the day follows the runner's state, not only the calendar", () => {
+    /** The week's intended volume, prorated to the day under test. */
+    function intendedWeekKm(phase: PhaseKey, now: Date): number {
+      const dayOfWeek = (now.getDay() + 6) % 7;
+      const monday = addDays(now, -dayOfWeek);
+      const total = getWeekPlan(phase, monday, RACE).reduce(
+        (sum, day) => sum + (day.distanceKm ?? 0),
+        0
+      );
+      return total * Math.min(1, (dayOfWeek + 1) / 7);
+    }
+
+    /** The last run's shape, classified by the shared run-character module. */
+    function summary(
+      character: "easy" | "tempo" | "long" | "hard",
+      distanceKm = 8
+    ): NonNullable<WorkoutInput["lastRunSummary"]> {
+      return { distanceKm, movingTimeSec: 2_700, character };
+    }
+
+    it("AC3: a 6-day pause restarts with a rolig tur and names the pause", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({ date: SHARPEN_WEDNESDAY }),
+          lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 6 * DAY_MS),
+          lastRunSummary: summary("easy"),
+        },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).not.toBe("rest");
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toMatch(/pause i 6 dage/i);
+    });
+
+    it("AC2: without lastRunSummary a 4-day gap leaves the tempo day unchanged", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({ date: SHARPEN_WEDNESDAY }),
+          lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 4 * DAY_MS),
+        },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("tempo");
+    });
+
+    it("AC2: with lastRunSummary a 4-day pause turns the tempo day easy", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({ date: SHARPEN_WEDNESDAY }),
+          lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 4 * DAY_MS),
+          lastRunSummary: summary("easy"),
+        },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toMatch(/pause i 4 dage/i);
+    });
+
+    it("AC2: a 14+ day break writes only the long-pause line, never both pauses", () => {
+      // Two pause concepts meet here: the 3-day state gate and the 14-day
+      // restart scale-down. On a long break the 14-day line already says the
+      // day restarted easy, so the card must not repeat "pause i 15 dage".
+      const rec = recommend(
+        {
+          lastRun: new Date(BURN_WEDNESDAY.getTime() - 15 * DAY_MS),
+          lastRunSummary: summary("easy"),
+        },
+        BURN_WEDNESDAY
+      );
+
+      const pauseLines = rec.reason.filter((line) => /pause/i.test(line));
+      expect(pauseLines).toHaveLength(1);
+      expect(pauseLines[0]).toContain("14+");
+    });
+
+    it("AC4: same readiness, different last-run character gives different days", () => {
+      // Repair R1: Z3 tempo is ordinary aerobic work and no longer gates. The
+      // contrast must come from a Z4–Z5 run, the effort that actually leaves
+      // 48 h of residue. A long day keeps its 24 h buffer, so a hard run 30 h
+      // ago clears the buffer and the character gate is what softens the day.
+      const lastRun = new Date(PEAK_SUNDAY.getTime() - 30 * HOUR_MS);
+      const afterEasy = recommend(
+        {
+          progression: snapshot({ date: PEAK_SUNDAY }),
+          lastRun,
+          lastRunSummary: summary("easy"),
+        },
+        PEAK_SUNDAY
+      );
+      const afterHard = recommend(
+        {
+          progression: snapshot({ date: PEAK_SUNDAY }),
+          lastRun,
+          lastRunSummary: summary("hard"),
+        },
+        PEAK_SUNDAY
+      );
+
+      expect(afterEasy.type).toBe("long");
+      expect(afterHard.type).toBe("easy");
+      expect(afterHard.reason.join(" ")).toMatch(/hårdt pas/i);
+    });
+
+    it("AC4: a Z3 last run does not cancel the plan's tempo day", () => {
+      // Repair R1: the old quality-last gate read Z3 as quality and deleted the
+      // tempo slot. Z3 is tempo work, not the kind of session that owes 48 h.
+      const rec = recommend(
+        {
+          progression: snapshot({ date: SHARPEN_WEDNESDAY }),
+          lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 60 * HOUR_MS),
+          lastRunSummary: summary("tempo"),
+        },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("tempo");
+      expect(rec.reason.join(" ")).not.toMatch(/hårdt pas/i);
+    });
+
+    it("AC4: a hard run 30 h ago softens a long day with the hard-last reason", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({ date: PEAK_SUNDAY }),
+          lastRun: new Date(PEAK_SUNDAY.getTime() - 30 * HOUR_MS),
+          lastRunSummary: summary("hard"),
+        },
+        PEAK_SUNDAY
+      );
+
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toMatch(/hårdt pas/i);
+      expect(rec.reason.join(" ")).toMatch(/restituere/i);
+    });
+
+    it("AC6: the variation agrees with the pas when the last run was hard", () => {
+      // Repair B1/R1: a hard run 30 h ago clears the long day's 24 h buffer, but
+      // the legs have not had the 48 h a hard effort owes them. The mix alone
+      // would pick the long tur (it is missing) — both cards must read the same
+      // state gate and say the same sentence instead.
+      const now = PEAK_SUNDAY;
+      const lastRun = new Date(now.getTime() - 30 * HOUR_MS);
+      const rec = recommend(
+        {
+          progression: snapshot({ date: now }),
+          lastRun,
+          lastRunSummary: summary("hard"),
+        },
+        now
+      );
+
+      const activity = (
+        hoursAgo: number,
+        overrides: Partial<CoachActivityInput> = {}
+      ): CoachActivityInput => ({
+        type: "Run",
+        distance: 8_000,
+        movingTime: 2_700,
+        averageHeartrate: 125,
+        startDate: new Date(now.getTime() - hoursAgo * HOUR_MS),
+        ...overrides,
+      });
+      const activities = [
+        activity(30, { averageHeartrate: 160 }),
+        activity(78, { distance: 16_000 }),
+        activity(126),
+        activity(174),
+        activity(222),
+      ];
+      const next = buildNextActivity({
+        activities,
+        progression: snapshot({ date: now }),
+        now,
+        raceDate: RACE,
+        todayType: rec.type,
+      });
+
+      const hardLine =
+        "Din sidste tur var et hårdt pas — i dag bliver det en rolig tur, så benene har nået at restituere.";
+      expect(rec.type).toBe("easy");
+      expect(next.type).toBe(rec.type);
+      expect(rec.reason).toContain(hardLine);
+      expect(next.reason).toContain(hardLine);
+    });
+
+    it("AC2: an easy last run preserves the plan's tempo rhythm", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({ date: SHARPEN_WEDNESDAY }),
+          lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 60 * HOUR_MS),
+          lastRunSummary: summary("easy"),
+        },
+        SHARPEN_WEDNESDAY
+      );
+
+      expect(rec.type).toBe("tempo");
+    });
+
+    it("AC2: a long run last time turns the long day into an easy run", () => {
+      // Repair R1: the long run's residue lasts 48 h — the same window a hard
+      // effort owes. Thirty hours is still inside it and clears the 24 h buffer
+      // for a long run, so this is exactly the day the gate exists for.
+      const rec = recommend(
+        {
+          progression: snapshot({ date: PEAK_SUNDAY }),
+          lastRun: new Date(PEAK_SUNDAY.getTime() - 30 * HOUR_MS),
+          lastRunSummary: summary("long", 18),
+        },
+        PEAK_SUNDAY
+      );
+
+      expect(rec.type).toBe("easy");
+      expect(rec.reason.join(" ")).toMatch(/lang tur/i);
+    });
+
+    it("AC2: a week behind its goal raises the distance to the gap, never over the phase max", () => {
+      const budget = intendedWeekKm("burn", BURN_WEDNESDAY);
+      const rec = recommend({ weekToDateKm: budget - 10 });
+
+      expect(rec.type).toBe("easy");
+      expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).maxDistanceKm);
+      expect(rec.reason.join(" ")).toMatch(/bag ugens planlagte volumen/i);
+    });
+
+    it("AC2: a large gap is still capped by the phase max", () => {
+      const rec = recommend({ weekToDateKm: 0 });
+
+      expect(rec.type).toBe("easy");
+      expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).maxDistanceKm);
+      expect(rec.reason.join(" ")).toMatch(/bag ugens planlagte volumen/i);
+    });
+
+    it("AC2: a week at its goal leaves the distance unchanged", () => {
+      const budget = intendedWeekKm("burn", BURN_WEDNESDAY);
+      const rec = recommend({ weekToDateKm: budget - 0.5 });
+
+      expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).minDistanceKm);
+      expect(rec.reason.join(" ")).not.toMatch(/bag ugens planlagte volumen/i);
+    });
+
+    it("AC2: an unknown week tally leaves the distance unchanged", () => {
+      expect(recommend({ lastRunSummary: summary("easy") }).distanceKm).toBe(
+        recommend().distanceKm
+      );
+    });
+
+    it("AC1: threads lastRunSummary.distanceKm into the validation context", () => {
+      const recovery = ALL_CONSTRAINTS.find((c) => c.id === "recovery-window");
+      if (!recovery) throw new Error("recovery-window constraint missing");
+      const seen: WorkoutContext[] = [];
+      vi.spyOn(recovery, "evaluate").mockImplementation((context) => {
+        seen.push(context);
+        return null;
+      });
+
+      recommend({ lastRunSummary: summary("easy", 12.4) });
+
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every((context) => context.lastRunDistanceKm === 12.4)).toBe(true);
+    });
+
+    it("AC7: the same state input gives an identical recommendation, reason and trace", () => {
+      const stateInput = input(SHARPEN_WEDNESDAY, {
+        progression: snapshot({ date: SHARPEN_WEDNESDAY }),
+        lastRun: new Date(SHARPEN_WEDNESDAY.getTime() - 60 * HOUR_MS),
+        lastRunSummary: summary("tempo"),
+      });
+
+      expect(JSON.stringify(recommendWorkout(stateInput, SHARPEN_WEDNESDAY))).toBe(
+        JSON.stringify(recommendWorkout(stateInput, SHARPEN_WEDNESDAY))
+      );
     });
   });
 

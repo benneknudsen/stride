@@ -1,4 +1,4 @@
-// Stride — "Næste aktivitet": the *variation* the runner's last five runs are
+// Stride — "Næste aktivitet": the *variation* the runner's recent runs are
 // missing, not a second opinion on today's session (issue #253).
 //
 // This is the counterpart to `lib/coach/recommender.ts`, and the two answer
@@ -7,16 +7,17 @@
 //     plan, filtered through the recovery buffer and readiness. Plan-grounded.
 //   • "Næste aktivitet" (here) — a *different kind* of session than the plan's
 //     standard easy/tempo/long: a long Zone 2 tur, a fartlek or intervals,
-//     picked from what the last five runs do not contain. Variation.
+//     picked from what the recent runs do not contain. Variation.
 // Before #253 both cards prescribed from the same easy/tempo/long vocabulary
 // and read as duplicates ("er det kort eller lang tur?"); the variety vocabulary
 // is what keeps them distinguishable.
 //
 // The decision, in order:
-//   1. Classify each of the last five runs — long (distance), hard (Z4–Z5),
-//      tempo (Z3) or easy (Z1–Z2). Intensity comes from `aggregateZones`, the
-//      one heart-rate→zone model the whole app shares, so a run is never
-//      classified by a rule invented here.
+//   1. Classify runs — long (distance), hard (Z4–Z5), tempo (Z3) or easy
+//      (Z1–Z2). Intensity comes from `aggregateZones`, the one heart-rate→zone
+//      model the whole app shares, so a run is never classified by a rule
+//      invented here. The five newest runs describe both the basis line and the
+//      mix; the 28-day window is read only for the long-run hole (#333).
 //   2. Recovery buffer against the newest run — `EASY_MIN_RECOVERY_HOURS`
 //      before any run at all, and the full `MIN_RECOVERY_HOURS` before the one
 //      session that really is hard: intervals. A fartlek is fartspring inside an
@@ -31,6 +32,10 @@
 //      overlap the de-dup in step 6 has always allowed.
 //   4. Readiness via `readinessFromRatio`, the same asymmetric mapping the Hjem
 //      gauge and the recommender read: rest → hvile, easy → a rolig tur.
+//   4b. State shape (#333): the same shared `dayShapeGate` the recommender reads.
+//      A pause, or a hard/long last run inside the 48 h residue window, caps
+//      today at a rolig tur before the mix can argue for intervals — and the
+//      de-dup cannot switch it back.
 //   5. What the mix lacks: no long run → the long Zone 2 tur; no quality at all
 //      → fartlek; tempo but no real speed → intervals; everything covered →
 //      fartlek again, since a rolig tur is what "Næste pas" already prescribes
@@ -62,24 +67,26 @@ import {
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
 import { PACE_RANGES, type RecommendedType, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
+import {
+  classifyRun,
+  dayShapeGate,
+  dayShapeReason,
+  longRunThresholdKm,
+  type RunKind,
+} from "@/lib/coach/run-character";
 import { formatDanish } from "@/lib/cobalt/format";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
-import { dominantZone, isHardEffort } from "@/lib/training/effort";
 import type { ProgressionSnapshot } from "@/lib/training/progression";
 
 /** How many recent runs the recommendation reads. */
 const NEXT_ACTIVITY_SAMPLE = 5;
 
-/**
- * A run counts as "long" from this share of the phase's long-run ceiling
- * (`longRunMaxKm`) upward — 13 km in the base phases, 14,5 km in sharpen/peak,
- * 8 km in the taper. Phase-relative rather than a fixed number so the bar moves
- * with what the block actually asks for.
- */
-const LONG_RUN_MIN_FACTOR = 0.8;
-
 const HOUR_MS = 3_600_000;
+
+/** How far back the missing-long check looks (issue #333). */
+const HOLE_WINDOW_DAYS = 28;
+const HOLE_WINDOW_MS = HOLE_WINDOW_DAYS * 24 * HOUR_MS;
 
 /**
  * What the variation can prescribe. Derived from the engine's {@link SessionType}
@@ -95,9 +102,6 @@ type RunType = Exclude<NextActivityType, "rest">;
 
 /** The two fast sessions — the ones a base phase gets in a dæmpet variant (#254). */
 type VarietyType = Extract<RunType, "fartlek" | "intervals">;
-
-/** How a past run is read: its role in the mix, not its label in Strava. */
-type RunKind = "easy" | "tempo" | "long" | "hard";
 
 type PaceRange = { min: string; max: string };
 
@@ -134,7 +138,7 @@ export interface NextActivityView {
    *  intervals (whose reps are meant to reach Zone 4–5, so a ceiling would
    *  misdescribe them). A base phase's dæmpet intervals do carry one (#254). */
   heartRateCap: number | null;
-  /** Danish one-liner over the sampled mix ("Sidste 5 ture: 4 rolige · …"). */
+  /** Danish one-liner over the sampled mix — five runs, or the 28-day window when it cut runs. */
   basis: string;
   reason: string[];
 }
@@ -154,6 +158,12 @@ interface NextActivityInput {
    * last-five-runs read it was before the coordination existed.
    */
   todayType?: RecommendedType;
+  /**
+   * Today's "Næste pas" distance, when the caller knows it (#333 repair). On a
+   * gate day both cards prescribe a rolig tur; sharing the distance keeps AC6's
+   * "de samme tal" true instead of the variation inventing its own mid-band km.
+   */
+  todayDistanceKm?: number;
 }
 
 /** Running activity types: "Run", "TrailRun", "VirtualRun", … */
@@ -164,20 +174,6 @@ function isRun(activity: CoachActivityInput): boolean {
 /** Prescribed distances sit on a half-km grid — "7,5 km", never "7,25 km". */
 function roundHalf(km: number): number {
   return Math.round(km * 2) / 2;
-}
-
-/**
- * A past run's role in the mix. Distance decides first: a 20 km run is the
- * week's long run however hard the heart rate ran. Below the long-run bar the
- * intensity decides — Z4–Z5 is a hard session (the shared {@link isHardEffort},
- * which the readiness cap reads too, so the two can never disagree about what
- * "hard" means), Z3 a tempo, the rest easy. A run without heart rate reads as
- * easy rather than inventing an intensity.
- */
-function classifyRun(run: CoachActivityInput, longThresholdKm: number): RunKind {
-  if (run.distance / 1000 >= longThresholdKm) return "long";
-  if (isHardEffort(run)) return "hard";
-  return dominantZone(run) === 3 ? "tempo" : "easy";
 }
 
 /**
@@ -217,9 +213,11 @@ const TYPE_LABELS: Record<RunType, string> = {
   intervals: "et intervalpas",
 };
 
-/** What the last five runs say about which fast session is the right one. */
+/** What the recent mix says about which fast session is the right one. */
 interface MixContext {
+  /** The long-run hole, read over the 28-day window. */
   longCount: number;
+  /** Hard (Z4–Z5) runs among the five newest, the mix the card varies from. */
   hardCount: number;
   /** Whether the full 48 h an intervalpas needs have passed (#254). */
   intervalBufferClear: boolean;
@@ -265,11 +263,12 @@ function runCard(
   rules: PhaseRules,
   basis: string,
   reason: string[],
-  reduced = false
+  reduced = false,
+  distanceKm?: number
 ): NextActivityView {
   return {
     type,
-    distanceKm: distanceFor(type, rules),
+    distanceKm: distanceKm ?? distanceFor(type, rules),
     paceRange: paceFor(type, reduced),
     heartRateCap: heartRateCapFor(type, reduced),
     basis,
@@ -298,12 +297,14 @@ export function buildNextActivity({
   now,
   raceDate,
   todayType,
+  todayDistanceKm,
 }: NextActivityInput): NextActivityView {
   // E2: which phase we're in must read the athlete's Danish calendar day, not
   // the server's UTC one — same rule the recommender follows.
-  const phase = getCurrentPhase(getLocalDate(now), raceDate);
+  const today = getLocalDate(now);
+  const phase = getCurrentPhase(today, raceDate);
   const rules = getPhaseRules(phase, raceDate);
-  const longThresholdKm = roundHalf(rules.longRunMaxKm * LONG_RUN_MIN_FACTOR);
+  const longThresholdKm = longRunThresholdKm(rules);
   // #330: the same load-risk band the recommender and the gauge read. High risk
   // is a rest day; elevated risk is a caution that only softens fast work.
   const loadRisk = progression.trainingLoad.risk;
@@ -312,11 +313,11 @@ export function buildNextActivity({
       ? "Høj skadesrisiko — variationen venter, til belastningen er faldet."
       : null;
 
-  const recent = activities
+  const eligible = activities
     .filter(isRun)
     .filter((run) => ensureDate(run.startDate).getTime() <= now.getTime())
-    .sort((a, b) => ensureDate(b.startDate).getTime() - ensureDate(a.startDate).getTime())
-    .slice(0, NEXT_ACTIVITY_SAMPLE);
+    .sort((a, b) => ensureDate(b.startDate).getTime() - ensureDate(a.startDate).getTime());
+  const recent = eligible.slice(0, NEXT_ACTIVITY_SAMPLE);
 
   if (recent.length === 0) {
     return runCard("easy", rules, "Ingen registrerede ture endnu", [
@@ -324,13 +325,32 @@ export function buildNextActivity({
     ]);
   }
 
-  const kinds = recent.map((run) => classifyRun(run, longThresholdKm));
-  const countOf = (kind: RunKind) => kinds.filter((k) => k === kind).length;
-  const easyCount = countOf("easy");
-  const longCount = countOf("long");
-  const hardCount = countOf("hard");
-  const qualityCount = countOf("tempo") + hardCount;
-  const basis = `Sidste ${recent.length} ture: ${easyCount} rolige · ${qualityCount} kvalitet · ${longCount} lange`;
+  // #333: the missing-long check reaches further back than the five runs the
+  // basis describes. 28 days is the same horizon the zone chart reads, so a
+  // long run from three weeks ago still counts as covered.
+  const windowRuns = eligible.filter(
+    (run) => ensureDate(run.startDate).getTime() >= now.getTime() - HOLE_WINDOW_MS
+  );
+  const windowCut = windowRuns.length < eligible.length;
+
+  // Classify each run in the window once. The five newest runs decide both the
+  // basis line and the hard/quality mix (#333 repair R6): the wider window is
+  // only for the long-run hole, so one monthly hard run cannot keep the card
+  // from ever suggesting intervals again.
+  const recentKinds = recent.map((run) => classifyRun(run, longThresholdKm));
+  const windowKinds = windowRuns.map((run) => classifyRun(run, longThresholdKm));
+  const basisKinds = windowCut ? windowKinds : recentKinds;
+  const countOf = (list: RunKind[], kind: RunKind) => list.filter((k) => k === kind).length;
+  const basisEasy = countOf(basisKinds, "easy");
+  const basisLong = countOf(basisKinds, "long");
+  const basisQuality = countOf(basisKinds, "tempo") + countOf(basisKinds, "hard");
+  const basis = windowCut
+    ? `Seneste ${HOLE_WINDOW_DAYS} dage: ${basisEasy} rolige · ${basisQuality} kvalitet · ${basisLong} lange`
+    : `Sidste ${recent.length} ture: ${basisEasy} rolige · ${basisQuality} kvalitet · ${basisLong} lange`;
+
+  const longCount = countOf(windowKinds, "long");
+  const hardCount = countOf(recentKinds, "hard");
+  const qualityCount = countOf(recentKinds, "tempo") + hardCount;
 
   const reason: string[] = [];
 
@@ -344,8 +364,7 @@ export function buildNextActivity({
     (now.getTime() - ensureDate(recent[0].startDate).getTime()) / HOUR_MS
   );
   if (gapHours < EASY_MIN_RECOVERY_HOURS) {
-    const ranToday =
-      getLocalDate(ensureDate(recent[0].startDate)).getTime() === getLocalDate(now).getTime();
+    const ranToday = getLocalDate(ensureDate(recent[0].startDate)).getTime() === today.getTime();
     if (highRiskReason) reason.push(highRiskReason);
     reason.push(
       ranToday
@@ -391,11 +410,38 @@ export function buildNextActivity({
     );
     return restCard(basis, reason);
   }
-  if (readiness.band === "easy") {
+
+  // 4b. State-based day shape (#333): the same shared gate the recommender
+  // reads. A pause, or a hard/long last run inside the 48 h residue window, caps
+  // today at a rolig tur — the variation must not answer with intervals or a
+  // long run on the same day the pas says the effort cannot stack. When the gate
+  // fires, the mix and the de-dup below are skipped: the gate's answer is the
+  // day's answer, not one opinion the cross-card coordination may switch back to
+  // something harder.
+  //
+  // When the pas already landed on easy, its distance is today's distance too
+  // (#333 repair R6): two cards prescribing the same rolig tur must not quote
+  // 8 km and 9 km for it. Without a pas in the input, the mid-band distance
+  // still stands.
+  const easyDistanceKm = todayType === "easy" ? todayDistanceKm : undefined;
+  const easyReadinessReason = `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Hold det roligt: variationen i dag er en rolig restitutionstur, ikke et fartpas.`;
+  const gate = dayShapeGate({
+    character: recentKinds[0],
+    gapHours,
+  });
+  if (gate) {
     reason.push(
-      `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Hold det roligt: variationen i dag er en rolig restitutionstur, ikke et fartpas.`
+      readiness.band === "easy"
+        ? easyReadinessReason
+        : `Din readiness er på ${readiness.pct}% — du er klar til en rolig tur i dag.`
     );
-    return runCard("easy", rules, basis, reason);
+    reason.push(dayShapeReason(gate, gapHours));
+    return runCard("easy", rules, basis, reason, false, easyDistanceKm);
+  }
+
+  if (readiness.band === "easy") {
+    reason.push(easyReadinessReason);
+    return runCard("easy", rules, basis, reason, false, easyDistanceKm);
   }
 
   // 5. What the mix is missing — the variation, never a copy of the phase's
@@ -411,12 +457,12 @@ export function buildNextActivity({
   if (longCount === 0) {
     type = "long";
     reason.push(
-      `Ingen lang tur (${formatDanish(longThresholdKm)}+ km) blandt de sidste ${recent.length} ture — en lang rolig Zone 2-tur er den variation din uge mangler.`
+      `Ingen lang tur (${formatDanish(longThresholdKm)}+ km) blandt de seneste ${HOLE_WINDOW_DAYS} dage — en lang rolig Zone 2-tur er den variation din uge mangler.`
     );
   } else if (qualityCount === 0) {
     type = "fartlek";
     reason.push(
-      `Alle ${recent.length} seneste ture var rolige og jævne — en fartlek bryder rytmen med fartspring uden at være et hårdt intervalpas.`
+      `Alle de seneste ${recent.length} ture var rolige og jævne — en fartlek bryder rytmen med fartspring uden at være et hårdt intervalpas.`
     );
   } else if (hardCount === 0 && intervalBufferClear) {
     type = "intervals";
@@ -431,7 +477,7 @@ export function buildNextActivity({
   } else {
     type = "fartlek";
     reason.push(
-      `De sidste ${recent.length} ture dækker både fart og distance — så variationen i dag er en fartlek, der holder benene kvikke uden at lægge et nyt hårdt pas oven i.`
+      `De seneste ${recent.length} ture dækker både fart og distance — så variationen i dag er en fartlek, der holder benene kvikke uden at lægge et nyt hårdt pas oven i.`
     );
   }
 
