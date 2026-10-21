@@ -3,6 +3,7 @@ import {
   buildCoachDashboard,
   buildLoadGauge,
   buildPaceEfficiencySeries,
+  buildPaceEfficiencyTrend,
   buildVolumeSeries,
   buildZoneSeries,
   type CoachActivityInput,
@@ -90,6 +91,28 @@ describe("buildPaceEfficiencySeries", () => {
   it("keeps null efficiency as null so the chart renders a gap", () => {
     const series = buildPaceEfficiencySeries([snapshot({ paceEfficiency: null })]);
     expect(series[0].efficiency).toBeNull();
+  });
+});
+
+describe("buildPaceEfficiencyTrend", () => {
+  it("compares the last two weekly snapshots", () => {
+    const trend = buildPaceEfficiencyTrend([
+      snapshot({ date: new Date(2026, 6, 1), paceEfficiency: 4.1 }),
+      snapshot({ date: new Date(2026, 6, 8), paceEfficiency: 4.3 }),
+    ]);
+    expect(trend).toEqual({ current: 4.3, previous: 4.1 });
+  });
+
+  it("returns undefined when a week has no pace efficiency — no comparison, no claim", () => {
+    const trend = buildPaceEfficiencyTrend([
+      snapshot({ paceEfficiency: null }),
+      snapshot({ paceEfficiency: 4.3 }),
+    ]);
+    expect(trend).toBeUndefined();
+  });
+
+  it("returns undefined with a single snapshot — there is nothing to compare with", () => {
+    expect(buildPaceEfficiencyTrend([snapshot({ paceEfficiency: 4.3 })])).toBeUndefined();
   });
 });
 
@@ -314,5 +337,39 @@ describe("buildCoachDashboard", () => {
     );
     const roundTrip = JSON.parse(JSON.stringify(dashboard));
     expect(roundTrip).toEqual(dashboard);
+  });
+
+  it("hands the measured week-over-week comparison to the card (#336)", () => {
+    // The card must never claim the pace efficiency held without having
+    // compared it — the comparison comes off the same weekly snapshot series
+    // the pace-trend chart plots.
+    const dashboard = buildCoachDashboard(
+      steadyHistory(BURN_WEDNESDAY),
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    expect(dashboard.workout.reason.join(" ")).toMatch(/ikke faldet siden sidste uge/i);
+    expect(dashboard.workout.reason.join(" ")).not.toMatch(/stabil/i);
+  });
+
+  it("keeps the upper distance shut when the weekly pace efficiency fell (#336)", () => {
+    // The last three weeks run at the same pace but a higher pulse, so the
+    // current 4-week window's efficiency drops below last week's. The card
+    // must say what fell — "data er stabil" was the unearned claim.
+    const activities = Array.from({ length: 24 }, (_, i) => {
+      const daysAgo = i * 3 + 2;
+      return run(BURN_WEDNESDAY, daysAgo, daysAgo <= 17 ? { averageHeartrate: 165 } : {});
+    });
+    const dashboard = buildCoachDashboard(
+      activities,
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    expect(dashboard.workout.reason.join(" ")).toMatch(/faldet siden sidste uge/i);
+    expect(dashboard.workout.reason.join(" ")).not.toMatch(/stabil/i);
   });
 });
