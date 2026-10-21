@@ -137,7 +137,7 @@ describe("runReviewBlock", () => {
     expect(noContext.some((b) => b.tool === "runReview")).toBe(false);
   });
 
-  it("says rest when the run happened inside the recovery window", () => {
+  it("says rest when a gate — here the recovery window — forbids the run", () => {
     const ctx = context({
       recommended: {
         type: "rest",
@@ -149,6 +149,9 @@ describe("runReviewBlock", () => {
 
     const block = runReviewBlock(inputWith(ctx), NOW);
 
+    // #332: the review repeats the gate that rested the day, never a calendar
+    // line — a non-taper rest slot only rests when such a gate holds.
+    expect(block?.body).toContain("restitutionsbuffer");
     expect(block?.nextRunLabel).toContain("hviledag");
     expect(block?.nextRunLabel).toContain("24 timer");
     expect(block?.suggestedRun).toBeNull();
@@ -213,6 +216,32 @@ describe("runReviewBlock", () => {
     expect(block?.nextRunLabel).toContain("når belastningen falder");
     expect(block?.nextRunLabel).not.toMatch(/Næste løb: lørdag/);
     expect(block?.suggestedRun).toBeNull();
+  });
+
+  it("never names today under high load risk, even when the plan's next run is today (#330)", () => {
+    // The engine card says rest, but the context also carries today as the
+    // plan's next run slot. High risk forbids promising any day, today included.
+    const ctx = context({
+      loadRisk: "high",
+      nextPlannedRun: "2026-07-08",
+      lastRun: {
+        startDate: "2026-07-05T06:00:00.000Z",
+        distanceKm: 10,
+        paceSecPerKm: 267,
+        averageHeartrate: 165,
+        movingTimeSec: 2670,
+      },
+      recommended: {
+        type: "rest",
+        distanceKm: 0,
+        reason: "Høj skadesrisiko — et nyt pas er ikke forsvarligt.",
+      },
+    });
+
+    const input = inputWith(ctx, [activity(new Date("2026-07-05T06:00:00.000Z"), 10, 267, 165)]);
+    const block = runReviewBlock(input, NOW);
+
+    expect(block?.nextRunLabel).toBe("Næste løb: når belastningen falder.");
   });
 
   it("takes the later of the recovery window and the plan's next run (#330)", () => {

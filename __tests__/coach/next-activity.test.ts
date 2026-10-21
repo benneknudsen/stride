@@ -405,10 +405,13 @@ describe("buildNextActivity — coordination with today's Næste pas", () => {
     expect(next.type).toBe("rest");
   });
 
-  // Issue #260: the plan rests for reasons this card cannot see (planned
-  // hviledag, the recommender's recovery buffer, a spent weekly volume budget),
-  // and a run beside "Næste pas: Hvile" is a contradiction, not a variation.
-  it("rests when today's pas is hvile, however healthy the mix looks", () => {
+  // Issue #260: the upstream pas rests for reasons this card cannot see (a
+  // deliberate taper day, the recommender's recovery buffer, high load risk, or
+  // a spent weekly volume budget), and a run beside "Næste pas: Hvile" is a
+  // contradiction, not a variation. Since #332 a non-taper rest slot only
+  // becomes hvile through one of those state gates, so the copy must not claim
+  // the calendar was the reason.
+  it("rests when today's pas is hvile, whichever gate rested it (#260/#332)", () => {
     // Ready readiness, 24 h+ clear and no long tur in the mix: on any other day
     // this is the long Zone 2-tur.
     const withoutPlan = build(fiveEasyRuns(SHARPEN), SHARPEN, READY_RATIO);
@@ -422,9 +425,10 @@ describe("buildNextActivity — coordination with today's Næste pas", () => {
     expect(next.heartRateCap).toBeNull();
     expect(next.basis).toBe("Sidste 5 ture: 5 rolige · 0 kvalitet · 0 lange");
     expect(next.reason.join(" ")).toContain("hvile");
+    expect(next.reason.join(" ")).toMatch(/sikkerhedsgrænse/i);
   });
 
-  it("rests on a hviledag even when readiness only asks for a rolig tur", () => {
+  it("rests on a hvile gate even when readiness only asks for a rolig tur", () => {
     // The readiness "easy" band prescribes a run of its own, so the hvile gate
     // has to outrank it — otherwise a rolig tur lands next to "Næste pas: Hvile".
     const capped = build(fiveEasyRuns(SHARPEN), SHARPEN, EASY_BAND_RATIO);
@@ -434,7 +438,7 @@ describe("buildNextActivity — coordination with today's Næste pas", () => {
     expect(next.type).toBe("rest");
   });
 
-  it("rests on a hviledag in a base phase too", () => {
+  it("rests on a hvile gate in a base phase too", () => {
     const next = build(fiveEasyRuns(BURN), BURN, READY_RATIO, "rest");
 
     expect(next.type).toBe("rest");
@@ -479,9 +483,10 @@ describe("avoidPlanDuplicate", () => {
     expect(avoidPlanDuplicate("intervals", "long", CLEAR)).toBe("intervals");
   });
 
-  it("leaves a hviledag to the gate upstream — a run type can never collide with it", () => {
+  it("leaves a hvile gate upstream — a run type can never collide with it", () => {
     // #260 answers `todayType === "rest"` before the mix is read, so this
-    // function only ever sees run types and passes them straight through.
+    // function only ever sees run types and passes them straight through. Since
+    // #332 that rest may come from a state gate, not only the phase week plan.
     expect(avoidPlanDuplicate("long", "rest", CLEAR)).toBe("long");
     expect(avoidPlanDuplicate("easy", "rest", CLEAR)).toBe("easy");
   });

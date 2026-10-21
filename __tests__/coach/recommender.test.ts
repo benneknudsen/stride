@@ -56,6 +56,7 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
   const ADAPT_WEDNESDAY = anchor("adapt", 3); // adapt, easy day
   const SHARPEN_WEDNESDAY = anchor("sharpen", 3); // sharpen, tempo day
   const PEAK_SUNDAY = anchor("peak", 0); // peak, long-run day
+  const TAPER_TUESDAY = anchor("taper", 2); // taper, planned rest day
 
   /** Progression snapshot with a full window and optimal load; override per test. */
   function snapshot(overrides: Partial<ProgressionSnapshot> = {}): ProgressionSnapshot {
@@ -170,6 +171,16 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       });
       expect(rec.type).toBe("rest");
       expect(rec.reason.join(" ")).toMatch(/24/);
+    });
+
+    it("keeps the readiness reason on a run card, before the distance reason (#332)", () => {
+      const rec = recommend({ progression: atRatio(1.0, BURN_WEDNESDAY) });
+
+      expect(rec.type).toBe("easy");
+      const readinessIndex = rec.reason.findIndex((line) => /readiness/i.test(line));
+      const distanceIndex = rec.reason.findIndex((line) => /Distance fra/i.test(line));
+      expect(readinessIndex).toBeGreaterThanOrEqual(0);
+      expect(distanceIndex).toBeGreaterThan(readinessIndex);
     });
   });
 
@@ -297,6 +308,25 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       expect(rec.type).toBe("rest");
       expect(rec.distanceKm).toBe(0);
       expect(rec.reason.join(" ")).toMatch(/uge/i);
+    });
+
+    it("does not keep the ready-band run line on the budget rest card (#332)", () => {
+      const rec = recommend({ weekToDateKm: intendedWeekKm("burn", BURN_WEDNESDAY) });
+
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).not.toMatch(/klar til dagens pas/i);
+    });
+
+    it("does not keep the easy-band run line on the budget rest card (#332)", () => {
+      const rec = recommend({
+        progression: snapshot({
+          trainingLoad: { acute: 45, chronic: 30, ratio: 1.5, risk: "optimal" },
+        }),
+        weekToDateKm: intendedWeekKm("burn", BURN_WEDNESDAY),
+      });
+
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).not.toMatch(/overvej en rolig tur/i);
     });
 
     it("shortens the run to the phase minimum when today would blow past the budget", () => {
@@ -470,14 +500,17 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
 
     it("still takes today's slot from the phase week plan, not from thin air", () => {
       // The plan is load-bearing even though it no longer escapes: a Wednesday in
-      // the sharpen block is a tempo day, and a Tuesday in burn is a rest day.
+      // the sharpen block is a tempo day, and a Tuesday in burn is the plan's
+      // rest slot — a preference the state may turn into the phase's easy run
+      // (#332), but the slot still comes from the plan.
       const sharpen = recommend(
         { progression: snapshot({ date: SHARPEN_WEDNESDAY }) },
         SHARPEN_WEDNESDAY
       );
       expect(sharpen.type).toBe("tempo");
       const burn = recommend({ progression: snapshot({ date: BURN_TUESDAY }) }, BURN_TUESDAY);
-      expect(burn.type).toBe("rest");
+      expect(burn.type).toBe("easy");
+      expect(burn.reason.join(" ")).toMatch(/præference/i);
     });
 
     it("formats the pace range as m:ss strings", () => {
@@ -545,10 +578,101 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
     });
   });
 
-  describe("plan rest days", () => {
-    it("recommends rest on a scheduled rest day even when recovered", () => {
+  describe("plan rest days — a preference, not a command (#332)", () => {
+    it("turns a scheduled rest day into the phase's easy run when the state allows it", () => {
+      // Recovered (3 days since the last run), readiness "ready", no week volume
+      // reported: nothing but the calendar says rest, so the state decides.
       const rec = recommend({ progression: snapshot({ date: BURN_TUESDAY }) }, BURN_TUESDAY);
+
+      expect(rec.type).toBe("easy");
+      expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).minDistanceKm);
+      expect(rec.reason.join(" ")).toMatch(/præference/i);
+      expect(rec.reason.join(" ")).not.toMatch(/Planlagt hviledag/);
+    });
+
+    it("still rests on a rest slot when the recovery buffer is broken", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({ date: BURN_TUESDAY }),
+          lastRun: new Date(BURN_TUESDAY.getTime() - 12 * HOUR_MS),
+        },
+        BURN_TUESDAY
+      );
+
       expect(rec.type).toBe("rest");
+      expect(rec.distanceKm).toBe(0);
+      expect(rec.reason.join(" ")).toMatch(/24/);
+    });
+
+    it("still rests on a rest slot when readiness is in the rest band", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({
+            date: BURN_TUESDAY,
+            trainingLoad: { acute: 60, chronic: 30, ratio: 2.0, risk: "optimal" },
+          }),
+        },
+        BURN_TUESDAY
+      );
+
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/restitution/i);
+    });
+
+    it("still rests on a rest slot when the load risk is high (#330)", () => {
+      const rec = recommend(
+        {
+          progression: snapshot({
+            date: BURN_TUESDAY,
+            trainingLoad: { acute: 48, chronic: 30, ratio: 1.6, risk: "high" },
+          }),
+        },
+        BURN_TUESDAY
+      );
+
+      expect(rec.type).toBe("rest");
+      expect(rec.distanceKm).toBe(0);
+      expect(rec.reason.join(" ")).toMatch(/skadesrisiko/i);
+    });
+
+    it("still rests on a rest slot when the week's volume budget is spent", () => {
+      const rec = recommend(
+        { progression: snapshot({ date: BURN_TUESDAY }), weekToDateKm: 999 },
+        BURN_TUESDAY
+      );
+
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/uge/i);
+    });
+
+    it("names the gate, never the calendar, on a rest day (#332)", () => {
+      // The buffer is the gate that rests this rest-slot day: the reason line
+      // must say so, and the calendar line must be gone.
+      const rec = recommend(
+        {
+          progression: snapshot({ date: BURN_TUESDAY }),
+          lastRun: new Date(BURN_TUESDAY.getTime() - 4 * HOUR_MS),
+        },
+        BURN_TUESDAY
+      );
+
+      expect(rec.type).toBe("rest");
+      const text = rec.reason.join(" ");
+      expect(text).toMatch(/restitutionsbuffer/i);
+      expect(text).not.toMatch(/Planlagt hviledag/);
+    });
+
+    it("is deterministic — same input and clock give the same card", () => {
+      const first = recommend({ progression: snapshot({ date: BURN_TUESDAY }) }, BURN_TUESDAY);
+      const second = recommend({ progression: snapshot({ date: BURN_TUESDAY }) }, BURN_TUESDAY);
+      expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    });
+
+    it("still rests on the taper's planned rest days — the race week is deliberate", () => {
+      const rec = recommend({ progression: snapshot({ date: TAPER_TUESDAY }) }, TAPER_TUESDAY);
+
+      expect(rec.type).toBe("rest");
+      expect(rec.reason.join(" ")).toMatch(/taper/i);
     });
 
     it("recommends the plan's easy run on a Monday run day", () => {

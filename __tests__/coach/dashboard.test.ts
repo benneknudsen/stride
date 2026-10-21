@@ -253,27 +253,40 @@ describe("buildCoachDashboard", () => {
       }
     }
     // Guard against a vacuous sweep: the steady history's variation is the long
-    // Zone 2-tur, so the run must actually cover a day the plan schedules one —
-    // and a hviledag, so the #260 branch above is really exercised.
+    // Zone 2-tur, so the run must actually cover a day the plan schedules one.
+    // Rest slots are read as easy days when the state allows it (#332), so the
+    // sweep must also see the rest slot turned into its easy run.
     expect(seen.has("long")).toBe(true);
-    expect(seen.has("rest")).toBe(true);
+    expect(seen.has("easy")).toBe(true);
   });
 
-  it("never puts a run next to a planned hviledag (#260)", () => {
-    // A rest slot in the burn phase's week plan: the pas is hvile for a reason
-    // the variation cannot see, and before #260 it prescribed straight through
-    // it — "Næste pas: Hvile" beside "Næste aktivitet: Intervalpas, 9 km".
-    const dashboard = buildCoachDashboard(
+  it("rests both cards when a gate asks for hvile (#260/#332)", () => {
+    // A rest slot in the burn phase's week plan is only a preference. Recovered
+    // state turns it into the phase's easy run (#332); a spent weekly budget is
+    // a gate the variation cannot see, and before #260 it prescribed straight
+    // through it — "Næste pas: Hvile" beside "Næste aktivitet: Intervalpas".
+    const recovered = buildCoachDashboard(
       steadyHistory(BURN_REST_DAY),
       BURN_REST_DAY,
       DASHBOARD_WEEKS,
       TEST_RACE_DATE
     );
+    expect(recovered.workout.type).toBe("easy");
+    expect(recovered.nextActivity.type).not.toBe("rest");
 
-    expect(dashboard.workout.type).toBe("rest");
-    expect(dashboard.nextActivity.type).toBe("rest");
-    expect(dashboard.nextActivity.distanceKm).toBe(0);
-    expect(dashboard.nextActivity.reason.join(" ")).toContain("hvile");
+    // Monday's 12 km already blows the burn week's prorated budget on Tuesday.
+    const gated = buildCoachDashboard(
+      [...steadyHistory(BURN_REST_DAY), run(BURN_REST_DAY, 1, { distance: 12_000 })],
+      BURN_REST_DAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    expect(gated.workout.type).toBe("rest");
+    expect(gated.workout.reason.join(" ")).toMatch(/volumen/i);
+    expect(gated.nextActivity.type).toBe("rest");
+    expect(gated.nextActivity.distanceKm).toBe(0);
+    expect(gated.nextActivity.reason.join(" ")).toContain("hvile");
   });
 
   it("is JSON-serializable (no Date instances or undefined gaps)", () => {

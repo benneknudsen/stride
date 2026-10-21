@@ -150,12 +150,19 @@ export function buildRunReviewContext({
     ? new Date(ensureDate(run.startDate).getTime() + workout.recoveryHours * HOUR_MS)
     : now;
   const searchFrom = new Date(Math.max(now.getTime(), recoveryEnd.getTime()));
-  const nextPlannedRun = nextPlannedRunDay(
-    searchFrom,
-    effectiveRaceDate,
-    effectiveRaceName,
-    raceDistanceKm ?? HALF_MARATHON_KM
-  );
+  // #332: when the engine turns a plan rest day into today's run, the engine's
+  // card — not the plan's slots — is the authoritative decision, so "next run"
+  // is today. When the engine rests (buffer/risk/budget), keep scanning the
+  // plan as before, preserving #330's no-promise contract.
+  const engineRunsToday = workout.type !== "rest" && now.getTime() >= recoveryEnd.getTime();
+  const nextPlannedRun = engineRunsToday
+    ? dateKey(now)
+    : nextPlannedRunDay(
+        searchFrom,
+        effectiveRaceDate,
+        effectiveRaceName,
+        raceDistanceKm ?? HALF_MARATHON_KM
+      );
 
   return {
     phase: plan.phase,

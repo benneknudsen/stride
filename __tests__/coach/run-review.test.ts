@@ -77,6 +77,37 @@ function contextFor(lastRun: Date) {
   return { workout, context };
 }
 
+/** The same context at an arbitrary clock, with activities consistent with `now`. */
+function contextAt(
+  now: Date,
+  lastRun: Date,
+  activities: (ProgressionActivityInput & AnalysisActivity)[] = steadyAround(now)
+) {
+  const progression = computeSnapshot(activities, now);
+  const workout = recommendWorkout(
+    {
+      userId: "u1",
+      goal: GOALS.zone2,
+      progression,
+      lastRun,
+      footballYesterday: false,
+      raceDate: RACE_DATE,
+    },
+    now
+  );
+  const context = buildRunReviewContext({
+    activities,
+    now,
+    raceDate: RACE_DATE,
+    raceName: "Testløbet",
+    raceDistanceKm: 21.0975,
+    goalTimeSeconds: null,
+    ratio: progression.trainingLoad.ratio,
+    workout,
+  });
+  return { workout, context };
+}
+
 describe("buildRunReviewContext", () => {
   it("carries the engine's phase, race, suggestions and latest run", () => {
     const newest = new Date(NOW.getTime() - DAY_MS);
@@ -133,12 +164,51 @@ describe("buildRunReviewContext", () => {
     expect(context.nextPlannedRun).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it("inside the recovery window the review excludes the forbidden run", () => {
+  it("names today when the engine turns a plan rest day into a run (#332)", () => {
+    // Burn Tuesday: the plan's rest slot. Recovered and ready, the recommender
+    // turns it into today's easy run, so "next run" must be today — not the
+    // plan's next run day (Wednesday).
+    const now = new Date("2026-07-07T12:00:00.000Z");
+    const activities = steadyAround(now);
+    const { workout, context } = contextAt(now, new Date(now.getTime() - DAY_MS), activities);
+
+    expect(workout.type).toBe("easy");
+    expect(context.recommended.type).toBe("easy");
+    expect(context.nextPlannedRun).toBe("2026-07-07");
+
+    const review = runReviewBlock(buildAnalysisInput(activities, "trend", now, context), now);
+    expect(review?.nextRunLabel).toContain("i dag");
+  });
+
+  it("still names the next planned run when the engine rests a plan rest day (#332)", () => {
+    // Same burn Tuesday, but a run four hours ago breaks the recovery buffer:
+    // the engine rests, so #330's contract still points at the plan's next run.
+    const now = new Date("2026-07-07T12:00:00.000Z");
+    const recent: ProgressionActivityInput & AnalysisActivity = {
+      type: "Run",
+      distance: 8000,
+      movingTime: 2496,
+      averageHeartrate: 150,
+      hrZones: null,
+      startDate: new Date(now.getTime() - 4 * HOUR_MS),
+    };
+    const { workout, context } = contextAt(now, recent.startDate, [...steadyAround(now), recent]);
+
+    expect(workout.type).toBe("rest");
+    expect(context.recommended.type).toBe("rest");
+    expect(context.nextPlannedRun).toBe("2026-07-08");
+  });
+
+  it("inside the recovery window the review excludes the forbidden run and names the gate", () => {
     const recent = new Date(NOW.getTime() - 4 * HOUR_MS);
     const { workout, context } = contextFor(recent);
 
     expect(workout.type).toBe("rest");
     expect(context.recommended.type).toBe("rest");
+    // #332: the rest comes from the buffer, not the calendar — the review quotes
+    // the gate, never "Planlagt hviledag i X-fasen".
+    expect(workout.reason.join(" ")).toMatch(/restitutionsbuffer/i);
+    expect(workout.reason.join(" ")).not.toMatch(/Planlagt hviledag/);
 
     const input = buildAnalysisInput(STEADY, "trend", NOW, context);
     const review = runReviewBlock(input, NOW);
