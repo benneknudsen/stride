@@ -8,12 +8,14 @@
 // dashboard is unit-testable with fixture data. The server page decides what
 // to cache (progression series, 1 h) vs. compute per request (workout card).
 
+import { getCurrentPhase, getLocalDate, getPhaseRules } from "@/lib/coach/engine";
 import { buildNextActivity, type NextActivityView } from "@/lib/coach/next-activity";
 import {
   recommendWorkout,
   type WorkoutRecommendation,
   weekToDateDistanceKm,
 } from "@/lib/coach/recommender";
+import { classifyRun, longRunThresholdKm } from "@/lib/coach/run-character";
 import { ensureDate } from "@/lib/db/calendar-date";
 import { hoursSinceHardEffort, hoursSinceLastRun } from "@/lib/training/effort";
 import { GOALS } from "@/lib/training/goals";
@@ -236,12 +238,23 @@ export function buildCoachDashboard(
 
   const runs = normalized.filter(isRun);
 
-  const lastRun = runs
-    .filter((run) => ensureDate(run.startDate).getTime() <= now.getTime())
-    .reduce<Date | null>((latest, run) => {
-      const runStart = ensureDate(run.startDate);
-      return latest === null || runStart.getTime() > latest.getTime() ? runStart : latest;
-    }, null);
+  // #333: keep the newest run itself, not only its date. The recommender needs
+  // what the run was (distance, duration, character) alongside when it happened.
+  const lastRunActivity =
+    runs
+      .filter((run) => ensureDate(run.startDate).getTime() <= now.getTime())
+      .sort((a, b) => ensureDate(b.startDate).getTime() - ensureDate(a.startDate).getTime())
+      .at(0) ?? null;
+  const lastRun = lastRunActivity ? ensureDate(lastRunActivity.startDate) : null;
+  const phase = getCurrentPhase(getLocalDate(now), raceDate);
+  const phaseRules = getPhaseRules(phase, raceDate);
+  const lastRunSummary = lastRunActivity
+    ? {
+        distanceKm: lastRunActivity.distance / 1000,
+        movingTimeSec: lastRunActivity.movingTime,
+        character: classifyRun(lastRunActivity, longRunThresholdKm(phaseRules)),
+      }
+    : undefined;
 
   // The recommender builds the phase week plan internally to find today's slot
   // and the week's budget, but keeps it to itself (issue #291) — so the card
@@ -255,6 +268,7 @@ export function buildCoachDashboard(
       goal: GOALS.zone2,
       progression: current,
       lastRun: lastRun ?? new Date(now.getTime() - 3 * DAY_MS),
+      lastRunSummary,
       footballYesterday: false,
       raceDate,
       // What the runner has already covered Mon→today (#256), so the card can
@@ -274,6 +288,9 @@ export function buildCoachDashboard(
       now,
       raceDate,
       todayType: workout.type,
+      // Same day, same rolig tur: the variation quotes the pas's distance
+      // instead of inventing a mid-band one (#333 repair R6).
+      todayDistanceKm: workout.distanceKm,
     }),
     paceSeries: buildPaceEfficiencySeries(snapshots),
     zoneSeries: buildZoneSeries(activities, weeks, now),

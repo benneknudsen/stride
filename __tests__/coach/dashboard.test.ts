@@ -34,6 +34,7 @@ const BURN_REST_DAY = anchorIn("burn", 2);
 // Peak is the only phase whose week plan carries a long run (Sundays) — the one
 // place today's pas can collide with the variation's long Zone 2-tur (#255).
 const PEAK_MONDAY = anchorIn("peak", 1);
+const PEAK_SUNDAY = anchorIn("peak", 0);
 
 /** A run `daysAgo` days before `asOf`; hrZones omitted like demo fixtures. */
 function run(
@@ -225,6 +226,21 @@ describe("buildCoachDashboard", () => {
     const activities = [...steadyHistory(asOf), run(asOf, 0.5)];
     const dashboard = buildCoachDashboard(activities, asOf, DASHBOARD_WEEKS, TEST_RACE_DATE);
     expect(dashboard.hoursSinceLastRun).toBeCloseTo(12);
+  });
+
+  it("keeps the peak long run when the last run was a Z3 tempo effort (#333)", () => {
+    // Repair R1: a Zone 3 run is ordinary aerobic work — the app's own model
+    // says it does not owe the body a 48 h recovery window. A Saturday run at
+    // 135 bpm therefore must not cancel Sunday's planned long run; only a Z4–Z5
+    // effort or a long run inside 48 h is residue enough to soften the day.
+    const activities = [
+      ...steadyHistory(PEAK_SUNDAY),
+      run(PEAK_SUNDAY, 1, { averageHeartrate: 135 }),
+    ];
+    const dashboard = buildCoachDashboard(activities, PEAK_SUNDAY, DASHBOARD_WEEKS, TEST_RACE_DATE);
+
+    expect(dashboard.workout.type).toBe("long");
+    expect(dashboard.workout.reason.join(" ")).toMatch(/lange tur/i);
   });
 
   it("never lets the variation prescribe the same run type as today's pas (#255)", () => {

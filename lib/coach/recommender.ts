@@ -23,7 +23,13 @@
 //      Mon–Sun week vs. the phase week's intended total, prorated to the days
 //      elapsed so far (#261): at/over budget → rest, about to blow past it →
 //      soften the session instead of stacking it.
-//   4. Distance from the phase band (adapt 6–8, burn 8–10, …).
+//   3d. State shape (#333) — a pause of 3+ days restarts easy, and a hard
+//      (Z4–Z5) or long last run inside the 48 h residue window must not stack
+//      another quality/long day on top. Z3 tempo is ordinary aerobic work and
+//      does not gate. Both reads sit after every rest gate, so they only soften
+//      a day the safety rules already allowed.
+//   4. Distance from the phase band (adapt 6–8, burn 8–10, …); a week behind
+//      its goal may close the gap, clamped inside the band.
 //   5. Improved pace efficiency + optimal load → unlock the band's upper end.
 //   6. Intensity: Zone 2 by default; tempo only where the phase allows it.
 //   7. Shoe: Vomero everywhere except tempo (Adios Pro 4); assemble the card.
@@ -45,6 +51,7 @@ import {
   type WorkoutContext,
   ZONE2_CEILING_BPM,
 } from "@/lib/coach/engine";
+import { dayShapeGate, dayShapeReason, type RunKind } from "@/lib/coach/run-character";
 import { readinessFromRatio } from "@/lib/cobalt/readiness";
 import { ensureDate } from "@/lib/db/calendar-date";
 import type { Goal } from "@/lib/training/goals";
@@ -76,6 +83,22 @@ export interface WorkoutInput {
    * matches the one the recommender reasons over.
    */
   weekToDateKm?: number;
+  /**
+   * Sidste turs data — karakteren af turen, ikke kun hvornår den var (issue
+   * #333). Describes the same run as {@link lastRun}; omitted, the recommender
+   * keeps the pre-#333 state read exactly as it was.
+   */
+  lastRunSummary?: {
+    distanceKm: number;
+    /**
+     * Carried for AC1/#333 — not yet read by the recommender; the last run's
+     * character is what gates the day. Kept on the input so callers answer
+     * "how long was it" without a second lookup when a rule needs it.
+     */
+    movingTimeSec: number;
+    /** Hvad turen VAR (klassificeret med det fælles modul), ikke hvad Strava kaldte den. */
+    character: RunKind;
+  };
 }
 
 /**
@@ -117,7 +140,12 @@ export interface WorkoutRecommendation {
 /** Recovery buffer when the athlete has an injury history: one extra day. */
 const INJURY_RECOVERY_HOURS = 72;
 
-/** A break this long or longer counts as a pause — restart 20% shorter. */
+/**
+ * A break this long or longer counts as a long pause — restart 20% shorter.
+ * Not the same concept as `PAUSE_RESTART_DAYS` (3) in `run-character.ts`: that
+ * one describes *today's form* after a short break and only gates the day
+ * shape; this one is the long-pause restart that scales the whole run down.
+ */
 const PAUSE_DAYS = 14;
 const PAUSE_DISTANCE_FACTOR = 0.8;
 
@@ -164,6 +192,11 @@ function mondayOfWeek(date: Date): Date {
 /** One decimal, for Danish reason copy — "32,5 km", never "32,499999 km". */
 function round1(km: number): number {
   return Math.round(km * 10) / 10;
+}
+
+/** Nearest half kilometre — the grid prescribed distances sit on. */
+function roundHalf(km: number): number {
+  return Math.round(km * 2) / 2;
 }
 
 /**
@@ -284,14 +317,9 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   // 6. Intensity: tempo only where the phase allows it; otherwise Zone 2. A
   // rest slot is read as an easy day, so the state gates can still turn it into
   // the phase band's easy run when nothing else asks for rest.
-  let type: "easy" | "tempo" | "long" =
-    restSlot || slot.type === "easy"
-      ? "easy"
-      : slot.type === "tempo" && rules.hasTempoSession
-        ? "tempo"
-        : slot.type === "long"
-          ? "long"
-          : "easy";
+  let type: "easy" | "tempo" | "long" = "easy";
+  if (slot.type === "long") type = "long";
+  else if (slot.type === "tempo" && rules.hasTempoSession) type = "tempo";
 
   // 2. Recovery buffer — 48 h before a hard session, 24 h before an easy/long
   // run, 72 h with an injury history. Broken buffer always wins over the slot.
@@ -301,6 +329,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
       ? MIN_RECOVERY_HOURS
       : EASY_MIN_RECOVERY_HOURS;
   const gap = hoursSince(input.lastRun, now);
+  const longPause = gap >= PAUSE_DAYS * 24;
   if (gap < recoveryHours) {
     // Even when the buffer is the proximate cause, the high-risk read belongs on
     // the card: the runner must know the rest is not only about elapsed time.
@@ -347,7 +376,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   //   • rest  (<68%) → the body needs restitution: no run today.
   //   • easy (68–79%) → downgrade a hard/long session to a rolig tur.
   //   • ready (≥80%) → keep the planned session and say so positively.
-  const readiness = readinessFromRatio(input.progression.trainingLoad.ratio);
+  const readiness = readinessFromRatio(load.ratio);
   if (readiness.band === "rest") {
     reason.push(
       `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Din krop har brug for restitution i dag.`
@@ -388,6 +417,19 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     return restCard(reason, recoveryHours);
   }
 
+  // 3d. State-based day shape (#333). One shared read — the same `dayShapeGate`
+  // the variation card calls — decides what the break and the last run's
+  // character allow; this card only applies it to today's slot. The read happens
+  // after every rest gate, so it can only soften a run the safety rules already
+  // allowed — never override a hviledag. Pause first: after a break the restart
+  // is a rolig tur, then the last run's own residue: a hard or long run must not
+  // stack. Z3 tempo is not residue (see `run-character.ts`).
+  const gate = dayShapeGate({
+    character: input.lastRunSummary?.character ?? null,
+    gapHours: gap,
+  });
+  if (gate && (type === "tempo" || type === "long")) type = "easy";
+
   // No gate turned the day into hvile, so the run-facing reason lines belong on
   // the card now — in their original order (#332). Deferring them past the
   // week-budget gate above keeps a budget rest card from claiming "du er klar
@@ -395,6 +437,9 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   if (elevatedReason) reason.push(elevatedReason);
   if (footballReason) reason.push(footballReason);
   reason.push(readinessReason);
+  // A 14+ day break is the long-pause line's story; the 3-day gate must not
+  // repeat it in different words on the same card (#333 repair R2).
+  if (gate && !(gate === "pause" && longPause)) reason.push(dayShapeReason(gate, gap));
 
   // No gate held the runner back, so a rest slot becomes the phase's easy run.
   // The reason names the calendar as a preference and the state as the decision,
@@ -426,6 +471,34 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     );
   }
 
+  // 3c (cont.) + #333: when the week is behind its plan through today, today's
+  // easy/long run may close the gap. The target is clamped inside the phase
+  // band, so it can raise a run but never past the phase max — and the
+  // scale-down gate below still has the final word if the raised distance would
+  // overshoot the week. The reason is held back until then (#333 repair): a
+  // line claiming the run is "lidt længere" must not sit beside a line saying
+  // the distance was cut to the phase minimum.
+  let weekGap: { targetKm: number; reason: string } | null = null;
+  const canCloseWeekGap =
+    weekLoadKnown &&
+    weekToDateKm < proratedWeeklyKm &&
+    weekBudgetKm - weekToDateKm > rules.minDistanceKm + 1.0 &&
+    (type === "easy" || type === "long");
+  if (canCloseWeekGap) {
+    const weekGapKm = weekBudgetKm - weekToDateKm;
+    const gapDistanceKm = Math.min(
+      rules.maxDistanceKm,
+      Math.max(rules.minDistanceKm, roundHalf(weekGapKm))
+    );
+    if (gapDistanceKm > distanceKm) {
+      distanceKm = gapDistanceKm;
+      weekGap = {
+        targetKm: gapDistanceKm,
+        reason: `Du er ${round1(proratedWeeklyKm - weekToDateKm)} km bag ugens planlagte volumen indtil i dag (${round1(proratedWeeklyKm)} km) — dagens tur er derfor lidt længere, så ugen følger med.`,
+      };
+    }
+  }
+
   // Edge: first runs — without a full history window, hold the adapt minimum.
   if (!input.progression.hasFullWindow) {
     distanceKm = Math.min(distanceKm, getPhaseRules("adapt", input.raceDate).minDistanceKm);
@@ -433,7 +506,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   }
 
   // Edge: 14+ day pause — come back 20% shorter.
-  if (gap >= PAUSE_DAYS * 24) {
+  if (longPause) {
     distanceKm = Math.round(distanceKm * PAUSE_DISTANCE_FACTOR * 10) / 10;
     reason.push(`${PAUSE_DAYS}+ dages pause — distancen er sat 20% ned for en sikker genstart.`);
   }
@@ -472,6 +545,13 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     }
   }
 
+  // The week-gap line only stands if its raised distance survived every clamp
+  // above (#333 repair). If the scale-down cut it back to the minimum, the card
+  // already says so and must not also claim today's run is longer.
+  if (weekGap !== null && distanceKm === weekGap.targetKm) {
+    reason.push(weekGap.reason);
+  }
+
   // 7. Shoe: the Adios Pro 4 is tempo-only; everything else runs in the Vomero.
   let plannedZone = type === "tempo" ? 4 : 2;
   let shoe: WorkoutRecommendation["shoe"] = type === "tempo" ? "adios-pro-4" : "vomero";
@@ -488,6 +568,7 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     plannedZone,
     shoeType: shoe,
     lastRunDate: input.lastRun,
+    lastRunDistanceKm: input.lastRunSummary?.distanceKm,
     footballYesterday: input.footballYesterday,
     phase,
     risk: input.risk,

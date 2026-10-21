@@ -7,7 +7,14 @@ import {
   REDUCED_VARIETY_PACE_RANGES,
   VARIETY_PACE_RANGES,
 } from "@/lib/coach/next-activity";
-import { PACE_RANGES, type RecommendedType, TEMPO_HR_CAP_BPM } from "@/lib/coach/recommender";
+import {
+  PACE_RANGES,
+  type RecommendedType,
+  recommendWorkout,
+  TEMPO_HR_CAP_BPM,
+} from "@/lib/coach/recommender";
+import { classifyRun, longRunThresholdKm } from "@/lib/coach/run-character";
+import { GOALS } from "@/lib/training/goals";
 import type { LoadRisk, ProgressionSnapshot } from "@/lib/training/progression";
 
 const HOUR_MS = 3_600_000;
@@ -49,8 +56,13 @@ function run(
   };
 }
 
+// #333: the variation now reads the same 3-day pause gate as the recommender, so
+// a 72 h fixture would be capped at a rolig tur. The mix tests keep their newest
+// run inside that window; the gate's own tests below cover the pause.
+const MIX_GAP_HOURS = 48;
+
 /** Five easy Zone-2 runs, the newest `oldestHoursAgo`-spaced back from `asOf`. */
-function fiveEasyRuns(asOf: Date, newestHoursAgo = 72): CoachActivityInput[] {
+function fiveEasyRuns(asOf: Date, newestHoursAgo = MIX_GAP_HOURS): CoachActivityInput[] {
   return [0, 1, 2, 3, 4].map((i) => run(asOf, newestHoursAgo + i * 48));
 }
 
@@ -77,7 +89,8 @@ function build(
   now: Date,
   ratio: number | null = READY_RATIO,
   todayType?: RecommendedType,
-  risk: LoadRisk = "optimal"
+  risk: LoadRisk = "optimal",
+  todayDistanceKm?: number
 ) {
   const progression = snapshot(ratio);
   progression.trainingLoad.risk = risk;
@@ -87,6 +100,7 @@ function build(
     now,
     raceDate: TEST_RACE_DATE,
     todayType,
+    todayDistanceKm,
   });
 }
 
@@ -121,12 +135,14 @@ describe("buildNextActivity", () => {
 
   it("suggests a fartlek when the mix is all steady and the long run is covered", () => {
     const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
+    // #333: the long run is older than the newest run, so the long-last gate
+    // does not cap the day — this test is about the all-steady mix.
     const activities = [
-      run(SHARPEN, 72, { distance: 16_000 }),
-      run(SHARPEN, 120),
-      run(SHARPEN, 168),
-      run(SHARPEN, 216),
-      run(SHARPEN, 264),
+      run(SHARPEN, MIX_GAP_HOURS),
+      run(SHARPEN, 96, { distance: 16_000 }),
+      run(SHARPEN, 144),
+      run(SHARPEN, 192),
+      run(SHARPEN, 240),
     ];
     const next = build(activities, SHARPEN);
 
@@ -140,12 +156,14 @@ describe("buildNextActivity", () => {
 
   it("suggests intervals when the mix holds tempo but no real speed", () => {
     const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
+    // #333: newest run is easy; the tempo and long runs sit in the mix, where
+    // they drive the interval branch without tripping the day-shape gate.
     const activities = [
-      run(SHARPEN, 72, { averageHeartrate: TEMPO_HR }),
-      run(SHARPEN, 120, { distance: 16_000 }),
-      run(SHARPEN, 168),
-      run(SHARPEN, 216),
-      run(SHARPEN, 264),
+      run(SHARPEN, MIX_GAP_HOURS),
+      run(SHARPEN, 96, { averageHeartrate: TEMPO_HR }),
+      run(SHARPEN, 144, { distance: 16_000 }),
+      run(SHARPEN, 192),
+      run(SHARPEN, 240),
     ];
     const next = build(activities, SHARPEN);
 
@@ -160,12 +178,13 @@ describe("buildNextActivity", () => {
     // #254: a covered mix used to fall back to a rolig tur, which is exactly what
     // "Næste pas" already prescribes — the two cards read as duplicates.
     const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
+    // #333: newest run is easy; the hard and long runs sit in the mix.
     const activities = [
-      run(SHARPEN, 72, { averageHeartrate: HARD_HR }),
-      run(SHARPEN, 120, { distance: 16_000 }),
-      run(SHARPEN, 168),
-      run(SHARPEN, 216),
-      run(SHARPEN, 264),
+      run(SHARPEN, MIX_GAP_HOURS),
+      run(SHARPEN, 96, { averageHeartrate: HARD_HR }),
+      run(SHARPEN, 144, { distance: 16_000 }),
+      run(SHARPEN, 192),
+      run(SHARPEN, 240),
     ];
     const next = build(activities, SHARPEN);
 
@@ -178,10 +197,14 @@ describe("buildNextActivity", () => {
 
   it("prescribes the base phase's fartlek at reduced intensity rather than skipping it", () => {
     // Burn has no tempo session, and a long run is already in the mix. Since #254
-    // the all-steady signal still becomes a fartlek here — just dæmpet.
+    // the all-steady signal still becomes a fartlek here — just dæmpet. #333:
+    // the long run is older than the newest run, so the long-last gate stays out.
     const activities = [
-      run(BURN, 72, { distance: 16_000 }),
-      ...fiveEasyRuns(BURN, 120).slice(0, 4),
+      run(BURN, MIX_GAP_HOURS),
+      run(BURN, 96, { distance: 16_000 }),
+      run(BURN, 144),
+      run(BURN, 192),
+      run(BURN, 240),
     ];
     const next = build(activities, BURN);
 
@@ -193,12 +216,13 @@ describe("buildNextActivity", () => {
   });
 
   it("prescribes the base phase's intervals at reduced intensity with a tempo HR cap", () => {
+    // #333: newest run is easy; tempo and long sit in the mix.
     const activities = [
-      run(BURN, 72, { averageHeartrate: TEMPO_HR }),
-      run(BURN, 120, { distance: 16_000 }),
-      run(BURN, 168),
-      run(BURN, 216),
-      run(BURN, 264),
+      run(BURN, MIX_GAP_HOURS),
+      run(BURN, 96, { averageHeartrate: TEMPO_HR }),
+      run(BURN, 144, { distance: 16_000 }),
+      run(BURN, 192),
+      run(BURN, 240),
     ];
     const next = build(activities, BURN);
 
@@ -225,12 +249,14 @@ describe("buildNextActivity", () => {
   });
 
   it("softens a fast variation at elevated risk instead of blocking the day (#330)", () => {
+    // #333: newest run is easy, so the long-last gate does not answer before the
+    // elevated-load softening this test is about.
     const activities = [
-      run(SHARPEN, 72, { distance: 16_000 }),
-      run(SHARPEN, 120),
-      run(SHARPEN, 168),
-      run(SHARPEN, 216),
-      run(SHARPEN, 264),
+      run(SHARPEN, MIX_GAP_HOURS),
+      run(SHARPEN, 96, { distance: 16_000 }),
+      run(SHARPEN, 144),
+      run(SHARPEN, 192),
+      run(SHARPEN, 240),
     ];
     const next = build(activities, SHARPEN, 1.45, undefined, "elevated");
 
@@ -239,12 +265,13 @@ describe("buildNextActivity", () => {
   });
 
   it("lets the fartlek fire on the 24 h buffer alone, without waiting for 48 h", () => {
-    // Newest run 30 h ago: past the easy buffer, short of the interval one — and
-    // it is the long run, so the long-Zone-2 branch can't fire either. A fartlek
-    // is not a hard intervalpas, so 24 h is enough (#254).
+    // Newest run 30 h ago: past the easy buffer, short of the interval one. #333:
+    // it stays easy so the long-last gate cannot fire — the long run sits at 78 h,
+    // where it still covers the mix's long branch. A fartlek is not a hard
+    // intervalpas, so 24 h is enough (#254).
     const activities = [
-      run(SHARPEN, 30, { distance: 16_000 }),
-      run(SHARPEN, 78),
+      run(SHARPEN, 30),
+      run(SHARPEN, 78, { distance: 16_000 }),
       run(SHARPEN, 126),
       run(SHARPEN, 174),
       run(SHARPEN, 222),
@@ -256,9 +283,10 @@ describe("buildNextActivity", () => {
   });
 
   it("lets the fartlek fire on the 24 h buffer in a base phase too, at reduced intensity", () => {
+    // #333: newest run stays easy, so the long-last gate does not cap the day.
     const activities = [
-      run(BURN, 30, { distance: 16_000 }),
-      run(BURN, 78),
+      run(BURN, 30),
+      run(BURN, 78, { distance: 16_000 }),
       run(BURN, 126),
       run(BURN, 174),
       run(BURN, 222),
@@ -273,11 +301,12 @@ describe("buildNextActivity", () => {
   it("still holds intervals back until the full 48 h have passed", () => {
     // Tempo in the mix, no real speed, long run covered — the interval branch's
     // trigger — but only 30 h since the last run. Intervals keep the 48 h gate,
-    // so the variation drops to the fartlek that only needs 24 h.
+    // so the variation drops to the fartlek that only needs 24 h. #333: the
+    // newest run is easy so the state gate does not answer first.
     const activities = [
-      run(SHARPEN, 30, { averageHeartrate: TEMPO_HR }),
-      run(SHARPEN, 78, { distance: 16_000 }),
-      run(SHARPEN, 126),
+      run(SHARPEN, 30),
+      run(SHARPEN, 78, { averageHeartrate: TEMPO_HR }),
+      run(SHARPEN, 126, { distance: 16_000 }),
       run(SHARPEN, 174),
       run(SHARPEN, 222),
     ];
@@ -289,17 +318,19 @@ describe("buildNextActivity", () => {
   });
 
   it("classifies intensity from Strava's hr_zones buckets when present", () => {
-    // Same easy average HR, but the zone buckets say it was threshold work — so
-    // the mix reads as five quality sessions and the fartlek rule must not fire;
-    // what it is missing is the long tur.
-    const activities = fiveEasyRuns(SHARPEN).map((activity) => ({
-      ...activity,
-      hrZones: [{ zone: 4, min: 152, max: 170, seconds: 2_700 }],
-    }));
+    // Same easy average HR, but the zone buckets say the older four were
+    // threshold work — so the mix reads as four quality sessions and the fartlek
+    // rule must not fire; what it is missing is the long tur. #333: the newest
+    // run stays easy so the state gate does not cap the day first.
+    const activities = fiveEasyRuns(SHARPEN).map((activity, index) =>
+      index === 0
+        ? activity
+        : { ...activity, hrZones: [{ zone: 4, min: 152, max: 170, seconds: 2_700 }] }
+    );
     const next = build(activities, SHARPEN);
 
     expect(next.type).toBe("long");
-    expect(next.basis).toBe("Sidste 5 ture: 0 rolige · 5 kvalitet · 0 lange");
+    expect(next.basis).toBe("Sidste 5 ture: 1 rolige · 4 kvalitet · 0 lange");
   });
 
   it("starts a runner with no history on an easy run rather than guessing", () => {
@@ -328,6 +359,173 @@ describe("buildNextActivity", () => {
 
     expect(second).toEqual(first);
     expect(JSON.parse(JSON.stringify(first))).toEqual(first);
+  });
+});
+
+describe("run-character — one classifier for both cards (#333)", () => {
+  const threshold = longRunThresholdKm(getPhaseRules("sharpen", TEST_RACE_DATE));
+
+  it("keeps the phase-relative long-run threshold in one place", () => {
+    const rules = getPhaseRules("sharpen", TEST_RACE_DATE);
+    expect(threshold).toBe(Math.round(rules.longRunMaxKm * 0.8 * 2) / 2);
+  });
+
+  it("classifies long before intensity, then hard, tempo and easy", () => {
+    expect(
+      classifyRun(run(SHARPEN, 0, { distance: 20_000, averageHeartrate: HARD_HR }), threshold)
+    ).toBe("long");
+    expect(classifyRun(run(SHARPEN, 0, { averageHeartrate: HARD_HR }), threshold)).toBe("hard");
+    expect(classifyRun(run(SHARPEN, 0, { averageHeartrate: TEMPO_HR }), threshold)).toBe("tempo");
+    expect(classifyRun(run(SHARPEN, 0, { averageHeartrate: EASY_HR }), threshold)).toBe("easy");
+  });
+});
+
+describe("buildNextActivity — 28-day hole detection (#333)", () => {
+  it("finds a long run beyond the last five runs but inside 28 days", () => {
+    const activities = [...fiveEasyRuns(SHARPEN), run(SHARPEN, 20 * 24, { distance: 16_000 })];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("fartlek");
+    expect(next.reason.join(" ")).toContain("fartlek");
+    // The window did not cut any run, so the five-run basis stays unchanged.
+    expect(next.basis).toBe("Sidste 5 ture: 5 rolige · 0 kvalitet · 0 lange");
+  });
+
+  it("keeps the mix on the five newest runs — an old hard run must not block intervals", () => {
+    // Repair R6: the 28-day window is for the long-run hole only. A Z4–5 run
+    // 20 days back is outside the five-run mix, so it must not make the card
+    // believe real speed is already covered — the recent mix still lacks it.
+    const activities = [
+      run(SHARPEN, MIX_GAP_HOURS),
+      run(SHARPEN, 96, { averageHeartrate: TEMPO_HR }),
+      run(SHARPEN, 144, { distance: 16_000 }),
+      run(SHARPEN, 192),
+      run(SHARPEN, 240),
+      run(SHARPEN, 20 * 24, { averageHeartrate: HARD_HR }),
+    ];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("intervals");
+  });
+
+  it("names the 28-day window only when it actually drops older runs", () => {
+    const activities = [...fiveEasyRuns(SHARPEN), run(SHARPEN, 40 * 24, { distance: 16_000 })];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("long");
+    expect(next.basis).toBe("Seneste 28 dage: 5 rolige · 0 kvalitet · 0 lange");
+  });
+
+  it("agrees with the recommender on hvile and easy for the same readiness", () => {
+    const lastRun = new Date(SHARPEN.getTime() - 3 * 24 * HOUR_MS);
+    const recommenderInput = (ratio: number) => ({
+      userId: "user-1",
+      goal: GOALS.zone2,
+      progression: snapshot(ratio),
+      lastRun,
+      footballYesterday: false,
+      raceDate: TEST_RACE_DATE,
+    });
+
+    const restWorkout = recommendWorkout(recommenderInput(REST_BAND_RATIO), SHARPEN);
+    expect(restWorkout.type).toBe("rest");
+    expect(build(fiveEasyRuns(SHARPEN), SHARPEN, REST_BAND_RATIO, restWorkout.type).type).toBe(
+      "rest"
+    );
+
+    const easyWorkout = recommendWorkout(recommenderInput(EASY_BAND_RATIO), SHARPEN);
+    expect(easyWorkout.type).toBe("easy");
+    expect(build(fiveEasyRuns(SHARPEN), SHARPEN, EASY_BAND_RATIO, easyWorkout.type).type).toBe(
+      "easy"
+    );
+  });
+});
+
+// Issue #333 (repair B1): the variation reads the same state gates as the
+// recommender. A quality or long last run — or a pause — caps today at a rolig
+// tur, even when the mix itself argues for intervals or a fartlek.
+describe("buildNextActivity — state-based day shape (#333)", () => {
+  it("turns the variation into a rolig tur when the last run was hard", () => {
+    // Repair R1: a Z4–Z5 run 30 h ago clears the 24 h run buffer but not the
+    // 48 h residue window. The long run is in the mix, and there is no other
+    // Z4–5 run, so the mix alone would pick intervals.
+    const activities = [
+      run(SHARPEN, 30, { averageHeartrate: HARD_HR }),
+      run(SHARPEN, 78, { distance: 16_000 }),
+      run(SHARPEN, 126),
+      run(SHARPEN, 174),
+      run(SHARPEN, 222),
+    ];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("easy");
+    expect(next.type).not.toBe("intervals");
+    expect(next.type).not.toBe("fartlek");
+    expect(next.reason.join(" ")).toContain("hårdt pas");
+  });
+
+  it("does not cap the day after a Z3 run — tempo is ordinary aerobic work", () => {
+    // Repair R1: Z3 does not owe the body 48 h. 60 h after the Z3 run the mix
+    // holds tempo and a long run but no real speed, so intervals are the
+    // variation — the old quality-last gate wrongly answered easy.
+    const activities = [
+      run(SHARPEN, 60, { averageHeartrate: TEMPO_HR }),
+      run(SHARPEN, 120, { distance: 16_000 }),
+      run(SHARPEN, 168),
+      run(SHARPEN, 216),
+      run(SHARPEN, 264),
+    ];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("intervals");
+    expect(next.reason.join(" ")).not.toContain("hårdt pas");
+  });
+
+  it("turns the variation into a rolig tur after a pause and names it", () => {
+    const activities = [
+      run(SHARPEN, 96),
+      run(SHARPEN, 144, { distance: 16_000 }),
+      run(SHARPEN, 192),
+      run(SHARPEN, 240),
+      run(SHARPEN, 288),
+    ];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("easy");
+    expect(next.reason.join(" ")).toMatch(/pause i 4 dage/i);
+  });
+
+  it("turns the variation into a rolig tur when the last run was long", () => {
+    // Repair R1: a long run's residue lasts 48 h. Thirty hours is inside that
+    // window and past the 24 h run buffer, so the gate still answers easy.
+    const activities = [
+      run(SHARPEN, 30, { distance: 16_000 }),
+      run(SHARPEN, 78, { averageHeartrate: TEMPO_HR }),
+      run(SHARPEN, 126),
+      run(SHARPEN, 174),
+      run(SHARPEN, 222),
+    ];
+    const next = build(activities, SHARPEN);
+
+    expect(next.type).toBe("easy");
+    expect(next.reason.join(" ")).toContain("lang tur");
+  });
+
+  it("uses the pas distance on a gate day so both cards state the same km", () => {
+    // Repair R6: "Næste pas" prescribes the phase minimum (8 km) on a gate day
+    // while the variation used to invent the band's midpoint (9 km). Same day,
+    // same session — the numbers must agree.
+    const activities = [
+      run(SHARPEN, 30, { averageHeartrate: HARD_HR }),
+      run(SHARPEN, 78, { distance: 16_000 }),
+      run(SHARPEN, 126),
+      run(SHARPEN, 174),
+      run(SHARPEN, 222),
+    ];
+    const next = build(activities, SHARPEN, READY_RATIO, "easy", "optimal", 8);
+
+    expect(next.type).toBe("easy");
+    expect(next.distanceKm).toBe(8);
   });
 });
 

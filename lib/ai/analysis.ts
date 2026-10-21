@@ -495,6 +495,55 @@ export function runReviewBlock(
 }
 
 /**
+ * The feed's "Forslag" card when the engine has already decided the day (#333
+ * repair R4). Type, distance and reason come straight from
+ * `planContext.recommended` — the same decision "Næste pas" renders — so the
+ * feed can never answer a gate-forced easy day with tempo intervals. The
+ * context-free branches in {@link heuristicBlocks} keep the pre-#333 volume read
+ * unchanged for fixtures and older callers.
+ */
+function plannedWorkoutBlock(
+  recommended: RunReviewRecommendation,
+  paces: { recoveryPace: string | null; tempoPace: string | null }
+): AnalysisBlockOf<"workoutRecommendation"> {
+  if (recommended.type === "rest") {
+    return {
+      tool: "workoutRecommendation",
+      title: "Hviledag",
+      workoutType: "Hvile",
+      details: "Ingen løbetur — kroppen skal restituere.",
+      rationale: recommended.reason,
+    };
+  }
+
+  if (recommended.type === "tempo") {
+    return {
+      tool: "workoutRecommendation",
+      title: "Tempo-intervaller",
+      workoutType: "Tempo",
+      details: `Tempo over ${formatDanish(recommended.distanceKm)} km${
+        paces.tempoPace ? ` @ ${paces.tempoPace} /km` : ""
+      }`,
+      rationale: recommended.reason,
+      ...(paces.tempoPace ? { targetPace: `${paces.tempoPace} /km` } : {}),
+      distanceKm: recommended.distanceKm,
+    };
+  }
+
+  const recoveryClause = paces.recoveryPace ? ` omkring ${paces.recoveryPace} /km` : "";
+  const isLong = recommended.type === "long";
+  return {
+    tool: "workoutRecommendation",
+    title: isLong ? "Langtur" : "Rolig restitutions-tur",
+    workoutType: isLong ? "Langtur" : "Restitution",
+    details: `${formatDanish(recommended.distanceKm)} km roligt i Zone 2${recoveryClause}`,
+    rationale: recommended.reason,
+    ...(paces.recoveryPace ? { targetPace: `${paces.recoveryPace} /km` } : {}),
+    distanceKm: recommended.distanceKm,
+  };
+}
+
+/**
  * Build typed blocks from arithmetic alone — the whole analysis. Ordered
  * most-important first: what changed, what it means, and what to do next.
  * `now` is optional (#298) and only feeds the per-run review; callers without a
@@ -560,16 +609,22 @@ export function heuristicBlocks(input: AnalysisInput, now?: Date): AnalysisBlock
     }`,
   });
 
-  // 4) A concrete next session, tuned to the volume trend and the load risk.
-  // High acute:chronic risk must not sit beside a tempo prescription (or even a
-  // recovery run) on the same feed: the risk guard in the recommender has
-  // already put today on hvile, so the generic block says the same here (#330).
+  // 4) A concrete next session. With a plan context the engine has already
+  // decided the day — its type, distance and reason are the card (#333 repair
+  // R4). Without one, the pre-#333 contract stands: tune the session to the
+  // volume trend and load risk. High acute:chronic risk must not sit beside a
+  // tempo prescription (or even a recovery run) on the same feed: the risk guard
+  // in the recommender has already put today on hvile, so the generic block
+  // says the same here (#330).
   const recoveryPace =
     input.avgPaceLast7 !== null ? formatPaceSecPerKm(Math.round(input.avgPaceLast7 * 1.12)) : null;
   const tempoPace =
     input.avgPaceLast7 !== null ? formatPaceSecPerKm(Math.round(input.avgPaceLast7 * 0.92)) : null;
   const loadRisk = input.progression.loadRisk;
-  if (loadRisk === "high") {
+  const recommended = input.planContext?.recommended;
+  if (recommended) {
+    blocks.push(plannedWorkoutBlock(recommended, { recoveryPace, tempoPace }));
+  } else if (loadRisk === "high") {
     blocks.push({
       tool: "workoutRecommendation",
       title: "Hviledag",

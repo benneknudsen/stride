@@ -46,6 +46,8 @@ function activity(
 }
 
 const LAST_RUN = activity(LAST_START, 10, 267, 165);
+/** Same 10 km a week earlier: equal weekly volume, so the old feed stays flat. */
+const PREVIOUS_WEEK_RUN = activity(new Date("2026-07-01T08:00:00.000Z"), 10, 267, 165);
 
 /** The engine facts the server derives and sends along (issue #298). */
 function context(overrides: Partial<RunReviewPlanContext> = {}): RunReviewPlanContext {
@@ -124,6 +126,58 @@ describe("runReviewBlock", () => {
     expect(JSON.stringify(heuristicBlocks(input, NOW))).toBe(
       JSON.stringify(heuristicBlocks(input, NOW))
     );
+  });
+
+  it("takes the feed's workout suggestion from the engine when plan context exists (#333)", () => {
+    // Repair R4: the feed used to re-derive today's session from the volume
+    // trend alone. With a plan context the engine's decision is already known —
+    // here a gate has made the day easy, so the feed must not prescribe tempo.
+    const reason =
+      "Din sidste tur var et hårdt pas — i dag bliver det en rolig tur, så benene har nået at restituere.";
+    const ctx = context({
+      recommended: { type: "easy", distanceKm: 8, reason },
+    });
+    const input = inputWith(ctx, [LAST_RUN, PREVIOUS_WEEK_RUN]);
+    const workout = heuristicBlocks(input, NOW).find((b) => b.tool === "workoutRecommendation");
+
+    expect(workout).toBeDefined();
+    if (workout?.tool === "workoutRecommendation") {
+      expect(workout.workoutType).toBe("Restitution");
+      expect(workout.title).toBe("Rolig restitutions-tur");
+      expect(workout.rationale).toBe(reason);
+      expect(workout.distanceKm).toBe(8);
+      expect(workout.workoutType).not.toBe("Tempo");
+    }
+  });
+
+  it("keeps the volume-based suggestion when no plan context is supplied (#298/#333)", () => {
+    // The pre-#333 contract, unchanged: without engine facts the feed reads the
+    // volume direction and load risk, exactly as it did before #298 and #330.
+    const input = buildAnalysisInput([LAST_RUN, PREVIOUS_WEEK_RUN], "trend", NOW);
+    // Pin the load read so the test is about the volume branch, not the risk.
+    input.progression = { ...input.progression, loadRisk: "optimal" };
+    const workout = heuristicBlocks(input, NOW).find((b) => b.tool === "workoutRecommendation");
+
+    expect(workout).toBeDefined();
+    if (workout?.tool === "workoutRecommendation") {
+      expect(workout.workoutType).toBe("Tempo");
+      expect(workout.title).toBe("Tempo-intervaller");
+    }
+  });
+
+  it("falls back to the volume-based suggestion when plan context lacks recommended", () => {
+    // Repair R4: an older payload may carry the plan facts without the engine's
+    // decision. The feed must then use the volume branch rather than guess.
+    const ctx = context({ recommended: undefined });
+    const input = buildAnalysisInput([LAST_RUN, PREVIOUS_WEEK_RUN], "trend", NOW, ctx);
+    input.progression = { ...input.progression, loadRisk: "optimal" };
+    // No clock: the review needs `recommended`, and this test is about the feed card.
+    const workout = heuristicBlocks(input).find((b) => b.tool === "workoutRecommendation");
+
+    expect(workout).toBeDefined();
+    if (workout?.tool === "workoutRecommendation") {
+      expect(workout.workoutType).toBe("Tempo");
+    }
   });
 
   it("emits nothing without a last run or without plan context", () => {
