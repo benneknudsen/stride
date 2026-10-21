@@ -44,7 +44,16 @@ const LINKS = [
 ];
 
 /** How long a terminal state shows before the button returns to "Synkronisér". */
-const RESET_DELAY_MS = { synced: 2500, error: 4000, rate_limited: 4000 } as const;
+const RESET_DELAY_MS = {
+  synced: 2500,
+  partial: 4000,
+  busy: 4000,
+  error: 4000,
+  rate_limited: 4000,
+} as const;
+
+/** The states a finished sync settles in. */
+type TerminalSyncState = keyof typeof RESET_DELAY_MS;
 
 /** Reference entrance/hide curve (a.5): a strong ease-out over ~0.8 s. */
 const PILL_EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -57,9 +66,25 @@ const HIDE_AFTER_DELTA = 120;
 const MENU_ROW =
   "flex w-full items-center gap-2.5 rounded-pill px-3 text-left text-[14px] font-medium";
 
+/**
+ * The status rows the phone menu shows instead of the sync action — the same
+ * states the pill's SyncButton renders, sentence-cased for the menu.
+ */
+const MENU_STATUS: Partial<Record<SyncState, { label: string; dot: string; text: string }>> = {
+  syncing: {
+    label: "Syncer…",
+    dot: "bg-red animate-[cg-pulse-dot_0.8s_ease-in-out_infinite] motion-reduce:animate-none",
+    text: "text-ink",
+  },
+  synced: { label: "Synced", dot: "bg-success", text: "text-success-ink" },
+  partial: { label: "Delvis synket", dot: "bg-cobalt", text: "text-cobalt" },
+  busy: { label: "Syncer allerede", dot: "bg-ink/50", text: "text-ink" },
+  rate_limited: { label: "Kørte for nylig", dot: "bg-ink/50", text: "text-ink" },
+};
+
 // The phone dropdown's data entry (#321): what the pill's sync control or
 // connect CTA does on desktop, as one menu row. A connected user gets the
-// manual sync — idle and error are the clickable states, the other three are
+// manual sync — idle and error are the clickable states, the other five are
 // the status SyncButton would be showing; a signed-in user without Strava gets
 // the same connect CTA that opens the OAuth flow, so neither entry loses its
 // only way in below md. Same words as SyncButton, sentence-cased for the menu.
@@ -95,16 +120,10 @@ function SyncMenuItem({
     );
   }
 
-  if (syncState === "syncing" || syncState === "synced" || syncState === "rate_limited") {
-    const status = {
-      syncing: {
-        label: "Syncer…",
-        dot: "bg-red animate-[cg-pulse-dot_0.8s_ease-in-out_infinite] motion-reduce:animate-none",
-        text: "text-ink",
-      },
-      synced: { label: "Synced", dot: "bg-success", text: "text-success-ink" },
-      rate_limited: { label: "Kørte for nylig", dot: "bg-ink/50", text: "text-ink" },
-    }[syncState];
+  // A sync in flight (or finished) shows what it is doing; idle and error are
+  // the two states that offer the click.
+  const status = MENU_STATUS[syncState];
+  if (status) {
     return (
       <div role="menuitem" tabIndex={-1} aria-disabled="true" className={cn(row, status.text)}>
         <span className={cn("size-[7px] rounded-full", status.dot)} />
@@ -380,7 +399,7 @@ export function NavBar({
 
   const pillHidden = !reduceMotion && scrolledAway;
 
-  const settle = useCallback((state: "synced" | "error" | "rate_limited") => {
+  const settle = useCallback((state: TerminalSyncState) => {
     setSyncState(state);
     timerRef.current = setTimeout(() => setSyncState("idle"), RESET_DELAY_MS[state]);
   }, []);
@@ -406,12 +425,22 @@ export function NavBar({
         settle("rate_limited");
         return;
       }
+      // Another sync for this account is already running (#338) — the work is
+      // being done, so this is a status, not a failure.
+      if (res.status === 409) {
+        settle("busy");
+        return;
+      }
       if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+
+      // A sync can come back having covered only part of the history (#338).
+      // "SYNCED" would then be a lie about the account's history.
+      const body = (await res.json().catch(() => null)) as { partial?: boolean } | null;
 
       // The synced runs live in server-rendered pages — pull them in.
       router.refresh();
       onSync?.();
-      settle("synced");
+      settle(body?.partial ? "partial" : "synced");
     } catch {
       // Unmounted mid-sync — never touch state after abort.
       if (controller.signal.aborted) return;

@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => {
     auth: vi.fn(),
     cookieSet: vi.fn(),
     syncStravaActivities: vi.fn(),
+    captureError: vi.fn(),
     // db.update(table).set(values).where(cond) — a chainable fluent stub.
     dbWhere: vi.fn(),
     dbSet: vi.fn(),
@@ -71,6 +72,8 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/auth", () => ({
   auth: mocks.auth,
 }));
+
+vi.mock("@/lib/observability", () => ({ captureError: mocks.captureError }));
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ set: mocks.cookieSet })),
@@ -108,7 +111,7 @@ beforeEach(() => {
   mocks.exchangeCodeForTokens.mockResolvedValue(tokensFixture);
   mocks.encrypt.mockReturnValue(blobFixture);
   mocks.upsertStravaTokens.mockResolvedValue(undefined);
-  mocks.syncStravaActivities.mockResolvedValue(0);
+  mocks.syncStravaActivities.mockResolvedValue({ status: "complete", inserted: 0 });
   mocks.auth.mockResolvedValue({ user: { id: "user-1" } });
 
   // db.update(table).set(values).where(cond) resolves once where() is awaited.
@@ -435,7 +438,7 @@ describe("handleStravaCallback — initial sync", () => {
     });
     mocks.syncStravaActivities.mockImplementationOnce(async () => {
       order.push("sync");
-      return 0;
+      return { status: "complete", inserted: 0 };
     });
 
     await handleStravaCallback("auth-code", "verifier-123");
@@ -458,6 +461,30 @@ describe("handleStravaCallback — initial sync", () => {
     mocks.syncStravaActivities.mockRejectedValueOnce(new Error("Strava API error 429"));
 
     // The connect itself succeeded — the action must resolve, not reject.
+    await expect(handleStravaCallback("auth-code", "verifier-123")).resolves.toBeUndefined();
+    expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue #338: a sync that only covered part of the history must not be
+  // reported as a complete one — and it must never fail the connect.
+  it("records a partial sync and still completes the connect", async () => {
+    mocks.syncStravaActivities.mockResolvedValueOnce({
+      status: "partial",
+      inserted: 100,
+      reason: "paginationCap",
+    });
+
+    await expect(handleStravaCallback("auth-code", "verifier-123")).resolves.toBeUndefined();
+    expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+    expect(mocks.captureError).toHaveBeenCalledWith(
+      "actions.handleStravaCallback.initialSync.incomplete",
+      expect.any(Error)
+    );
+  });
+
+  it("keeps the connect when another sync is already running", async () => {
+    mocks.syncStravaActivities.mockResolvedValueOnce({ status: "busy", inserted: 0 });
+
     await expect(handleStravaCallback("auth-code", "verifier-123")).resolves.toBeUndefined();
     expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
   });

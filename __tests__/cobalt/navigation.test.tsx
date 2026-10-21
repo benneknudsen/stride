@@ -225,7 +225,10 @@ describe("NavBar sync (#97)", () => {
   test("posts to the sync endpoint, refreshes, then falls back to idle", async () => {
     useTimers();
     pathname.mockReturnValue(ROUTES.HOME);
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, inserted: 42, partial: false }),
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     renderConnected();
@@ -252,7 +255,10 @@ describe("NavBar sync (#97)", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({ ok: false, status: 500 })
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, inserted: 42, partial: false }),
+      });
     vi.stubGlobal("fetch", fetchMock);
 
     renderConnected();
@@ -278,6 +284,42 @@ describe("NavBar sync (#97)", () => {
     fireEvent.click(syncButton());
 
     await waitFor(() => expect(screen.getByText(/kørte for nylig/i)).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /prøv igen/i })).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  // Issue #338: a sync that only covered part of the history must not claim
+  // the account is fully synced.
+  test("a partial sync does not claim the account is synced", async () => {
+    useTimers();
+    pathname.mockReturnValue(ROUTES.HOME);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, inserted: 100, partial: true, reason: "paginationCap" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderConnected();
+    fireEvent.click(syncButton());
+
+    await waitFor(() => expect(screen.getByText(/delvis synket/i)).toBeTruthy());
+    expect(screen.queryByText("SYNCED")).toBeNull();
+    // The rows that did sync are still worth pulling in.
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue #338: another sync for the same account is already running — the
+  // work is happening, so this is a status, not a failure.
+  test("a 409 shows that a sync is already running, not the red retry", async () => {
+    useTimers();
+    pathname.mockReturnValue(ROUTES.HOME);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderConnected();
+    fireEvent.click(syncButton());
+
+    await waitFor(() => expect(screen.getByText(/syncer allerede/i)).toBeTruthy());
     expect(screen.queryByRole("button", { name: /prøv igen/i })).toBeNull();
     expect(refresh).not.toHaveBeenCalled();
   });

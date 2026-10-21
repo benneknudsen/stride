@@ -4,11 +4,72 @@ import { track } from "@vercel/analytics";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-export type SyncState = "idle" | "syncing" | "synced" | "error" | "rate_limited";
+export type SyncState =
+  | "idle"
+  | "syncing"
+  | "synced"
+  | "partial"
+  | "busy"
+  | "error"
+  | "rate_limited";
 
-// Sync control with four states. Controlled: the parent owns `state` and fires
+/** The status pills — everything that reports instead of offering a click. */
+type StatusLook = {
+  /** The Danish word on the pill. */
+  label: string;
+  /** Text colour. */
+  text: string;
+  /** The pill's border colour. */
+  border: string;
+  /** The dot's classes, on top of the shared dot geometry. */
+  dot: string;
+};
+
+const STATUS: Partial<Record<SyncState, StatusLook>> = {
+  syncing: {
+    label: "SYNCER…",
+    text: "text-cobalt",
+    border: "color-mix(in srgb, var(--color-cobalt) 25%, transparent)",
+    dot: "bg-red animate-[cg-pulse-dot_0.8s_ease-in-out_infinite] motion-reduce:animate-none",
+  },
+  synced: {
+    label: "SYNCED",
+    text: "text-success-ink",
+    border: "color-mix(in srgb, var(--color-success) 35%, transparent)",
+    dot: "bg-success",
+  },
+  // The sync only covered part of the history (#338). "SYNCED" would be a lie
+  // about the account's history, so it says what actually happened.
+  partial: {
+    label: "DELVIS SYNKET",
+    text: "text-cobalt",
+    border: "color-mix(in srgb, var(--color-cobalt) 25%, transparent)",
+    dot: "bg-cobalt",
+  },
+  // Another sync for this account is already running (#338) — the work is
+  // happening, so this is a calm status, not the red retry button.
+  busy: {
+    label: "SYNCER ALLEREDE",
+    text: "text-ink",
+    border: "color-mix(in srgb, var(--color-ink) 25%, transparent)",
+    dot: "bg-ink/50",
+  },
+  // Strava's own API refused a fresh pull (429). That is not a failure the user
+  // can fix by retrying, so it reads as a calm status, not the red retry button.
+  rate_limited: {
+    label: "KØRTE FOR NYLIG",
+    text: "text-ink",
+    border: "color-mix(in srgb, var(--color-ink) 25%, transparent)",
+    dot: "bg-ink/50",
+  },
+};
+
+// Sync control with seven states. Controlled: the parent owns `state` and fires
 // `onSync` on click; the parent flips the state on the API response and drops
-// "synced"/"error" back to "idle" so the button stays usable (#97).
+// "synced"/"error" back to "idle" so the button stays usable (#97). "partial"
+// and "busy" are statuses the parent reads off the response (#338): a sync
+// that only covered part of the history is not a "synced" account, and a sync
+// that lost the race for the account lock is a status, not a failure.
 export function SyncButton({
   state,
   onSync,
@@ -25,49 +86,19 @@ export function SyncButton({
     if (state === "synced") track("sync_udført");
   }, [state]);
 
-  if (state === "syncing") {
+  const status = STATUS[state];
+  if (status) {
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-cobalt",
+          "inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em]",
+          status.text,
           className
         )}
-        style={{ borderColor: "color-mix(in srgb, var(--color-cobalt) 25%, transparent)" }}
+        style={{ borderColor: status.border }}
       >
-        <span className="size-[7px] animate-[cg-pulse-dot_0.8s_ease-in-out_infinite] rounded-full bg-red motion-reduce:animate-none" />
-        SYNCER…
-      </span>
-    );
-  }
-
-  if (state === "synced") {
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-success-ink",
-          className
-        )}
-        style={{ borderColor: "color-mix(in srgb, var(--color-success) 35%, transparent)" }}
-      >
-        <span className="size-[7px] rounded-full bg-success" />
-        SYNCED
-      </span>
-    );
-  }
-
-  // Strava's own API refused a fresh pull (429). That is not a failure the user
-  // can fix by retrying, so it reads as a calm status, not the red retry button.
-  if (state === "rate_limited") {
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-ink",
-          className
-        )}
-        style={{ borderColor: "color-mix(in srgb, var(--color-ink) 25%, transparent)" }}
-      >
-        <span className="size-[7px] rounded-full bg-ink/50" />
-        KØRTE FOR NYLIG
+        <span className={cn("size-[7px] rounded-full", status.dot)} />
+        {status.label}
       </span>
     );
   }
