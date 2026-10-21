@@ -349,8 +349,14 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
     });
 
     it("shortens the run to the phase minimum when today would blow past the budget", () => {
+      // #336: the unlock needs the measured week-over-week comparison too, so
+      // the "fresh" baseline carries one — otherwise this test would measure
+      // the missing comparison instead of the week budget.
       const progression = snapshot({ readyToIncrease: true });
-      const fresh = recommend({ progression });
+      const fresh = recommend({
+        progression,
+        paceEfficiencyTrend: { current: 4.2, previous: 4.2 },
+      });
       expect(fresh.distanceKm).toBe(getPhaseRules("burn", RACE).maxDistanceKm);
 
       const loaded = recommend({
@@ -427,8 +433,15 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
   });
 
   describe("step 5 — progression unlocks the upper distance", () => {
-    it("moves to the phase maximum when ready to increase", () => {
-      const rec = recommend({ progression: snapshot({ readyToIncrease: true }) });
+    it("moves to the phase maximum when ready to increase and pace efficiency held", () => {
+      // #336: the unlock no longer rides on "there is a pace-efficiency number"
+      // — it needs the week-over-week comparison the dashboard measures off
+      // the same snapshot series the pace-trend chart plots. Same expectation as
+      // before the fix, but the card now has to earn it.
+      const rec = recommend({
+        progression: snapshot({ readyToIncrease: true }),
+        paceEfficiencyTrend: { current: 4.2, previous: 4.2 },
+      });
       expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).maxDistanceKm);
     });
 
@@ -437,6 +450,69 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
         progression: snapshot({ readyToIncrease: true, paceEfficiency: null }),
       });
       expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).minDistanceKm);
+    });
+  });
+
+  describe("step 5 — pace efficiency must be measured, not assumed (#336)", () => {
+    /** The burn phase's upper distance — the one the unlock hands out. */
+    const burnMax = (): number => getPhaseRules("burn", RACE).maxDistanceKm;
+    /** The burn phase's minimum — what a locked upper distance falls back to. */
+    const burnMin = (): number => getPhaseRules("burn", RACE).minDistanceKm;
+
+    it("unlocks the upper distance when pace efficiency improved week over week", () => {
+      const rec = recommend({
+        progression: snapshot({ readyToIncrease: true }),
+        paceEfficiencyTrend: { current: 4.3, previous: 4.1 },
+      });
+
+      expect(rec.distanceKm).toBe(burnMax());
+      // The reason must name what was compared — "data er stabil" is not a
+      // measurement, the two numbers are.
+      expect(rec.reason.join(" ")).toMatch(/ikke faldet siden sidste uge/i);
+      expect(rec.reason.join(" ")).toContain("4,3 mod 4,1");
+    });
+
+    it("unlocks the upper distance when pace efficiency held week over week", () => {
+      const rec = recommend({
+        progression: snapshot({ readyToIncrease: true }),
+        paceEfficiencyTrend: { current: 4.2, previous: 4.2 },
+      });
+
+      expect(rec.distanceKm).toBe(burnMax());
+      expect(rec.reason.join(" ")).toMatch(/ikke faldet siden sidste uge/i);
+    });
+
+    it("holds the phase minimum when pace efficiency fell week over week", () => {
+      // The regression #336 exists for: the number existed, so the old code
+      // handed out the upper distance and called the data stable — while the
+      // efficiency had actually dropped.
+      const rec = recommend({
+        progression: snapshot({ readyToIncrease: true }),
+        paceEfficiencyTrend: { current: 4.1, previous: 4.3 },
+      });
+
+      expect(rec.distanceKm).toBe(burnMin());
+      expect(rec.reason.join(" ")).not.toMatch(/stabil/i);
+      expect(rec.reason.join(" ")).toMatch(/faldet siden sidste uge/i);
+      expect(rec.reason.join(" ")).toContain("4,1 mod 4,3");
+    });
+
+    it("holds the phase minimum when there is not enough history to compare", () => {
+      // "Vi ved det ikke" is not "det er stabilt": without the comparison the
+      // upper distance stays locked.
+      const rec = recommend({ progression: snapshot({ readyToIncrease: true }) });
+
+      expect(rec.distanceKm).toBe(burnMin());
+      expect(rec.reason.join(" ")).not.toMatch(/stabil/i);
+    });
+
+    it("keeps the phase minimum when the load is not optimal, whatever the trend says", () => {
+      const rec = recommend({
+        progression: snapshot({ readyToIncrease: false }),
+        paceEfficiencyTrend: { current: 4.3, previous: 4.1 },
+      });
+
+      expect(rec.distanceKm).toBe(burnMin());
     });
   });
 

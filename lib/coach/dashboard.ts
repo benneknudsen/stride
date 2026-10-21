@@ -11,6 +11,7 @@
 import { getCurrentPhase, getLocalDate, getPhaseRules } from "@/lib/coach/engine";
 import { buildNextActivity, type NextActivityView } from "@/lib/coach/next-activity";
 import {
+  type PaceEfficiencyTrend,
   recommendWorkout,
   type WorkoutRecommendation,
   weekToDateDistanceKm,
@@ -77,6 +78,24 @@ export function buildPaceEfficiencySeries(snapshots: ProgressionSnapshot[]): Pac
     week: weekLabel(s.date),
     efficiency: s.paceEfficiency,
   }));
+}
+
+/**
+ * Uge-over-uge-sammenligningen af pace-effektiviteten (issue #336), læst af
+ * DEN SAMME uge-serie som pace-trend-kortet plottet: det sidste snapshot er
+ * 4-ugers vinduet der slutter nu, det forrige er det samme vindue 7 dage
+ * tidligere. Udefineret når sammenligningen ikke kan foretages — for lidt
+ * historik, kun ét snapshot, eller en uge uden pulsdata. "Vi ved det ikke" må
+ * aldrig læses som "det er stabilt", så der er ingen delvis aflæsning.
+ */
+export function buildPaceEfficiencyTrend(
+  snapshots: ProgressionSnapshot[]
+): PaceEfficiencyTrend | undefined {
+  const current = snapshots.at(-1)?.paceEfficiency;
+  const previous = snapshots.at(-2)?.paceEfficiency;
+  // Ingen snapshot og ingen pulsdata er det samme: ingen sammenligning.
+  if (current == null || previous == null) return undefined;
+  return { current, previous };
 }
 
 // ── Zone distribution (stacked, rolling 4 weeks) ────────────────────────────
@@ -274,6 +293,10 @@ export function buildCoachDashboard(
       // What the runner has already covered Mon→today (#256), so the card can
       // spread the week's load instead of stacking another hard day on top.
       weekToDateKm: weekToDateDistanceKm(normalized, now),
+      // The measured week-over-week pace-efficiency comparison (#336), read off
+      // the same snapshot series the pace-trend chart plots — so the card can
+      // only unlock the upper distance on a comparison that was actually made.
+      paceEfficiencyTrend: buildPaceEfficiencyTrend(snapshots),
     },
     now
   );

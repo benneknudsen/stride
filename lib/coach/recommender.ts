@@ -30,7 +30,10 @@
 //      a day the safety rules already allowed.
 //   4. Distance from the phase band (adapt 6–8, burn 8–10, …); a week behind
 //      its goal may close the gap, clamped inside the band.
-//   5. Improved pace efficiency + optimal load → unlock the band's upper end.
+//   5. A measured week-over-week pace-efficiency comparison + optimal load →
+//      unlock the band's upper end. "There is a number" is not a measurement:
+//      without the comparison (too little history, no HR data) the upper
+//      distance stays locked (#336).
 //   6. Intensity: Zone 2 by default; tempo only where the phase allows it.
 //   7. Shoe: Vomero everywhere except tempo (Adios Pro 4); assemble the card.
 //
@@ -60,6 +63,20 @@ import {
   type ProgressionSnapshot,
   type TrainingLoad,
 } from "@/lib/training/progression";
+
+/**
+ * Uge-over-uge-aflæsningen af pace-effektiviteten (issue #336). Begge tal er
+ * det samme mål coachens pace-trend-kort plottet — median speed-per-heartbeat
+ * ×1000 over det rullende 4-ugers vindue, nu og 7 dage tidligere — men læst
+ * som en sammenligning. Enten er sammenligningen der, eller den er der ikke:
+ * en sammenligning der ikke kan foretages, er aldrig "stabil".
+ */
+export interface PaceEfficiencyTrend {
+  /** Det 4-ugers vindue der slutter nu. */
+  current: number;
+  /** Det samme vindue 7 dage tidligere. */
+  previous: number;
+}
 
 export interface WorkoutInput {
   /** Carried for future multi-goal support — not yet wired into the recommender. */
@@ -99,6 +116,13 @@ export interface WorkoutInput {
     /** Hvad turen VAR (klassificeret med det fælles modul), ikke hvad Strava kaldte den. */
     character: RunKind;
   };
+  /**
+   * Uge-over-uge-sammenligningen af pace-effektiviteten (issue #336) — samme
+   * signal som coachens pace-trend-kort plottet, kun læst som en sammenligning.
+   * Uden feltet kan step 5 ikke låse den øvre distance op: "der er et tal" er
+   * ikke "data er stabil", og "vi ved det ikke" er ikke "det er stabilt".
+   */
+  paceEfficiencyTrend?: PaceEfficiencyTrend;
 }
 
 /**
@@ -192,6 +216,11 @@ function mondayOfWeek(date: Date): Date {
 /** One decimal, for Danish reason copy — "32,5 km", never "32,499999 km". */
 function round1(km: number): number {
   return Math.round(km * 10) / 10;
+}
+
+/** One decimal with a Danish decimal comma — "4,2", never "4.2". */
+function decimalComma(value: number): string {
+  return value.toFixed(1).replace(".", ",");
 }
 
 /** Nearest half kilometre — the grid prescribed distances sit on. */
@@ -454,21 +483,43 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   // B6: `readyToIncrease` is null when load data is missing — guard it to false
   // (not ready) so a null never reads as "unlock the upper distance".
   const readyToIncrease = input.progression.readyToIncrease ?? false;
-  const readyForMore = readyToIncrease && input.progression.paceEfficiency !== null;
+  // #336: the upper end unlocks on a MEASURED week-over-week comparison, never
+  // on "a number exists". `paceEfficiency !== null` only said "there is a
+  // value", so a runner whose efficiency fell since last week still got the
+  // band's upper distance and a reason that called the data stable. The rule
+  // is "not worse than last week" (nu >= sidste uge), read on the same one
+  // decimal the card prints — so the numbers the reason quotes are the numbers
+  // the rule compared, and a change below that precision is noise, not a
+  // regression. Without the comparison there is no unlock: "vi ved det ikke" er
+  // ikke "det er stabilt".
+  const trend = input.paceEfficiencyTrend;
+  const comparison = trend
+    ? { current: round1(trend.current), previous: round1(trend.previous) }
+    : null;
+  const paceEfficiencyNotWorse = comparison !== null && comparison.current >= comparison.previous;
+  const readyForMore =
+    readyToIncrease && input.progression.paceEfficiency !== null && paceEfficiencyNotWorse;
   let distanceKm: number;
   if (type === "long") {
     distanceKm = rules.longRunMaxKm;
     reason.push(`Ugens lange tur i ${phase}-fasen — op til ${rules.longRunMaxKm} km i Zone 2.`);
-  } else if (readyForMore) {
+  } else if (readyForMore && comparison !== null) {
     distanceKm = rules.maxDistanceKm;
     reason.push(
-      `Pace-efficiency data er stabil og belastningen er optimal — klar til ${phase}-fasens øvre distance.`
+      `Pace-effektiviteten er ikke faldet siden sidste uge (${decimalComma(comparison.current)} mod ${decimalComma(comparison.previous)}) og belastningen er optimal — klar til ${phase}-fasens øvre distance.`
     );
   } else {
     distanceKm = rules.minDistanceKm;
     reason.push(
       `Distance fra ${phase}-fasens bånd (${rules.minDistanceKm}–${rules.maxDistanceKm} km).`
     );
+    // The comparison was made and it went the wrong way — say so, so the card
+    // never leaves the runner guessing why the upper distance stayed shut.
+    if (comparison !== null && !paceEfficiencyNotWorse) {
+      reason.push(
+        `Pace-effektiviteten er faldet siden sidste uge (${decimalComma(comparison.current)} mod ${decimalComma(comparison.previous)}) — ${phase}-fasens øvre distance er ikke låst op.`
+      );
+    }
   }
 
   // 3c (cont.) + #333: when the week is behind its plan through today, today's
