@@ -149,13 +149,15 @@ describe("buildLiveCoachView", () => {
     expect(view.focusQuote).toContain("165");
   });
 
-  it("uses the rest-day reason as the focus quote on a rest recommendation", () => {
+  it("quotes the gate that rested the day, never the calendar (#332)", () => {
+    const reason =
+      "Du har allerede løbet 32 km i denne uge — ugens planlagte volumen er brugt, så i dag er en hviledag.";
     const view = buildLiveCoachView(
-      dashboard({ ratio: 1.0, workout: { type: "rest", reason: ["Hviledag i dag."] } }),
+      dashboard({ ratio: 1.0, workout: { type: "rest", reason: [reason] } }),
       liveActivities,
       NOW
     );
-    expect(view.focusQuote).toBe("Hviledag i dag.");
+    expect(view.focusQuote).toBe(reason);
   });
 
   it("peaks readiness when the ratio sits on the chronic base (≈1)", () => {

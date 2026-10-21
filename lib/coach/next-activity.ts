@@ -358,15 +358,17 @@ export function buildNextActivity({
   }
 
   // 3. Today's pas is hvile (#260). The recommender rests for reasons the mix
-  // below cannot see — a planned hviledag in the phase week, its own recovery
-  // buffer, or a week whose planned volume is already covered (#256) — and the
-  // variation used to prescribe straight through them, putting "Intervalpas,
-  // 9 km" next to "Næste pas: Hvile". This must outrank the readiness bands
-  // below, not follow them: the easy band still prescribes a rolig tur, and a
-  // run of any length beside a hviledag is the contradiction being removed.
+  // below cannot see — a deliberate taper day, its own recovery buffer, high
+  // load risk, or a week whose planned volume is already covered (#256/#330) —
+  // and the variation used to prescribe straight through them, putting
+  // "Intervalpas, 9 km" next to "Næste pas: Hvile". This must outrank the
+  // readiness bands below, not follow them: the easy band still prescribes a
+  // rolig tur, and a run of any length beside a hviledag is the contradiction
+  // being removed. The copy names both possible sources (#332): a rest slot is
+  // only a preference now, so the hvile may come from a safety gate, not the plan.
   if (todayType === "rest") {
     reason.push(
-      'Dagens "Næste pas" er hvile — så variationen venter. Hviledagen er en del af planen, ikke et hul i den.'
+      'Dagens "Næste pas" er hvile — så variationen venter. Coachen har lagt hvile ind efter planen eller efter en sikkerhedsgrænse; det er bevidst, ikke et hul i planen.'
     );
     return restCard(basis, reason);
   }

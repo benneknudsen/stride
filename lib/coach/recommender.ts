@@ -6,6 +6,9 @@
 //
 // The seven decision steps, in order:
 //   1. The phase week plan decides the day's slot (rest / easy / tempo / long).
+//      A rest slot is a preference, not a command (#332): the state gates below
+//      decide whether it becomes the phase's easy run. Taper rest days are the
+//      deliberate exception.
 //   2. Recovery buffer (48 h before tempo, 24 h before easy/long, 72 h with
 //      injury history) — broken → rest day.
 //   3. Football yesterday → no hard session (tempo downgrades to easy).
@@ -264,21 +267,31 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
   const highRiskReason = loadRisk === "high" ? highRiskRestReason(load) : null;
 
   // 1. The phase week plan decides the day's slot (rest / easy / tempo / long).
+  // A rest slot is a preference, not a command (#332): the gates below decide
+  // whether the state allows the phase's easy run instead. The taper week is
+  // the deliberate exception — its rest days are part of the race-week shape.
   const dayOfWeek = (today.getDay() + 6) % 7; // 0 = Mon … 6 = Sun
   const slot = weekPlan[dayOfWeek];
-  if (slot.type === "rest") {
-    reason.push(`Planlagt hviledag i ${phase}-fasen — restitution er en del af planen.`);
+  const restSlot = slot.type === "rest";
+  if (restSlot && phase === "taper") {
+    reason.push(
+      `Planlagt hviledag i ${phase}-fasen — nedtrapningen er bevidst, og restitution er en del af planen.`
+    );
     if (highRiskReason) reason.push(highRiskReason);
     return restCard(reason, input.injuryHistory ? INJURY_RECOVERY_HOURS : EASY_MIN_RECOVERY_HOURS);
   }
 
-  // 6. Intensity: tempo only where the phase allows it; otherwise Zone 2.
+  // 6. Intensity: tempo only where the phase allows it; otherwise Zone 2. A
+  // rest slot is read as an easy day, so the state gates can still turn it into
+  // the phase band's easy run when nothing else asks for rest.
   let type: "easy" | "tempo" | "long" =
-    slot.type === "tempo" && rules.hasTempoSession
-      ? "tempo"
-      : slot.type === "long"
-        ? "long"
-        : "easy";
+    restSlot || slot.type === "easy"
+      ? "easy"
+      : slot.type === "tempo" && rules.hasTempoSession
+        ? "tempo"
+        : slot.type === "long"
+          ? "long"
+          : "easy";
 
   // 2. Recovery buffer — 48 h before a hard session, 24 h before an easy/long
   // run, 72 h with an injury history. Broken buffer always wins over the slot.
@@ -312,17 +325,18 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     reason.push(highRiskReason);
     return restCard(reason, recoveryHours);
   }
+  let elevatedReason: string | null = null;
   if (loadRisk === "elevated" && type === "tempo") {
     type = "easy";
-    reason.push(elevatedRiskReason(load));
+    elevatedReason = elevatedRiskReason(load);
   }
 
   // 3. Football yesterday → no hard session.
+  let footballReason: string | null = null;
   if (type === "tempo" && input.footballYesterday) {
     type = "easy";
-    reason.push(
-      "Fodboldkamp i går — benene er forbelastede, så tempoturen bliver en rolig Zone 2-tur."
-    );
+    footballReason =
+      "Fodboldkamp i går — benene er forbelastede, så tempoturen bliver en rolig Zone 2-tur.";
   }
 
   // 3b. Readiness band (#245): read freshness through the exact same
@@ -340,15 +354,12 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
     );
     return restCard(reason, recoveryHours);
   }
+  let readinessReason: string;
   if (readiness.band === "easy") {
-    if (type !== "easy") {
-      type = "easy";
-    }
-    reason.push(
-      `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Overvej en rolig tur i dag frem for et hårdt pas.`
-    );
+    type = "easy";
+    readinessReason = `Din readiness er på ${readiness.pct}% — ${readiness.note.toLowerCase()}. Overvej en rolig tur i dag frem for et hårdt pas.`;
   } else {
-    reason.push(`Din readiness er på ${readiness.pct}% — du er klar til dagens pas.`);
+    readinessReason = `Din readiness er på ${readiness.pct}% — du er klar til dagens pas.`;
   }
 
   // 3c. Week-to-date load (#256). The week strip is the phase's own budget for
@@ -375,6 +386,23 @@ export function recommendWorkout(input: WorkoutInput, now: Date): WorkoutRecomme
       `Du har allerede løbet ${round1(weekToDateKm)} km i denne uge — ugens planlagte volumen i ${phase}-fasen er ${round1(proratedWeeklyKm)} km indtil i dag, så i dag er en hviledag.`
     );
     return restCard(reason, recoveryHours);
+  }
+
+  // No gate turned the day into hvile, so the run-facing reason lines belong on
+  // the card now — in their original order (#332). Deferring them past the
+  // week-budget gate above keeps a budget rest card from claiming "du er klar
+  // til dagens pas" (or "overvej en rolig tur") beside "i dag er en hviledag".
+  if (elevatedReason) reason.push(elevatedReason);
+  if (footballReason) reason.push(footballReason);
+  reason.push(readinessReason);
+
+  // No gate held the runner back, so a rest slot becomes the phase's easy run.
+  // The reason names the calendar as a preference and the state as the decision,
+  // never the other way around (issue #332).
+  if (restSlot) {
+    reason.push(
+      `Ugens hviledag i ${phase}-fasen var en præference — tilstanden tillader en rolig tur, så dagen bliver et let pas i planens bånd.`
+    );
   }
 
   // 4 + 5. Distance from the phase band; progression unlocks the upper end.
