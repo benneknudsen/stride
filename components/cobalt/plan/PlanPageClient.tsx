@@ -8,6 +8,7 @@ import { RaceDateDialog } from "@/components/cobalt/plan/RaceDateDialog";
 import { RaceDayCard } from "@/components/cobalt/plan/RaceDayCard";
 import { UpcomingWeeks } from "@/components/cobalt/plan/UpcomingWeeks";
 import { WeekSuggestions } from "@/components/cobalt/plan/WeekSuggestions";
+import { WhatIfCard } from "@/components/cobalt/plan/WhatIfCard";
 import { useStartupReveal } from "@/hooks/useStartupReveal";
 import type { PlanView } from "@/lib/cobalt/plan";
 
@@ -100,6 +101,9 @@ export function PlanPageClient({
               daysToRace={view.daysToRace}
               onEdit={canEditRace ? openDialog : undefined}
             />
+            <div className="mt-4 [animation:cg-fade-up_0.6s_0.42s_ease_both] motion-reduce:[animation:none]">
+              <WhatIfCard scenarios={view.scenarios} signedIn={canEditRace} />
+            </div>
           </div>
         </div>
 

@@ -16,7 +16,12 @@ import {
   type RunSuggestion,
   type UpcomingWeek,
 } from "@/lib/cobalt/plan";
-import { formatPaceClock, predictRace, zonePaces } from "@/lib/training/prediction";
+import {
+  formatPaceClock,
+  formatPaceRange,
+  predictRace,
+  zonePaces,
+} from "@/lib/training/prediction";
 
 // View-model tests for the race parameterisation (issue #99): the countdown,
 // plan title and phase timeline must all re-anchor to an arbitrary race date,
@@ -1141,5 +1146,116 @@ describe("buildPlanView — Kommende uger, phase-aware (issue #237)", () => {
     }
     const identities = view.upcomingWeeks.map(rowIdentity);
     expect(new Set(identities).size).toBe(3);
+  });
+});
+
+describe("buildPlanView — 'hvad hvis' scenarios (issue #340)", () => {
+  const NOW = midOf("peak");
+
+  function liveRun(
+    daysAgo: number,
+    km: number,
+    paceSecPerKm: number,
+    hr: number
+  ): HomeActivityLike {
+    const startDate = addDays(NOW, -daysAgo);
+    startDate.setHours(7, 30, 0, 0);
+    const distance = km * 1000;
+    const movingTime = Math.round(km * paceSecPerKm);
+    return {
+      id: `run-${daysAgo}`,
+      name: `Tur ${daysAgo}`,
+      type: "Run",
+      startDate,
+      distance,
+      movingTime,
+      averageSpeed: distance / movingTime,
+      averageHeartrate: hr,
+      averageCadence: 88,
+      totalElevationGain: 15,
+    };
+  }
+
+  // Six weeks of running: long enough to anchor a 10K, short of a marathon.
+  const RUNS: HomeActivityLike[] = [
+    liveRun(6, 10, 270, 168),
+    liveRun(9, 12, 330, 148),
+    liveRun(13, 9, 335, 145),
+    liveRun(17, 10, 330, 146),
+    liveRun(24, 8, 340, 142),
+    liveRun(31, 15, 335, 150),
+  ];
+
+  it("offers a scenario for each of the four standard distances", () => {
+    const view = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true);
+    expect(view.scenarios.map((s) => s.distanceKm)).toEqual([5, 10, 21.0975, 42.195]);
+    expect(view.scenarios.map((s) => s.label)).toEqual(["5K", "10K", "Halvmarathon", "Marathon"]);
+  });
+
+  it("carries the predictor's own numbers for every distance", () => {
+    // The projection is the predictor's, unchanged — the card only points it at
+    // another distance.
+    const view = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true);
+    for (const scenario of view.scenarios) {
+      const prediction = predictRace(RUNS, NOW, scenario.distanceKm).prediction;
+      expect(scenario.timeSeconds).toBe(prediction?.timeSeconds ?? null);
+      expect(scenario.paceSecPerKm).toBe(prediction?.paceSecPerKm ?? null);
+      expect(scenario.confidence).toBe(prediction?.confidence ?? null);
+      expect(scenario.estimate).not.toBeNull();
+    }
+  });
+
+  it("locks a distance the predictor cannot reach — and shows no number for it", () => {
+    // One 9 km run unlocks a 10K (5 km bar) but not a marathon (10,5 km bar).
+    const view = buildPlanView([liveRun(3, 9, 320, 160)], NOW, RACE, RACE_NAME, true);
+    const tenK = view.scenarios.find((s) => s.distanceKm === 10);
+    const marathon = view.scenarios.find((s) => s.distanceKm === 42.195);
+
+    expect(tenK?.lock).toBeNull();
+    expect(tenK?.timeSeconds).toBeGreaterThan(0);
+    expect(marathon?.lock?.reason).toBe("runs-too-short");
+    expect(marathon?.lock?.message).toContain("10,5 km");
+    expect(marathon?.timeSeconds).toBeNull();
+    expect(marathon?.estimate).toBeNull();
+    expect(marathon?.paceRange).toBeNull();
+  });
+
+  it("still offers the distances for a runner we cannot predict for — locked, not blank", () => {
+    const view = buildPlanView([], NOW, RACE, RACE_NAME, true);
+    expect(view.scenarios).toHaveLength(4);
+    for (const scenario of view.scenarios) {
+      expect(scenario.lock).not.toBeNull();
+      expect(scenario.timeSeconds).toBeNull();
+    }
+  });
+
+  it("shows no scenarios for the demo plan — the demo athlete's times are not the runner's", () => {
+    // The same rule as the locked race card (issue #117): a stranger's race time
+    // must never stand under the runner's own name.
+    const view = buildPlanView(undefined, NOW, RACE, RACE_NAME);
+    expect(view.scenarios).toEqual([]);
+  });
+
+  it("defaults the goal to the runner's own goal on their own distance", () => {
+    const view = buildPlanView(RUNS, NOW, RACE, RACE_NAME, true, null, 10, 2400);
+    const tenK = view.scenarios.find((s) => s.distanceKm === 10);
+    const half = view.scenarios.find((s) => s.distanceKm === 21.0975);
+    expect(tenK?.isOwnRace).toBe(true);
+    expect(tenK?.defaultGoalSeconds).toBe(2400);
+    expect(half?.isOwnRace).toBe(false);
+    expect(half?.defaultGoalSeconds).not.toBe(2400);
+  });
+
+  it("shows the confidence and widens the pace range when the prediction rests on one run", () => {
+    const runs = [liveRun(3, 8, 330, 140)];
+    const prediction = predictRace(runs, NOW, 10).prediction;
+    expect(prediction?.confidence).toBe("low");
+
+    const view = buildPlanView(runs, NOW, RACE, RACE_NAME, true);
+    const tenK = view.scenarios.find((s) => s.distanceKm === 10);
+    expect(tenK?.confidence).toBe("low");
+    expect(tenK?.confidenceLabel).toBe("Lav");
+    // The same spread the plan's own targets use under low confidence (#231).
+    expect(tenK?.paceRange).toBe(formatPaceRange(prediction?.paceSecPerKm ?? 0, 25));
   });
 });
