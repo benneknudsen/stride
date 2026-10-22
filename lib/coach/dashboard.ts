@@ -8,11 +8,13 @@
 // dashboard is unit-testable with fixture data. The server page decides what
 // to cache (progression series, 1 h) vs. compute per request (workout card).
 
+import { buildWorkoutAlternatives, type WorkoutAlternative } from "@/lib/coach/alternatives";
 import { getCurrentPhase, getLocalDate, getPhaseRules } from "@/lib/coach/engine";
 import { buildNextActivity, type NextActivityView } from "@/lib/coach/next-activity";
 import {
   type PaceEfficiencyTrend,
   recommendWorkout,
+  type WorkoutInput,
   type WorkoutRecommendation,
   weekToDateDistanceKm,
 } from "@/lib/coach/recommender";
@@ -210,6 +212,12 @@ export type WorkoutCardView = WorkoutRecommendation;
 
 export interface CoachDashboardData {
   workout: WorkoutCardView;
+  /**
+   * The "Hvis du i stedet" list (issue #342): every other run type, what it would
+   * have meant today, and the engine's own verdict on it — judged by the same
+   * `validateWorkout` over the same input the recommendation used.
+   */
+  alternatives: WorkoutAlternative[];
   /** The recommendation derived from the runner's last five runs. */
   nextActivity: NextActivityView;
   paceSeries: PacePoint[];
@@ -278,31 +286,36 @@ export function buildCoachDashboard(
   // The recommender builds the phase week plan internally to find today's slot
   // and the week's budget, but keeps it to itself (issue #291) — so the card
   // comes back ready to render.
-  const workout = recommendWorkout(
-    {
-      // The signed-in user's own id; "demo" only on the fixture path. The goal
-      // stays the product's Zone-2 philosophy — no per-user goal exists yet, and
-      // the recommender doesn't read it (see WorkoutInput.goal).
-      userId: userId ?? "demo",
-      goal: GOALS.zone2,
-      progression: current,
-      lastRun: lastRun ?? new Date(now.getTime() - 3 * DAY_MS),
-      lastRunSummary,
-      footballYesterday: false,
-      raceDate,
-      // What the runner has already covered Mon→today (#256), so the card can
-      // spread the week's load instead of stacking another hard day on top.
-      weekToDateKm: weekToDateDistanceKm(normalized, now),
-      // The measured week-over-week pace-efficiency comparison (#336), read off
-      // the same snapshot series the pace-trend chart plots — so the card can
-      // only unlock the upper distance on a comparison that was actually made.
-      paceEfficiencyTrend: buildPaceEfficiencyTrend(snapshots),
-    },
-    now
-  );
+  //
+  // The input is built once and handed to both callers: the recommendation and
+  // the "Hvis du i stedet" list (#342) must judge the same day from the same
+  // data, so they cannot each assemble their own version of it.
+  const workoutInput: WorkoutInput = {
+    // The signed-in user's own id; "demo" only on the fixture path. The goal
+    // stays the product's Zone-2 philosophy — no per-user goal exists yet, and
+    // the recommender doesn't read it (see WorkoutInput.goal).
+    userId: userId ?? "demo",
+    goal: GOALS.zone2,
+    progression: current,
+    lastRun: lastRun ?? new Date(now.getTime() - 3 * DAY_MS),
+    lastRunSummary,
+    footballYesterday: false,
+    raceDate,
+    // What the runner has already covered Mon→today (#256), so the card can
+    // spread the week's load instead of stacking another hard day on top.
+    weekToDateKm: weekToDateDistanceKm(normalized, now),
+    // The measured week-over-week pace-efficiency comparison (#336), read off
+    // the same snapshot series the pace-trend chart plots — so the card can
+    // only unlock the upper distance on a comparison that was actually made.
+    paceEfficiencyTrend: buildPaceEfficiencyTrend(snapshots),
+  };
+  const workout = recommendWorkout(workoutInput, now);
 
   return {
     workout,
+    // The alternatives for the types today's pas is not (#342) — judged over the
+    // same input, so a line can never describe a different day than the card.
+    alternatives: buildWorkoutAlternatives(workoutInput, now, workout.type),
     // The variation is built *after* the pas and told what it landed on, so it
     // can step aside rather than prescribe the same session twice (#255).
     nextActivity: buildNextActivity({

@@ -373,3 +373,68 @@ describe("buildCoachDashboard", () => {
     expect(dashboard.workout.reason.join(" ")).not.toMatch(/stabil/i);
   });
 });
+
+describe("buildCoachDashboard — the alternatives list (#342)", () => {
+  it("never repeats today's own type in the alternatives", () => {
+    const dashboard = buildCoachDashboard(
+      steadyHistory(BURN_WEDNESDAY),
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    const types = dashboard.alternatives.map((alternative) => alternative.type);
+    expect(types).not.toContain(dashboard.workout.type);
+    // A hviledag repeats nothing, so all three types are listed.
+    expect(types).toHaveLength(dashboard.workout.type === "rest" ? 3 : 2);
+  });
+
+  it("lists all three types when the day is a hviledag", () => {
+    // A run 12 h ago breaks the recovery buffer, so the day rests.
+    const dashboard = buildCoachDashboard(
+      [...steadyHistory(BURN_WEDNESDAY), run(BURN_WEDNESDAY, 0.5)],
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    expect(dashboard.workout.type).toBe("rest");
+    expect(dashboard.alternatives.map((alternative) => alternative.type)).toEqual([
+      "easy",
+      "tempo",
+      "long",
+    ]);
+  });
+
+  it("serializes the alternatives with no Date or function values", () => {
+    const dashboard = buildCoachDashboard(
+      steadyHistory(BURN_WEDNESDAY),
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    const roundTrip = JSON.parse(JSON.stringify(dashboard.alternatives));
+    expect(roundTrip).toEqual(dashboard.alternatives);
+  });
+
+  it("leaves the workout untouched — the alternatives never graft themselves onto it", () => {
+    const dashboard = buildCoachDashboard(
+      steadyHistory(BURN_WEDNESDAY),
+      BURN_WEDNESDAY,
+      DASHBOARD_WEEKS,
+      TEST_RACE_DATE
+    );
+
+    expect(Object.keys(dashboard.workout).sort()).toEqual([
+      "distanceKm",
+      "heartRateCap",
+      "paceRange",
+      "reason",
+      "recoveryHours",
+      "shoe",
+      "trace",
+      "type",
+    ]);
+  });
+});
