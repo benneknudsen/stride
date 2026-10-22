@@ -5,6 +5,7 @@ import { LoadGauge } from "@/components/cobalt/coach-dashboard/LoadGauge";
 import { NextActivityCard } from "@/components/cobalt/coach-dashboard/NextActivityCard";
 import { PaceEfficiencyChart } from "@/components/cobalt/coach-dashboard/PaceEfficiencyChart";
 import { VolumeTrendChart } from "@/components/cobalt/coach-dashboard/VolumeTrendChart";
+import { WorkoutAlternativesCard } from "@/components/cobalt/coach-dashboard/WorkoutAlternativesCard";
 import { WorkoutCard } from "@/components/cobalt/coach-dashboard/WorkoutCard";
 import { WorkoutTraceCard } from "@/components/cobalt/coach-dashboard/WorkoutTraceCard";
 import { ZoneDistributionChart } from "@/components/cobalt/coach-dashboard/ZoneDistributionChart";
@@ -78,7 +79,7 @@ function SectionLoader({ height }: { height: number }) {
 // the workout card and the console can never disagree and the engine runs a
 // single time per request.
 async function NextWorkoutSection({ dashboard }: { dashboard: CoachDashboardData }) {
-  const { workout, nextActivity } = dashboard;
+  const { workout, nextActivity, alternatives } = dashboard;
   return (
     <div className="grid grid-cols-12 gap-4">
       <div className="col-span-12 flex flex-col gap-4 lg:col-span-7">
@@ -86,6 +87,9 @@ async function NextWorkoutSection({ dashboard }: { dashboard: CoachDashboardData
         {/* Issue #301: the rule trace hangs off "Næste pas" — same carried
             recommendation, so the why can never describe a different pas. */}
         <WorkoutTraceCard workout={workout} />
+        {/* Issue #342: the same rhythm continues — what the other session types
+            would have meant today, with the engine's own verdict on each. */}
+        <WorkoutAlternativesCard alternatives={alternatives} />
       </div>
       <div className="col-span-12 lg:col-span-5">
         <NextActivityCard activity={nextActivity} />

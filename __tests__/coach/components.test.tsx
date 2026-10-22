@@ -610,3 +610,143 @@ describe("WorkoutTraceCard — why this workout (#301)", () => {
     expect(screen.queryByText(/Se alle/)).toBeNull();
   });
 });
+
+// ── WorkoutAlternativesCard — "Hvis du i stedet" (issue #342) ──────────────
+
+import { WorkoutAlternativesCard } from "@/components/cobalt/coach-dashboard/WorkoutAlternativesCard";
+import type { WorkoutAlternative } from "@/lib/coach/alternatives";
+
+/** One alternative line, blocked by the engine's own Zone 2 ceiling rule. */
+function alternativeFixture(overrides: Partial<WorkoutAlternative> = {}): WorkoutAlternative {
+  return {
+    type: "tempo",
+    label: "Tempo",
+    distance: { minKm: 8, maxKm: 10 },
+    zone: 4,
+    paceRange: { min: "4:45", max: "5:05" },
+    status: "blocked",
+    issues: [
+      {
+        id: "zone2-hr-ceiling",
+        label: "Zone 2-loft",
+        message:
+          "Planlagt Zone 4 overskrider Zone 2-loftet for burn-basefasen (hold pulsen ≤ 155 bpm).",
+        suggestion:
+          "Gå ned til en rolig Zone 2-indsats, eller flyt kvalitetsarbejdet til sharpen/peak-blokken.",
+      },
+    ],
+    warnings: [],
+    ...overrides,
+  };
+}
+
+describe("WorkoutAlternativesCard — what if you did something else (#342)", () => {
+  test("lists every alternative with the engine's own message and remedy", () => {
+    const long = alternativeFixture({
+      type: "long",
+      label: "Lang tur",
+      distance: { minKm: 16, maxKm: 16 },
+      zone: 2,
+      paceRange: { min: "5:45", max: "6:15" },
+      status: "allowed",
+      issues: [],
+    });
+    render(<WorkoutAlternativesCard alternatives={[alternativeFixture(), long]} />);
+
+    expect(screen.getByText("Tempo")).toBeDefined();
+    expect(screen.getByText("Lang tur")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Planlagt Zone 4 overskrider Zone 2-loftet for burn-basefasen (hold pulsen ≤ 155 bpm)."
+      )
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "Gå ned til en rolig Zone 2-indsats, eller flyt kvalitetsarbejdet til sharpen/peak-blokken."
+      )
+    ).toBeDefined();
+  });
+
+  test("names the status in words, so the verdict never rests on colour alone", () => {
+    const warning = alternativeFixture({
+      type: "easy",
+      label: "Rolig tur",
+      status: "warning",
+      issues: [],
+      warnings: [
+        {
+          id: "football-recovery",
+          label: "Fodbold i går",
+          message: "Hårdt pas planlagt dagen efter fodbold — benene er sandsynligvis forbelastede.",
+          suggestion: "Hold det roligt (Zone 2) i dag, eller flyt kvalitetsarbejdet en dag.",
+        },
+      ],
+    });
+    const allowed = alternativeFixture({
+      type: "long",
+      label: "Lang tur",
+      status: "allowed",
+      issues: [],
+      warnings: [],
+    });
+    render(<WorkoutAlternativesCard alternatives={[alternativeFixture(), warning, allowed]} />);
+
+    expect(screen.getByText("Blokeret")).toBeDefined();
+    expect(screen.getByText("Advarsel")).toBeDefined();
+    expect(screen.getByText("Tilladt")).toBeDefined();
+  });
+
+  test("a blocked line shows the engine's warnings too, not only the blocking rules", () => {
+    const both = alternativeFixture({
+      warnings: [
+        {
+          id: "football-recovery",
+          label: "Fodbold i går",
+          message: "Hårdt pas planlagt dagen efter fodbold — benene er sandsynligvis forbelastede.",
+          suggestion: "Hold det roligt (Zone 2) i dag, eller flyt kvalitetsarbejdet en dag.",
+        },
+      ],
+    });
+    render(<WorkoutAlternativesCard alternatives={[both]} />);
+
+    expect(
+      screen.getByText(
+        "Planlagt Zone 4 overskrider Zone 2-loftet for burn-basefasen (hold pulsen ≤ 155 bpm)."
+      )
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        "Hårdt pas planlagt dagen efter fodbold — benene er sandsynligvis forbelastede."
+      )
+    ).toBeDefined();
+  });
+
+  test("prints the distance band, and one number only where the engine pins it", () => {
+    const long = alternativeFixture({
+      type: "long",
+      label: "Lang tur",
+      distance: { minKm: 16, maxKm: 16 },
+      zone: 2,
+      status: "allowed",
+      issues: [],
+    });
+    render(<WorkoutAlternativesCard alternatives={[alternativeFixture(), long]} />);
+
+    expect(screen.getByText("8–10 km")).toBeDefined();
+    expect(screen.getByText("16 km")).toBeDefined();
+  });
+
+  test("is a plain semantic list with no interactive element to reach", () => {
+    const { container } = render(
+      <WorkoutAlternativesCard
+        alternatives={[alternativeFixture(), alternativeFixture({ type: "long" })]}
+      />
+    );
+
+    expect(container.querySelectorAll("ul > li")).toHaveLength(2);
+    // Nothing here is clickable, so there is no keyboard path to invent.
+    expect(
+      container.querySelectorAll("button, a, input, select, textarea, details, summary")
+    ).toHaveLength(0);
+  });
+});
