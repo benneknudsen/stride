@@ -1,11 +1,24 @@
 import { cn } from "@/lib/utils";
 
 // The three slowly-drifting liquid blobs behind every Cobalt Glass page.
-// Fixed + pointer-events-none so they sit behind (and bleed through) the glass
-// widgets without ever intercepting clicks. Bound to 100dvh where supported so
-// the layer tracks the mobile URL bar instead of leaving a bare strip at the
-// bottom; html carries the matching silver base colour for any sub-pixel gap.
-// Drift pauses under reduced motion.
+// #344: the layer is document-bound now — `absolute inset-0` inside the shell
+// that is already `relative min-h-screen` — instead of a `position: fixed`
+// strip that had to keep tracking the viewport itself. A surface tied to the
+// document cannot desync from the viewport the way the fixed one did when
+// mobile browsers resize or offset the layout viewport (URL bar, rubber-band,
+// dynamic dvh): nothing occupies a coordinate space the page doesn't own.
+// The sheet paints its own silver base, so no underneath surface can ever
+// shine through with a different colour.
+//
+// Blob geometry keeps its old values: on a sheet about one viewport tall
+// (every auth screen, the hero on short pages) the layout stays exactly as
+// before, and on multi-screen documents the fog rests in document space —
+// thin silver behind content is continuous by construction (every radial
+// fades out, nothing repeats, nothing is cut hard), so no scan region can
+// meet an edge. The sheet sits first in the shell's DOM with z-auto, so the
+// positioned siblings after it (content container, NavBar, BottomTabBar)
+// paint above it and the glass widgets keep bleeding through. Drift pauses
+// under reduced motion.
 const BLOBS = [
   {
     id: "red",
@@ -49,7 +62,8 @@ export function BackgroundBlobs() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed inset-x-0 top-0 h-screen w-full overflow-hidden supports-[height:100dvh]:h-[100dvh]"
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{ backgroundColor: "var(--color-silver)" }}
     >
       {BLOBS.map((blob) => (
         <div

@@ -132,11 +132,21 @@
   * {
     @apply border-border outline-ring/50;
   }
-  /* App/auth shells paint bg-silver (#e9eae5). Keeping the same colour on the
-     root canvas means a sub-pixel gap under the fixed blob layer — most
-     visible while the mobile URL bar resizes — never turns into a stripe. */
+  /* App/auth shells paint bg-silver (#e9eae5), and #344's document-bound
+     blob sheet paints the same silver itself. Keeping the colour on the root
+     canvas too means a scroll bounce now has neither a stripe nor a hue
+     mismatch to expose (overscroll-behavior is switched off below). */
   html {
     background-color: var(--color-silver);
+  }
+  /* #344: neither the document nor its ambient sheet may leave the document.
+     Without this, iOS rubber-bands the page past its own bounds and shows the
+     canvas beyond the shell with a hard edge where the sheet ends. iOS 16+
+     and all modern engines support the property; older ones keep their native
+     bounce, and the canvas behind that bounce stays silver (rule above). */
+  html,
+  body {
+    overscroll-behavior-y: none;
   }
   body {
     @apply bg-background text-foreground antialiased;
