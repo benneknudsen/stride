@@ -51,8 +51,8 @@ export {
   HALF_MARATHON_KM,
   MAX_WEEKLY_INCREASE_RATIO,
   MIN_RECOVERY_HOURS,
-  serializeValidationResult,
   WEEKDAYS,
   ZONE2_CEILING_BPM,
 } from "./types";
+export { type SerializedValidationResult, serializeValidationResult } from "./validation-result";
 export { getWeekPlan } from "./week-plan";
