@@ -1099,4 +1099,42 @@ describe.each(RACE_DATES)("recommendWorkout — %s", (_label, RACE) => {
       expect(rec.type).not.toBe("rest");
     });
   });
+
+  describe("issue #347 — extracted decision steps", () => {
+    it("taper: a planned rest day stays a rest card with the taper reason", () => {
+      const rec = recommend({ progression: snapshot({ date: TAPER_TUESDAY }) }, TAPER_TUESDAY);
+
+      expect(rec.type).toBe("rest");
+      expect(rec.distanceKm).toBe(0);
+      expect(rec.reason.join(" ")).toMatch(/nedtrapningen er bevidst/i);
+      expect(rec.reason.join(" ")).toMatch(/taper/i);
+    });
+
+    it("load risk high overrides a ready readiness band", () => {
+      // The risk read and the readiness read answer different questions, and
+      // can disagree. Make readiness "ready" (ratio 1.0) while the dashboard's
+      // load-risk field says high: risk must win the prescription.
+      const rec = recommend({
+        progression: snapshot({
+          date: BURN_WEDNESDAY,
+          trainingLoad: { acute: 30, chronic: 30, ratio: 1.0, risk: "high" },
+        }),
+      });
+
+      expect(rec.type).toBe("rest");
+      expect(rec.distanceKm).toBe(0);
+      expect(rec.reason.join(" ")).toMatch(/Høj skadesrisiko/i);
+      expect(rec.reason.join(" ")).toMatch(/restitution/i);
+    });
+
+    it("without pace-efficiency history the upper distance stays locked", () => {
+      const rec = recommend({
+        progression: snapshot({ readyToIncrease: true }),
+        paceEfficiencyTrend: undefined,
+      });
+
+      expect(rec.distanceKm).toBe(getPhaseRules("burn", RACE).minDistanceKm);
+      expect(rec.reason.join(" ")).not.toMatch(/ikke faldet siden sidste uge/i);
+    });
+  });
 });
