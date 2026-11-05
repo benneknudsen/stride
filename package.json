@@ -17,7 +17,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "perf:lhci": "lhci autorun --config=lighthouserc.cjs",
+    "perf:lhci:desktop": "lhci autorun --config=lighthouserc.desktop.cjs",
+    "perf:lhci:auth": "lhci autorun --config=lighthouserc.auth.cjs",
+    "perf:session": "tsx scripts/perf/capture-session.ts",
+    "perf:extract": "node scripts/perf/extract-scores.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
@@ -48,6 +53,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@lhci/cli": "0.16.0",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",

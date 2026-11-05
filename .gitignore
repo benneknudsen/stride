@@ -19,6 +19,11 @@
 /blob-report/
 /__tests__/e2e/.auth/
 
+# lighthouse / performance
+/.lighthouseci/
+/.perf-auth/
+docs/performance/**/private/
+
 # next.js
 /.next/
 /out/
