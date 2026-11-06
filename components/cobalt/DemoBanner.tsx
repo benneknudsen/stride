@@ -35,7 +35,7 @@ export function DemoBanner() {
         variant="banner"
         className="flex max-w-full items-center gap-3 rounded-pill py-1.5 pr-1.5 pl-4 sm:gap-4 sm:py-2 sm:pr-2"
       >
-        <span className="flex-none rounded-pill bg-red px-2.5 py-1 cg-label tracking-[0.18em] font-semibold text-white">
+        <span className="flex-none rounded-pill bg-red-ink px-2.5 py-1 cg-label tracking-[0.18em] font-semibold text-white">
           Demo
         </span>
         {/* Cobalt, not ink: the banner sticks over the hero blob and the cobalt

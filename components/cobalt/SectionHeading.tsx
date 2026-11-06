@@ -12,7 +12,7 @@ export function SectionHeading({
 }) {
   return (
     <div className="mb-3 flex items-baseline gap-3">
-      <span className="font-cg-mono text-[11px] text-red">{index}</span>
+      <span className="font-cg-mono text-[11px] text-red-ink">{index}</span>
       <h2 className="m-0 font-cg-display text-[20px] leading-none text-cobalt">{title}</h2>
       <span className="cg-label">{hint}</span>
     </div>

@@ -57,7 +57,7 @@ export function AktiviteterPageClient({ view }: { view: ActivitiesView }) {
           Intensitet måles ud fra din puls:{" "}
           <strong className="font-semibold text-cobalt">rolig er snak-fart</strong>, moderat er
           behageligt hårdt,{" "}
-          <strong className="font-semibold text-red">
+          <strong className="font-semibold text-red-ink">
             hårdt til maks er tempo- og intervalarbejde
           </strong>
           .

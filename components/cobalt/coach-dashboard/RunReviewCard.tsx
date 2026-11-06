@@ -22,7 +22,7 @@ export function RunReviewCard({ review }: { review: AnalysisBlockOf<"runReview">
       <p className="m-0 text-[13.5px] leading-relaxed text-ink">{review.body}</p>
 
       <div className="mt-auto flex flex-col gap-1.5 border-t border-cobalt/10 pt-3">
-        <span className="font-cg-mono text-[11px] uppercase tracking-[0.12em] text-red">
+        <span className="font-cg-mono text-[11px] uppercase tracking-[0.12em] text-red-ink">
           {review.nextRunLabel}
         </span>
         {review.suggestedRun ? (

@@ -141,7 +141,7 @@ function SyncMenuItem({
       className={cn(
         row,
         "transition-colors",
-        syncState === "error" ? "text-red hover:bg-red/8" : "text-cobalt hover:bg-cobalt/[0.08]"
+        syncState === "error" ? "text-red-ink hover:bg-red/8" : "text-cobalt hover:bg-cobalt/[0.08]"
       )}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">

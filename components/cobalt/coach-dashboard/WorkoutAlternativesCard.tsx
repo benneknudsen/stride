@@ -22,9 +22,9 @@ interface StatusStyle {
  * verdict, not the hue.
  */
 const STATUS: Record<WorkoutAlternative["status"], StatusStyle> = {
-  allowed: { word: "Tilladt", tone: "text-ink/80", border: "border-cobalt/25" },
+  allowed: { word: "Tilladt", tone: "text-ink", border: "border-cobalt/25" },
   warning: { word: "Advarsel", tone: "text-cobalt", border: "border-ink/40" },
-  blocked: { word: "Blokeret", tone: "text-red", border: "border-red/70" },
+  blocked: { word: "Blokeret", tone: "text-red-ink", border: "border-red/70" },
 };
 
 /** A distance in Danish decimals — "8" and "7,5", never "8.0". */
@@ -46,13 +46,13 @@ export function WorkoutAlternativesCard({ alternatives }: { alternatives: Workou
     <GlassCard className="flex flex-col gap-4 p-[22px]">
       <div className="flex items-baseline justify-between gap-3">
         <span className="cg-label tracking-[0.18em]">Hvis du i stedet…</span>
-        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink/70">
+        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink">
           Motorens dom
         </span>
       </div>
 
       {alternatives.length === 0 ? (
-        <p className="m-0 text-[12.5px] leading-snug text-ink/80">
+        <p className="m-0 text-[12.5px] leading-snug text-ink">
           Der er ingen andre pas-typer at veksle imellem i dag.
         </p>
       ) : (
@@ -78,7 +78,7 @@ export function WorkoutAlternativesCard({ alternatives }: { alternatives: Workou
                   <span className="text-[13px] font-semibold text-cobalt">{alternative.label}</span>
                 </div>
 
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-cg-mono text-[11.5px] tabular-nums text-ink/80">
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-cg-mono text-[11.5px] tabular-nums text-ink">
                   <span>{distanceLabel(alternative.distance)}</span>
                   <span>Zone {alternative.zone}</span>
                   <span>
@@ -91,16 +91,14 @@ export function WorkoutAlternativesCard({ alternatives }: { alternatives: Workou
                     key={`${blocked ? "issue" : "warning"}-${entry.id}`}
                     className="flex flex-col gap-0.5"
                   >
-                    <span className="cg-label-sm tracking-[0.12em] text-ink/60">{entry.label}</span>
+                    <span className="cg-label-sm tracking-[0.12em] text-ink">{entry.label}</span>
                     <p
-                      className={`m-0 text-[12.5px] leading-snug ${blocked ? "text-ink" : "text-ink/70"}`}
+                      className={`m-0 text-[12.5px] leading-snug ${blocked ? "text-ink" : "text-ink"}`}
                     >
                       {entry.message}
                     </p>
                     {entry.suggestion ? (
-                      <p className="m-0 text-[12.5px] leading-snug text-ink/80">
-                        {entry.suggestion}
-                      </p>
+                      <p className="m-0 text-[12.5px] leading-snug text-ink">{entry.suggestion}</p>
                     ) : null}
                   </div>
                 ))}

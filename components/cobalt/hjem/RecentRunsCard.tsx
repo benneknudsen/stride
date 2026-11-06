@@ -36,7 +36,7 @@ export function RecentRunsCard({ runs }: { runs: RecentRunView[] }) {
               <div className="flex items-center gap-2 text-[12px]">
                 <span className="text-ink">{run.dateLabel}</span>
                 <span className="text-ink">·</span>
-                <span className={run.zone.tone === "red" ? "text-red" : "text-cobalt"}>
+                <span className={run.zone.tone === "red" ? "text-red-ink" : "text-cobalt"}>
                   {zoneBadgeText(run.zone)}
                 </span>
               </div>

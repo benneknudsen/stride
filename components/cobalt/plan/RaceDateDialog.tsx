@@ -306,7 +306,7 @@ export function RaceDateDialog({
         aria-labelledby="race-dialog-title"
         className="relative max-h-[90vh] w-full max-w-[420px] overflow-y-auto px-[26px] py-[24px] [animation:cg-fade-up_0.3s_ease_both] motion-reduce:[animation:none]"
       >
-        <span className="cg-label tracking-[0.18em] text-red">Din race</span>
+        <span className="cg-label tracking-[0.18em] text-red-ink">Din race</span>
         <h2
           id="race-dialog-title"
           className="mt-1 mb-4 font-cg-serif text-[24px] italic leading-[1.15] text-cobalt"
@@ -458,7 +458,7 @@ export function RaceDateDialog({
           </fieldset>
 
           {shortRunway ? (
-            <p className="m-0 text-[12px] leading-snug text-red">
+            <p className="m-0 text-[12px] leading-snug text-red-ink">
               Under {SHORT_RUNWAY_WEEKS} uger til race — planen starter midt i forløbet, så
               basefaserne bliver korte.
             </p>
@@ -473,7 +473,7 @@ export function RaceDateDialog({
             </p>
           ) : null}
 
-          {error ? <p className="m-0 text-[12px] leading-snug text-red">{error}</p> : null}
+          {error ? <p className="m-0 text-[12px] leading-snug text-red-ink">{error}</p> : null}
 
           <div className="mt-1 flex justify-end gap-3">
             <button

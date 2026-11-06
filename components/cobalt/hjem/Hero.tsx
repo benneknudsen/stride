@@ -32,7 +32,7 @@ export function Hero({
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-6 px-3 pt-[38px] pb-2">
       <div className="min-w-0">
-        <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red">
+        <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red-ink">
           Uge {weekNumber} · {planName}
         </div>
         <h1 className={PAGE_TITLE_CLASS}>

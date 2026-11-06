@@ -154,7 +154,7 @@ function ChartCard({
     <GlassCard className={`${className} p-[20px]`}>
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <span className="cg-label tracking-[0.16em]">{title}</span>
-        <span className="cg-label-sm tracking-[0.12em] text-ink/70">{hint}</span>
+        <span className="cg-label-sm tracking-[0.12em] text-ink">{hint}</span>
       </div>
       {children}
     </GlassCard>
@@ -205,7 +205,7 @@ export default async function CoachPage() {
   return (
     <main className="flex flex-col gap-8 pt-4 pb-4">
       <header className="flex flex-col gap-1">
-        <span className="cg-label text-[11px] tracking-[0.2em] text-red">Træner</span>
+        <span className="cg-label text-[11px] tracking-[0.2em] text-red-ink">Træner</span>
         <h1 className={PAGE_TITLE_CLASS}>
           <FlipText {...TITLE_FLIP}>Coach</FlipText>
         </h1>

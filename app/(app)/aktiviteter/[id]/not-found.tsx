@@ -9,7 +9,7 @@ export default function ActivityNotFound() {
   return (
     <main className="flex min-h-[60vh] items-center justify-center px-3">
       <GlassCard className="max-w-[420px] p-10 text-center">
-        <div className="cg-label text-[11px] tracking-[0.2em] text-red">404 · Aktivitet</div>
+        <div className="cg-label text-[11px] tracking-[0.2em] text-red-ink">404 · Aktivitet</div>
         <h1 className="mt-3 mb-2 font-cg-serif text-[32px] italic leading-[1.1] text-cobalt">
           Turen findes ikke
         </h1>

@@ -15,8 +15,8 @@ export function FormStatusCard({ form, started }: { form: CoachView["form"]; sta
       <div className="mb-3.5 flex items-baseline justify-between">
         <span className="cg-label tracking-[0.18em]">Form-status</span>
         <span className="font-cg-mono text-[10.5px]">
-          <span className="text-ink/70">Belastning</span>{" "}
-          <span className={cn(form.trendTone === "red" ? "text-red" : "text-cobalt")}>
+          <span className="text-ink">Belastning</span>{" "}
+          <span className={cn(form.trendTone === "red" ? "text-red-ink" : "text-cobalt")}>
             {form.trend}
           </span>
         </span>

@@ -113,7 +113,7 @@ function FeedCard({ view }: { view: FeedCardView }) {
             className={cn(
               "inline-flex items-center gap-1 rounded-pill px-2.5 py-1 font-cg-mono text-[11px] font-semibold",
               view.tone === "warning"
-                ? "bg-red/12 text-red"
+                ? "bg-red/12 text-red-ink"
                 : cobaltSurface
                   ? "bg-silver/15 text-silver"
                   : "bg-cobalt/10 text-cobalt"
