@@ -34,8 +34,13 @@ const nextConfig: NextConfig = {
     // profile image from its CloudFront CDN (dgtbsa32eaptv.cloudfront.net) and,
     // for athletes who linked Facebook, from graph.facebook.com; older accounts
     // still surface *.strava.com URLs.
+    //
+    // #358: the host is listed by name, not as a `*.cloudfront.net` wildcard.
+    // /_next/image is same-origin and the CSP allows `'self'`, so a wildcard
+    // would turn the optimizer into a proxy for every CloudFront distribution.
+    // Keep it concrete; do not reintroduce a wildcard.
     remotePatterns: [
-      { protocol: "https", hostname: "*.cloudfront.net" },
+      { protocol: "https", hostname: "dgtbsa32eaptv.cloudfront.net" },
       { protocol: "https", hostname: "*.strava.com" },
       { protocol: "https", hostname: "graph.facebook.com" },
     ],
