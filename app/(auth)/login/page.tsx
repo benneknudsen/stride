@@ -12,11 +12,14 @@ import { DEMO_HOME_ROUTE } from "@/lib/routes";
 type OAuthProvider = "strava";
 
 // Issue #304: the measured reference entrance (docs/bevaegelsesstrategi.md a.5)
-// grows from zero — opacity + scale together, done in 600–1000 ms on a strong
-// ease-out. Dampened for Stride: the card fades + scales 0.96 → 1, and its
-// rows stagger in reading order. Transform/opacity only, so the layout box
-// never moves (no CLS). Under prefers-reduced-motion every duration is 0 —
-// nothing travels, the content just appears.
+// grows from zero — done in 600–1000 ms on a strong ease-out. Dampened for
+// Stride: the card scales 0.96 → 1 and its rows stagger in reading order.
+// LCP: the entrance is transform-only, never opacity. Motion server-renders
+// its initial variant as inline styles, so an `opacity: 0` start left the card
+// invisible until hydration finished and LCP waited on the animation. With the
+// card opaque from the first paint, the layout box never moves (no CLS) and
+// the entrance still reads as a subtle settle. Under prefers-reduced-motion
+// every duration is 0 — nothing travels, the content just appears.
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 export default function LoginPage() {
@@ -38,9 +41,8 @@ export default function LoginPage() {
   const busy = oauthLoading !== null;
 
   const cardVariants: Variants = {
-    hidden: { opacity: 0, scale: 0.96 },
+    hidden: { scale: 0.96 },
     show: {
-      opacity: 1,
       scale: 1,
       transition: reduceMotion
         ? { duration: 0 }
@@ -48,9 +50,8 @@ export default function LoginPage() {
     },
   };
   const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 8 },
+    hidden: { y: 8 },
     show: {
-      opacity: 1,
       y: 0,
       transition: reduceMotion ? { duration: 0 } : { duration: 0.45, ease: EASE },
     },
