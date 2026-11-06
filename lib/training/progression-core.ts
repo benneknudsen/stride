@@ -45,6 +45,13 @@ export const TAU_ACUTE = 7;
 /** EWMA smoothing constant for chronic load (slow baseline). */
 export const TAU_CHRONIC = 42;
 
+/**
+ * How far back the EWMA walk must go: four chronic time constants. The residual
+ * weight after 4·TAU_CHRONIC days is below 2 %, so anything older contributes
+ * negligibly to either series.
+ */
+export const EWMA_WINDOW_DAYS = 4 * TAU_CHRONIC;
+
 /** Minimal activity shape the engine reads — a subset of an activities row. */
 export interface ProgressionActivityInput {
   /** Strava activity type, e.g. "Run", "TrailRun", "Ride". */
@@ -228,7 +235,11 @@ function ewmaLoad(runs: ProgressionActivityInput[], asOf: Date): EwmaLoad {
 
   let acute = 0;
   let chronic = 0;
-  for (let day = firstDay; day <= asOfDay; day++) {
+  // Clamp the walk to the window the recurrence still has memory for: residual
+  // weight older than EWMA_WINDOW_DAYS is below 2 %, and this blocks an
+  // attacker-supplied 1970 start date from forcing ~100M iterations (#356).
+  const startDay = Math.max(firstDay, asOfDay - EWMA_WINDOW_DAYS);
+  for (let day = startDay; day <= asOfDay; day++) {
     const load = minutesByDay.get(day) ?? 0;
     acute = acute * (1 - 1 / TAU_ACUTE) + load / TAU_ACUTE;
     chronic = chronic * (1 - 1 / TAU_CHRONIC) + load / TAU_CHRONIC;

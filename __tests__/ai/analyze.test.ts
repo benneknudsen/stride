@@ -200,6 +200,37 @@ describe("POST /api/ai/analyze", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects an extended-year startDate with a 400 before any compute (#356)", async () => {
+    const res = await POST(
+      analyzeRequest({
+        activities: [{ startDate: "-271821-04-20T00:00:00Z", distance: 8000, movingTime: 2400 }],
+      })
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      error: string;
+      issues: { path: PropertyKey[] }[];
+    };
+    expect(body.error).toBe("invalid_request");
+    expect(body.issues.some((issue) => issue.path.includes("startDate"))).toBe(true);
+  });
+
+  it("still accepts a valid ISO startDate with a timezone offset (#356)", async () => {
+    const res = await POST(
+      analyzeRequest({
+        activities: [{ startDate: "2026-07-01T08:00:00+02:00", distance: 8000, movingTime: 2400 }],
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const blocks = await readBlocks(res);
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) {
+      expect(analysisBlockSchema.safeParse(block).success).toBe(true);
+    }
+  });
+
   it("streams the run review first when a plan context is supplied (#298)", async () => {
     const res = await POST(
       analyzeRequest({ activities: ACTIVITIES, planContext: RUN_REVIEW_CONTEXT })
