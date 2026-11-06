@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { hasReducedMotionListener } from "motion-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next-auth/react", () => ({ signIn: vi.fn() }));
@@ -12,12 +13,17 @@ import { DEMO_HOME_ROUTE } from "@/lib/routes";
 // Issue #304: the login page is the real entry point. These tests pin the
 // CTA hierarchy (Strava primary and first in tab order, demo a real tracked
 // secondary CTA through the LoginLink pattern) and the Motion entrance
-// contract (starts hidden, ends visible, and under prefers-reduced-motion
-// nothing stays hidden).
+// contract (the card is opaque from the first render so LCP never waits on
+// hydration, and the transform settles afterwards; under prefers-reduced-motion
+// every duration is 0 and no hidden state remains).
 //
 // jsdom has no matchMedia; Motion's useReducedMotion reads it and subscribes,
 // so the stub needs the full MediaQueryList shape, not just `matches`.
 function setPrefersReducedMotion(matches: boolean) {
+  // Motion caches the media query at module scope and only initialises it once.
+  // Reset that guard so each render reads the preference this test sets,
+  // regardless of which test rendered before it.
+  hasReducedMotionListener.current = false;
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: (query: string) => ({
@@ -88,21 +94,32 @@ describe("LoginPage — CTA hierarchy and entrance (#304)", () => {
     }
   });
 
-  test("the card starts hidden and ends visible", async () => {
+  test("the card is opaque from the first render so LCP does not wait", () => {
     render(<LoginPage />);
 
     const card = screen.getByTestId("login-card");
-    expect(card.style.opacity).toBe("0");
-
-    await waitFor(() => expect(card.style.opacity).toBe("1"), { timeout: 3000 });
+    // The entrance is transform-only (scale/y): Motion's server-rendered
+    // initial state must never hide the card behind opacity 0, and an omitted
+    // opacity style is fully opaque.
+    expect(Number(card.style.opacity || 1)).toBe(1);
   });
 
-  test("prefers-reduced-motion: nothing starts hidden", async () => {
+  test("prefers-reduced-motion: card stays opaque and the entrance has duration 0", async () => {
     setPrefersReducedMotion(true);
     render(<LoginPage />);
 
     const card = screen.getByTestId("login-card");
-    await waitFor(() => expect(card.style.opacity).toBe("1"), { timeout: 1000 });
+    expect(Number(card.style.opacity || 1)).toBe(1);
+
+    // The reduced branch sets every duration to 0, so the transform settles on
+    // the first frame — well before the normal 700 ms entrance would. A card
+    // still running the normal animation would fail this short timeout.
+    await waitFor(() => expect(card.style.transform).toBe("none"), { timeout: 500 });
+
+    // No hidden state is left behind on the card or any staggered row.
+    for (const element of [card, ...card.querySelectorAll<HTMLElement>("[style]")]) {
+      expect(Number(element.style.opacity || 1)).toBe(1);
+    }
     expect(screen.getByRole("button", { name: /Log ind med Strava/i })).toBeTruthy();
   });
 });
