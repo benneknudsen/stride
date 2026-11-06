@@ -120,13 +120,13 @@ export function DataSourcesCard({
             connected={stravaConnected}
             signedIn={signedIn}
             pending={pending}
-            brandColor="var(--color-strava)"
+            brandColor="var(--color-strava-deep)"
             onConnect={handleConnectStrava}
           />
         </SourceRow>
 
         {failed ? (
-          <p className="m-0 px-3 text-[12px] text-red">
+          <p className="m-0 px-3 text-[12px] text-red-ink">
             Kunne ikke starte forbindelsen. Prøv igen.
           </p>
         ) : null}

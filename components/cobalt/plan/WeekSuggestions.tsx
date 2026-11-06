@@ -5,7 +5,7 @@ import type { RunSuggestion, SuggestionType } from "@/lib/cobalt/plan";
 // runs cobalt (rolig/moderat) — the same cobalt/red split the rest of the plan uses.
 const TYPE_TONE: Record<SuggestionType, { accent: string; meta: string }> = {
   easy: { accent: "text-cobalt", meta: "text-cobalt" },
-  tempo: { accent: "text-red", meta: "text-red" },
+  tempo: { accent: "text-red-ink", meta: "text-red-ink" },
   long: { accent: "text-cobalt", meta: "text-ink" },
 };
 
@@ -18,7 +18,9 @@ function SuggestionCard({ suggestion }: { suggestion: RunSuggestion }) {
 
   return (
     <div className="cg-interactive flex min-h-[132px] flex-col gap-2 rounded-card border border-cobalt/25 bg-white/60 p-4">
-      <span className={`cg-label ${suggestion.type === "tempo" ? "font-semibold text-red" : ""}`}>
+      <span
+        className={`cg-label ${suggestion.type === "tempo" ? "font-semibold text-red-ink" : ""}`}
+      >
         {suggestion.label}
       </span>
       <div className="text-[13.5px] text-ink">

@@ -230,7 +230,7 @@ export function PaceTrendCard({
         </div>
         {deltaLabel !== null ? (
           <div>
-            <span className="font-cg-mono text-[12px] font-semibold tracking-[0.04em] text-red">
+            <span className="font-cg-mono text-[12px] font-semibold tracking-[0.04em] text-red-ink">
               {deltaLabel}
             </span>
             <span className="ml-2 text-[11px] text-ink">mod sidste uge</span>

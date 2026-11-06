@@ -23,7 +23,7 @@ function Metric({
   return (
     <div className="min-w-0">
       <div
-        className={`font-cg-display text-[34px] font-bold leading-none tracking-[-0.03em] ${red ? "text-red" : "text-cobalt"}`}
+        className={`font-cg-display text-[34px] font-bold leading-none tracking-[-0.03em] ${red ? "text-red-ink" : "text-cobalt"}`}
       >
         {value}
         <span className="ml-1 text-[15px] font-semibold text-ink">{unit}</span>
@@ -59,13 +59,13 @@ export function LatestActivityCard({
         {/* The persistent PR mark (#122) — unlike the confetti/toast it shows
             on every render, and under prefers-reduced-motion too. */}
         {latest.isPersonalRecord ? (
-          <span className="rounded-pill bg-red px-[12px] py-[5px] text-[12px] font-semibold text-white">
+          <span className="rounded-pill bg-red-ink px-[12px] py-[5px] text-[12px] font-semibold text-white">
             🏆 Personlig rekord
           </span>
         ) : null}
         <span
           className={`rounded-pill px-[12px] py-[5px] text-[12px] font-medium ${
-            latest.zone.tone === "red" ? "text-red" : "text-cobalt"
+            latest.zone.tone === "red" ? "text-red-ink" : "text-cobalt"
           }`}
           style={{
             background:

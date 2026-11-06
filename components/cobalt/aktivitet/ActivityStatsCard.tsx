@@ -15,7 +15,7 @@ export function ActivityStatsCard({ stats }: { stats: ActivityStatView[] }) {
             <div
               className={cn(
                 "mt-1.5 font-cg-display text-[26px] font-bold leading-none tracking-[-0.02em]",
-                stat.tone === "red" ? "text-red" : "text-cobalt"
+                stat.tone === "red" ? "text-red-ink" : "text-cobalt"
               )}
             >
               {stat.value}

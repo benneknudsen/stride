@@ -13,9 +13,9 @@ const SEGMENT_STYLE: Record<PhaseSegment["fill"], string> = {
 // Label colour per phase state.
 const LABEL_TONE: Record<PhaseMarker["state"], string> = {
   done: "text-cobalt",
-  active: "text-red",
+  active: "text-red-ink",
   upcoming: "text-ink",
-  race: "text-red",
+  race: "text-red-ink",
 };
 
 // Dot colour per phase state — done/active are filled, upcoming is a hollow

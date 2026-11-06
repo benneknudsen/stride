@@ -25,7 +25,7 @@ export function ActivityDetailHeader({ view }: { view: ActivityDetailView }) {
 
       <div className="mt-2 flex flex-wrap items-end justify-between gap-x-8 gap-y-6">
         <div className="min-w-0 [animation:cg-fade-up_0.7s_ease_both] motion-reduce:[animation:none]">
-          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 cg-label text-[11px] tracking-[0.2em] text-red">
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 cg-label text-[11px] tracking-[0.2em] text-red-ink">
             <span>
               {view.typeLabel} · {view.dateLabel}
             </span>
@@ -50,7 +50,7 @@ export function ActivityDetailHeader({ view }: { view: ActivityDetailView }) {
             <p
               className={cn(
                 "mt-3 font-cg-sans text-[14px] font-semibold",
-                view.zone.tone === "red" ? "text-red" : "text-cobalt"
+                view.zone.tone === "red" ? "text-red-ink" : "text-cobalt"
               )}
             >
               {zoneBadgeText(view.zone)}
@@ -88,7 +88,7 @@ function HeadlineStat({
       <div
         className={cn(
           "font-cg-display text-[30px] font-bold tracking-[-0.02em] sm:text-[44px]",
-          tone === "red" ? "text-red" : "text-cobalt"
+          tone === "red" ? "text-red-ink" : "text-cobalt"
         )}
       >
         {value}

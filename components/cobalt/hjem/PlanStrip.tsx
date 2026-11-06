@@ -58,7 +58,7 @@ export function PlanStrip({
         </div>
       </div>
 
-      <span className="cg-label text-[12px] tracking-[0.12em] font-semibold text-red">
+      <span className="cg-label text-[12px] tracking-[0.12em] font-semibold text-red-ink">
         {daysToRace} dage til race
       </span>
 

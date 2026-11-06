@@ -110,7 +110,7 @@ export function SyncButton({
         type="button"
         onClick={onSync}
         className={cn(
-          "cg-interactive inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-red transition-colors hover:bg-red/8",
+          "cg-interactive inline-flex items-center gap-2 rounded-pill border px-4 py-2 font-cg-mono text-[11px] tracking-[0.08em] text-red-ink transition-colors hover:bg-red/8",
           className
         )}
         style={{ borderColor: "color-mix(in srgb, var(--color-red) 35%, transparent)" }}

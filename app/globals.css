@@ -236,6 +236,7 @@
   --color-cobalt-light: #2536d8; /* gradient-top */
   --color-cobalt-dark: #131f96; /* gradient-bund */
   --color-red: #ee2418; /* accent: signal, logo-hoved, highlights */
+  --color-red-ink: #bd251b; /* red text/fill that must hold 4.5:1 */
   --color-silver: #e9eae5; /* side-baggrund ("sølv-papir") */
   --color-silver-dark: #dde0ec;
   --color-ink: #5560a8; /* sekundær tekst, labels, mono ("muted") */
@@ -243,6 +244,7 @@
   /* Colors — semantic */
   --color-onred: #fdf3ee; /* tekst på røde flader */
   --color-strava: #fc4c02;
+  --color-strava-deep: #c93a00; /* strava fill that holds white text at 4.5:1 */
   --color-success: #2ba84a; /* synced-prik */
   --color-success-ink: #1b7a38; /* synced-tekst */
 

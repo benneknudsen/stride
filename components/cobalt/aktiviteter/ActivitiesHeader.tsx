@@ -24,7 +24,7 @@ export function ActivitiesHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-6 px-3 pt-[38px] pb-2">
       <div className="min-w-0 [animation:cg-fade-up_0.7s_ease_both] motion-reduce:[animation:none]">
-        <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red">
+        <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red-ink">
           Aktiviteter · {periodLabel}
         </div>
         <h1 className={PAGE_TITLE_CLASS}>
@@ -52,7 +52,7 @@ export function ActivitiesHeader({
           label="timer"
           run={started}
           format={formatTimerLabel}
-          className="text-[30px] text-red sm:text-[44px]"
+          className="text-[30px] text-red-ink sm:text-[44px]"
         />
       </div>
     </header>

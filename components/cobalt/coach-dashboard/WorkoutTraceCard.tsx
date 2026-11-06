@@ -29,19 +29,19 @@ export function WorkoutTraceCard({ workout }: { workout: WorkoutCardView }) {
     <GlassCard className="flex flex-col gap-4 p-[22px]">
       <div className="flex items-baseline justify-between gap-3">
         <span className="cg-label tracking-[0.18em]">Hvorfor dette pas</span>
-        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink/70">
+        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink">
           Motorens regler
         </span>
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-red">
+        <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-red-ink">
           Motorens indgreb
         </span>
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
           {workout.reason.map((line) => (
             <li key={line} className="flex gap-2 text-[13px] leading-snug text-ink">
-              <span aria-hidden="true" className="text-red">
+              <span aria-hidden="true" className="text-red-ink">
                 ●
               </span>
               {line}
@@ -62,7 +62,7 @@ export function WorkoutTraceCard({ workout }: { workout: WorkoutCardView }) {
               <div className="flex items-baseline gap-2">
                 <span
                   className={`cg-label text-[10px] tracking-[0.14em] ${
-                    entry.status === "blocked" ? "text-red" : "text-cobalt"
+                    entry.status === "blocked" ? "text-red-ink" : "text-cobalt"
                   }`}
                 >
                   {STATUS_LABELS[entry.status]}
@@ -71,18 +71,18 @@ export function WorkoutTraceCard({ workout }: { workout: WorkoutCardView }) {
               </div>
               <p className="m-0 text-[12.5px] leading-snug text-ink">{entry.detail}</p>
               {entry.suggestion ? (
-                <p className="m-0 text-[12.5px] leading-snug text-ink/80">{entry.suggestion}</p>
+                <p className="m-0 text-[12.5px] leading-snug text-ink">{entry.suggestion}</p>
               ) : null}
             </li>
           ))}
         </ul>
       ) : workout.trace.length === 0 ? (
-        <p className="m-0 text-[12.5px] leading-snug text-ink/80">
+        <p className="m-0 text-[12.5px] leading-snug text-ink">
           Dagen er lagt som hviledag af motorens egne grunde (se linjerne ovenfor) — derfor blev der
           ikke kørt en regelvalidering.
         </p>
       ) : (
-        <p className="m-0 text-[12.5px] leading-snug text-ink/80">
+        <p className="m-0 text-[12.5px] leading-snug text-ink">
           Ingen regler havde indvendinger mod dagens pas.
         </p>
       )}
@@ -92,11 +92,11 @@ export function WorkoutTraceCard({ workout }: { workout: WorkoutCardView }) {
           <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
             <span
               aria-hidden="true"
-              className="font-cg-mono text-[11px] text-ink/70 transition-transform group-open:rotate-90"
+              className="font-cg-mono text-[11px] text-ink transition-transform group-open:rotate-90"
             >
               ▸
             </span>
-            <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink/70">
+            <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink">
               Se alle {workout.trace.length} regler · {passedCount} passerede ·{" "}
               {folded.length - passedCount} ikke i spil
             </span>
@@ -104,10 +104,10 @@ export function WorkoutTraceCard({ workout }: { workout: WorkoutCardView }) {
           <ul className="m-0 mt-3 flex list-none flex-col gap-2.5 p-0">
             {folded.map((entry) => (
               <li key={entry.id} className="flex flex-col gap-0.5">
-                <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink/60">
+                <span className="font-cg-mono text-[10.5px] uppercase tracking-[0.12em] text-ink">
                   {entry.label} · {STATUS_LABELS[entry.status]}
                 </span>
-                <span className="text-[12px] leading-snug text-ink/70">{entry.detail}</span>
+                <span className="text-[12px] leading-snug text-ink">{entry.detail}</span>
               </li>
             ))}
           </ul>

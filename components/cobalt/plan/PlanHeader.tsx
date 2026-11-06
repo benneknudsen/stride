@@ -54,7 +54,7 @@ export function PlanHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5 px-3 pt-[38px] pb-1.5">
       <div className="[animation:cg-fade-up_0.7s_ease_both] motion-reduce:[animation:none]">
-        <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red">{planTitle}</div>
+        <div className="mb-3 cg-label text-[11px] tracking-[0.2em] text-red-ink">{planTitle}</div>
         <h1 className={PAGE_TITLE_CLASS}>
           <FlipText {...TITLE_FLIP}>
             {`${totalWeeks} uger.\n${headline(goalLabel, distanceInline)}.`}
@@ -75,7 +75,7 @@ export function PlanHeader({
           <CountUpNumber
             value={daysToRace}
             run={started}
-            className="items-end text-[44px] text-red"
+            className="items-end text-[44px] text-red-ink"
           />
           <span className="mt-2 cg-label tracking-[0.16em]">Dage til race</span>
         </div>

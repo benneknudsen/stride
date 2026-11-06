@@ -13,9 +13,9 @@ import type { SessionTone, UpcomingWeek } from "@/lib/cobalt/plan";
 
 /** Tailwind classes per run kind — literals, not interpolated, so the scanner sees them. */
 const TONE_CLASS: Record<SessionTone, string> = {
-  race: "text-red",
+  race: "text-red-ink",
   long: "text-cobalt",
-  quality: "text-red",
+  quality: "text-red-ink",
   easy: "text-ink",
 };
 
@@ -57,7 +57,7 @@ export function UpcomingWeeks({ weeks }: { weeks: UpcomingWeek[] }) {
               <span className="flex-1 text-[14px] font-medium text-cobalt">{week.focus}</span>
               {week.isRaceWeek ? (
                 <span
-                  className="cg-label-sm rounded-pill border border-red/40 px-2 py-0.5 text-red"
+                  className="cg-label-sm rounded-pill border border-red/40 px-2 py-0.5 text-red-ink"
                   data-testid="race-week-flag"
                 >
                   Race

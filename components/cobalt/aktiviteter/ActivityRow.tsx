@@ -27,7 +27,10 @@ export function ActivityRow({ row }: { row: ActivityRowView }) {
             <span className="truncate">{row.metaLabel}</span>
             <span aria-hidden="true">·</span>
             <span
-              className={cn("font-semibold", row.zone.tone === "red" ? "text-red" : "text-cobalt")}
+              className={cn(
+                "font-semibold",
+                row.zone.tone === "red" ? "text-red-ink" : "text-cobalt"
+              )}
             >
               {zoneBadgeText(row.zone)}
             </span>
@@ -47,7 +50,7 @@ export function ActivityRow({ row }: { row: ActivityRowView }) {
           <div
             className={cn(
               "font-cg-display text-[18px] font-bold tracking-[-0.02em]",
-              row.paceTone === "red" ? "text-red" : "text-cobalt"
+              row.paceTone === "red" ? "text-red-ink" : "text-cobalt"
             )}
           >
             {row.paceLabel}

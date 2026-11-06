@@ -40,7 +40,7 @@ export function VelkommenPage() {
         {/* Solid white, not cg-glass: a translucent pill sits directly on the
             background blobs here and picks up their tint, and the bright glass
             border reads as a rendering artifact rather than as glass. */}
-        <LoginLink className="cg-interactive rounded-pill bg-white px-5 py-2 text-[13px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red">
+        <LoginLink className="cg-interactive rounded-pill bg-white px-5 py-2 text-[13px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red-ink">
           Log ind
         </LoginLink>
       </header>
@@ -48,7 +48,7 @@ export function VelkommenPage() {
       {/* ── Hero ── */}
       <section className="px-3 pt-14 pb-12 text-center md:pt-20 md:pb-16">
         <Reveal delay={0}>
-          <div className="mb-4 cg-label text-[11px] tracking-[0.22em] text-red">
+          <div className="mb-4 cg-label text-[11px] tracking-[0.22em] text-red-ink">
             Datadriven løbetræning
           </div>
         </Reveal>
@@ -71,13 +71,13 @@ export function VelkommenPage() {
             >
               Udforsk demoen
             </Link>
-            <LoginLink className="cg-interactive rounded-pill bg-white px-7 py-3 text-[14px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red">
+            <LoginLink className="cg-interactive rounded-pill bg-white px-7 py-3 text-[14px] font-semibold text-cobalt shadow-[0_8px_24px_color-mix(in_srgb,var(--color-cobalt)_14%,transparent)] transition-colors hover:text-red-ink">
               Log ind
             </LoginLink>
           </div>
         </Reveal>
         <Reveal delay={0.32}>
-          <p className="mt-5 cg-label tracking-[0.18em] text-ink/70">
+          <p className="mt-5 cg-label tracking-[0.18em] text-ink">
             Demoen kræver ingen konto · 30 løbeture venter
           </p>
         </Reveal>
@@ -195,7 +195,7 @@ export function VelkommenPage() {
             </Link>
           </div>
         </GlassCard>
-        <p className="mt-8 text-center cg-label tracking-[0.18em] text-ink/60">
+        <p className="mt-8 text-center cg-label tracking-[0.18em] text-ink">
           Bygget med Next.js · TypeScript · Drizzle
         </p>
       </section>
@@ -273,7 +273,9 @@ function StepCard({
   return (
     <Reveal delay={delay} className="col-span-12 h-full md:col-span-4 [&>*]:h-full">
       <GlassCard className="flex flex-col rounded-widget p-[26px]">
-        <span className="font-cg-mono text-[26px] font-semibold leading-none text-red">{step}</span>
+        <span className="font-cg-mono text-[26px] font-semibold leading-none text-red-ink">
+          {step}
+        </span>
         <h3 className="mt-4 mb-0 font-cg-display text-[16px] font-bold tracking-[-0.02em] text-cobalt">
           {title}
         </h3>
