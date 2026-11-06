@@ -27,7 +27,7 @@ export const maxDuration = 30;
 // ---------------------------------------------------------------------------
 
 const requestActivitySchema = z.object({
-  startDate: z.string().describe("ISO date string"),
+  startDate: z.iso.datetime({ offset: true }).describe("ISO date string"),
   distance: z.number(),
   movingTime: z.number(),
   averageSpeed: z.number().nullable().optional(),

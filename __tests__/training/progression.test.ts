@@ -4,6 +4,7 @@ import {
   computeProgression,
   computeSnapshot,
   daysUntilRiskFalls,
+  EWMA_WINDOW_DAYS,
   getProgression,
   TAU_ACUTE,
   TAU_CHRONIC,
@@ -365,6 +366,19 @@ describe("computeSnapshot — EWMA training load (#246)", () => {
     const partial = computeSnapshot([run({ daysAgo: 1 }), run({ daysAgo: 5 })], AS_OF);
     expect(partial.readyToIncrease).toBeNull();
     expect(partial.trainingLoad.acute).toBeGreaterThan(0);
+  });
+});
+
+describe("computeSnapshot — EWMA walk window (#356)", () => {
+  it("clamps the walk to EWMA_WINDOW_DAYS, so older activity carries no weight", () => {
+    const todayRun = run({ daysAgo: 0, minutes: 60 });
+    const outsideWindow = run({ daysAgo: EWMA_WINDOW_DAYS + 1, minutes: 600 });
+    const without = computeSnapshot([todayRun], AS_OF).trainingLoad;
+    const withOutside = computeSnapshot([outsideWindow, todayRun], AS_OF).trainingLoad;
+
+    expect(withOutside.acute).toBeCloseTo(without.acute, 5);
+    expect(withOutside.chronic ?? 0).toBeCloseTo(without.chronic ?? 0, 5);
+    expect(EWMA_WINDOW_DAYS).toBe(4 * TAU_CHRONIC);
   });
 });
 
