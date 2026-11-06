@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RouteMap } from "@/components/cobalt/hjem/RouteMap";
 
@@ -211,6 +211,41 @@ describe("RouteMap", () => {
     // background and the brand token could drift apart.
     expect(mapContainer.className.split(/\s+/)).toContain("bg-silver");
     expect(mapContainer.getAttribute("style")).not.toMatch(/e9eae5/i);
+  });
+
+  it("defers map init until the container nears the viewport", async () => {
+    // The landing/demo mount this card below the fold, but MapLibre used to
+    // fetch ~3.7 MB of OpenFreeMap tiles the moment it mounted. Init must wait
+    // for the IntersectionObserver to say the card is close (rootMargin).
+    let callback: IntersectionObserverCallback | undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    class FakeIntersectionObserver {
+      constructor(cb: IntersectionObserverCallback) {
+        callback = cb;
+      }
+      observe = observe;
+      disconnect = disconnect;
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+
+    try {
+      render(<RouteMap coords={COORDS} label="Rutekort for demoturen" />);
+      await waitFor(() => expect(observe).toHaveBeenCalled());
+      expect(mocks.mapCtor).not.toHaveBeenCalled();
+
+      act(() => {
+        callback?.(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver
+        );
+      });
+
+      await waitFor(() => expect(mocks.mapCtor).toHaveBeenCalledTimes(1));
+      expect(disconnect).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("never touches MapLibre when there are no coordinates", async () => {

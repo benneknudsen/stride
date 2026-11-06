@@ -130,6 +130,10 @@ export function RouteMap({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  // #T4: the card sits below the fold on landing/demo, yet mounting the map
+  // immediately fetched ~3.7 MB of OpenFreeMap vector tiles and blocked the
+  // main thread (TBT/SI). Init waits until the container is near the viewport.
+  const [nearViewport, setNearViewport] = useState(false);
   const mapRef = useRef<MapLibreMap | undefined>(undefined);
   const glRef = useRef<MapLibre | undefined>(undefined);
   // Whether `load` has added the source yet — a `coords` change that lands
@@ -147,8 +151,31 @@ export function RouteMap({
     coordsRef.current = coords;
   }, [coords]);
 
+  // #T4: start MapLibre only when the card is close to the viewport. The
+  // placeholder below keeps the same box, so deferring paints no layout shift.
+  // No IntersectionObserver (older browsers, jsdom) falls back to starting now.
   useEffect(() => {
-    if (!hasCoords) return;
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setNearViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setNearViewport(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "400px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!nearViewport || !hasCoords) return;
     const el = ref.current;
     if (!el) return;
     let cancelled = false;
@@ -234,7 +261,7 @@ export function RouteMap({
       cancelled = true;
       teardown();
     };
-  }, [hasCoords]);
+  }, [nearViewport, hasCoords]);
 
   useEffect(() => {
     const map = mapRef.current;
