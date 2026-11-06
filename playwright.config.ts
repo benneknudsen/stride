@@ -72,7 +72,9 @@ function refuseIfDevPortTaken() {
   process.exit(1);
 }
 
-refuseIfDevPortTaken();
+// A11Y_BASE_URL names the server under test externally, so a listener on :6969
+// is not in the way and the dev-server guard does not apply.
+if (!process.env.A11Y_BASE_URL) refuseIfDevPortTaken();
 
 /** Where auth.setup.ts parks the signed-in cookie jar for the other projects. */
 export const STORAGE_STATE = "__tests__/e2e/.auth/user.json";
@@ -101,6 +103,15 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
       dependencies: ["setup"],
+      testIgnore: /a11y\.spec\.ts/,
+    },
+    {
+      name: "a11y",
+      testMatch: /a11y\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: process.env.A11Y_BASE_URL ?? BASE_URL,
+      },
     },
   ],
 
@@ -111,70 +122,74 @@ export default defineConfig({
   // provider in auth.config.ts, which is compiled out unless NODE_ENV is
   // "development". Against a production server those suites would sit on the
   // login screen.
-  webServer: {
-    command: "npm run dev",
-    // Health-check /login — a real page, unlike /demo, which next.config.ts only
-    // rewrites to "/?demo=1". A 200 here proves the dev server is serving pages.
-    url: `${BASE_URL}/login`,
-    // Never adopt a server that is already listening (#297). This was
-    // `!process.env.CI`, and it coupled reuse to configuration: Playwright asks
-    // only "is something on :6969?", never "was it started with the env below",
-    // so a human's own `npm run dev` — no NEXT_PRIVATE_DISABLE_DEV_OVERLAY_UX —
-    // got adopted as-is. The overlay came back, the Hjem tab sat under it, and
-    // navigation.spec.ts died 30s into the run on "nextjs-portal … subtree
-    // intercepts pointer events". CI never hit it, because CI already ran with
-    // reuse off, which is what made this read as "nothing changed".
-    //
-    // What refusing costs: a fresh `next dev` per run. A full 16-test suite
-    // measured 15s wall with a warm .next/dev cache, once at the cold-cache
-    // start-up cost. What it buys: the server under test is always one this file
-    // configured. No warm path is lost by giving up reuse — Playwright kills the
-    // webServer it spawned when the run ends, so the only server reuse could
-    // ever find is a human's, and that is exactly the one that must not be
-    // adopted. Slow green beats fast red.
-    //
-    // The two other ways to decouple were worse:
-    //
-    // - A marker proving the adopted server is configured. Next already writes
-    //   one (`.next/dev/lock`, a pid/port record) and it is byte-identical for a
-    //   configured and an unconfigured server, so it cannot answer the question
-    //   — "was this started with the env var". Anything that could would have to
-    //   be written by the e2e command itself, and that command only runs when
-    //   Playwright decides to start a server, i.e. never on the reuse path it
-    //   was supposed to vet. Matching "is that the listening PID" on top needs a
-    //   per-platform probe. A mechanism that is dead on arrival.
-    // - A dedicated e2e port (6970) so :6969 could never be adopted. Next 16
-    //   allows exactly one `next dev` per project directory: a second one exits
-    //   with "⨯ Another next dev server is already running." and never binds, so
-    //   it cannot reach the new port. The option does not exist in this repo.
-    //
-    // The one manual step left is stopping a dev server that is already on
-    // :6969; refuseIfDevPortTaken above turns Playwright's generic port error
-    // into that instruction, and the run is otherwise a single command.
-    reuseExistingServer: false,
-    timeout: 120_000,
-    // Unmounts Next's dev overlay for this server only (#289). The overlay
-    // mounts a `nextjs-portal` shadow root holding a `position: fixed` toast in
-    // the bottom-left corner. The mobile BottomTabBar is `fixed inset-x-3
-    // bottom-…` with `justify-around`, so Hjem — its first tab — sits exactly
-    // there, and Playwright's hit test refuses the click with "nextjs-portal …
-    // subtree intercepts pointer events". Only the e2e server loses the overlay;
-    // `npm run dev` for a human is untouched.
-    //
-    // `devIndicators: false` is NOT enough here, which is why this is an env var
-    // and not a next.config.ts flag. It only hides the badge while the issue
-    // count is zero; with any runtime error present the overlay keeps a disabled
-    // error pill in the same corner, and the e2e DB failures alone are enough to
-    // produce those. The overlay as a whole is what has to go.
-    //
-    // The trade-off: the browser no longer renders compile/runtime error
-    // overlays during e2e. Errors still reach the dev server's stdout and
-    // Playwright's pageerror events, so a broken run still fails loudly.
-    //
-    // process.env spreads first so the dev server keeps DATABASE_URL, AUTH_SECRET
-    // and friends. A human's own `npm run dev` on :6969 never reaches the suite:
-    // reuseExistingServer above refuses it, and refuseIfDevPortTaken stops the
-    // run first with the reason. Only this server loses the overlay.
-    env: { ...process.env, NEXT_PRIVATE_DISABLE_DEV_OVERLAY_UX: "1" },
-  },
+  // A11Y_BASE_URL targets an already-running server (e.g. a signed-in preview),
+  // so the a11y scan must not start its own dev server on :6969 in that case.
+  webServer: process.env.A11Y_BASE_URL
+    ? undefined
+    : {
+        command: "npm run dev",
+        // Health-check /login — a real page, unlike /demo, which next.config.ts only
+        // rewrites to "/?demo=1". A 200 here proves the dev server is serving pages.
+        url: `${BASE_URL}/login`,
+        // Never adopt a server that is already listening (#297). This was
+        // `!process.env.CI`, and it coupled reuse to configuration: Playwright asks
+        // only "is something on :6969?", never "was it started with the env below",
+        // so a human's own `npm run dev` — no NEXT_PRIVATE_DISABLE_DEV_OVERLAY_UX —
+        // got adopted as-is. The overlay came back, the Hjem tab sat under it, and
+        // navigation.spec.ts died 30s into the run on "nextjs-portal … subtree
+        // intercepts pointer events". CI never hit it, because CI already ran with
+        // reuse off, which is what made this read as "nothing changed".
+        //
+        // What refusing costs: a fresh `next dev` per run. A full 16-test suite
+        // measured 15s wall with a warm .next/dev cache, once at the cold-cache
+        // start-up cost. What it buys: the server under test is always one this file
+        // configured. No warm path is lost by giving up reuse — Playwright kills the
+        // webServer it spawned when the run ends, so the only server reuse could
+        // ever find is a human's, and that is exactly the one that must not be
+        // adopted. Slow green beats fast red.
+        //
+        // The two other ways to decouple were worse:
+        //
+        // - A marker proving the adopted server is configured. Next already writes
+        //   one (`.next/dev/lock`, a pid/port record) and it is byte-identical for a
+        //   configured and an unconfigured server, so it cannot answer the question
+        //   — "was this started with the env var". Anything that could would have to
+        //   be written by the e2e command itself, and that command only runs when
+        //   Playwright decides to start a server, i.e. never on the reuse path it
+        //   was supposed to vet. Matching "is that the listening PID" on top needs a
+        //   per-platform probe. A mechanism that is dead on arrival.
+        // - A dedicated e2e port (6970) so :6969 could never be adopted. Next 16
+        //   allows exactly one `next dev` per project directory: a second one exits
+        //   with "⨯ Another next dev server is already running." and never binds, so
+        //   it cannot reach the new port. The option does not exist in this repo.
+        //
+        // The one manual step left is stopping a dev server that is already on
+        // :6969; refuseIfDevPortTaken above turns Playwright's generic port error
+        // into that instruction, and the run is otherwise a single command.
+        reuseExistingServer: false,
+        timeout: 120_000,
+        // Unmounts Next's dev overlay for this server only (#289). The overlay
+        // mounts a `nextjs-portal` shadow root holding a `position: fixed` toast in
+        // the bottom-left corner. The mobile BottomTabBar is `fixed inset-x-3
+        // bottom-…` with `justify-around`, so Hjem — its first tab — sits exactly
+        // there, and Playwright's hit test refuses the click with "nextjs-portal …
+        // subtree intercepts pointer events". Only the e2e server loses the overlay;
+        // `npm run dev` for a human is untouched.
+        //
+        // `devIndicators: false` is NOT enough here, which is why this is an env var
+        // and not a next.config.ts flag. It only hides the badge while the issue
+        // count is zero; with any runtime error present the overlay keeps a disabled
+        // error pill in the same corner, and the e2e DB failures alone are enough to
+        // produce those. The overlay as a whole is what has to go.
+        //
+        // The trade-off: the browser no longer renders compile/runtime error
+        // overlays during e2e. Errors still reach the dev server's stdout and
+        // Playwright's pageerror events, so a broken run still fails loudly.
+        //
+        // process.env spreads first so the dev server keeps DATABASE_URL, AUTH_SECRET
+        // and friends. A human's own `npm run dev` on :6969 never reaches the suite:
+        // reuseExistingServer above refuses it, and refuseIfDevPortTaken stops the
+        // run first with the reason. Only this server loses the overlay.
+        env: { ...process.env, NEXT_PRIVATE_DISABLE_DEV_OVERLAY_UX: "1" },
+      },
 });

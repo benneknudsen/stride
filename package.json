@@ -18,6 +18,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:a11y": "playwright test --project=a11y",
     "perf:lhci": "lhci autorun --config=lighthouserc.cjs",
     "perf:lhci:desktop": "lhci autorun --config=lighthouserc.desktop.cjs",
     "perf:lhci:auth": "lhci autorun --config=lighthouserc.auth.cjs",
@@ -52,6 +53,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@biomejs/biome": "^2.5.1",
     "@lhci/cli": "0.16.0",
     "@playwright/test": "^1.61.1",
