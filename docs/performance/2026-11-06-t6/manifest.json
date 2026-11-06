@@ -1,0 +1,392 @@
+[
+  {
+    "url": "http://localhost:3000/",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_32_27.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_32_27.report.json",
+    "summary": {
+      "performance": 0.67,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_32_41.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_32_41.report.json",
+    "summary": {
+      "performance": 0.7,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_32_54.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_32_54.report.json",
+    "summary": {
+      "performance": 0.73,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_33_21.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_33_21.report.json",
+    "summary": {
+      "performance": 0.7,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/demo",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_33_35.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_33_35.report.json",
+    "summary": {
+      "performance": 0.75,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/demo",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_33_48.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_33_48.report.json",
+    "summary": {
+      "performance": 0.75,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/demo",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_34_01.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_34_01.report.json",
+    "summary": {
+      "performance": 0.74,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/demo",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_34_15.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_34_15.report.json",
+    "summary": {
+      "performance": 0.75,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/aktiviteter",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_34_41.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_34_41.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/aktiviteter",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_34_52.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_34_52.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/aktiviteter",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_35_02.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_35_02.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/aktiviteter",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_35_12.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_35_12.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/plan",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_35_33.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_35_33.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/plan",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_35_43.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_35_43.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/plan",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_35_53.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_35_53.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/plan",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_36_14.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_36_14.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/dashboard/coach",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_24.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_24.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.92,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/dashboard/coach",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_34.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_34.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.92,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/dashboard/coach",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_45.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_45.report.json",
+    "summary": {
+      "performance": 0.99,
+      "accessibility": 1,
+      "best-practices": 0.92,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/dashboard/coach",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_37_06.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_37_06.report.json",
+    "summary": {
+      "performance": 0.99,
+      "accessibility": 1,
+      "best-practices": 0.92,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/login",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_16.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_16.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 0.98,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/login",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_36.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_36.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 0.98,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/login",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_46.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_46.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 0.98,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/login",
+    "isRepresentativeRun": false,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_56.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_56.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 0.98,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/",
+    "isRepresentativeRun": true,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_33_07.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost--2026_11_06_11_33_07.report.json",
+    "summary": {
+      "performance": 0.71,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/demo",
+    "isRepresentativeRun": true,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_34_28.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-demo-2026_11_06_11_34_28.report.json",
+    "summary": {
+      "performance": 0.74,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/aktiviteter",
+    "isRepresentativeRun": true,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_35_22.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-aktiviteter-2026_11_06_11_35_22.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/plan",
+    "isRepresentativeRun": true,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_36_04.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-plan-2026_11_06_11_36_04.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/dashboard/coach",
+    "isRepresentativeRun": true,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_55.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-dashboard_coach-2026_11_06_11_36_55.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.92,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  },
+  {
+    "url": "http://localhost:3000/login",
+    "isRepresentativeRun": true,
+    "htmlPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_26.report.html",
+    "jsonPath": "/Users/macmini/code/stride/docs/performance/2026-11-06-t6/localhost-login-2026_11_06_11_37_26.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 0.98,
+      "best-practices": 0.96,
+      "seo": 1,
+      "agentic-browsing": 1
+    }
+  }
+]

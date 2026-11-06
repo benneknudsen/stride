@@ -1,0 +1,110 @@
+[
+  {
+    "requestedUrl": "/",
+    "fetchTime": "2026-11-06T11:33:21.617Z",
+    "lighthouseVersion": "13.6.0",
+    "categories": {
+      "performance": 0.7,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1
+    },
+    "metrics": {
+      "largest-contentful-paint": 781.4644999999999,
+      "cumulative-layout-shift": 0,
+      "total-blocking-time": 1543.999999999999,
+      "first-contentful-paint": 781.4644999999999,
+      "speed-index": 4931.72262772746
+    }
+  },
+  {
+    "requestedUrl": "/aktiviteter",
+    "fetchTime": "2026-11-06T11:35:22.891Z",
+    "lighthouseVersion": "13.6.0",
+    "categories": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1
+    },
+    "metrics": {
+      "largest-contentful-paint": 778.023,
+      "cumulative-layout-shift": 0.0007471044316319182,
+      "total-blocking-time": 18.5,
+      "first-contentful-paint": 778.023,
+      "speed-index": 2013.1984164287646
+    }
+  },
+  {
+    "requestedUrl": "/dashboard/coach",
+    "fetchTime": "2026-11-06T11:37:06.055Z",
+    "lighthouseVersion": "13.6.0",
+    "categories": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.92,
+      "seo": 1
+    },
+    "metrics": {
+      "largest-contentful-paint": 775.181,
+      "cumulative-layout-shift": 0,
+      "total-blocking-time": 68,
+      "first-contentful-paint": 775.181,
+      "speed-index": 2320.9939590778617
+    }
+  },
+  {
+    "requestedUrl": "/demo",
+    "fetchTime": "2026-11-06T11:34:28.452Z",
+    "lighthouseVersion": "13.6.0",
+    "categories": {
+      "performance": 0.75,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1
+    },
+    "metrics": {
+      "largest-contentful-paint": 1080.328,
+      "cumulative-layout-shift": 0,
+      "total-blocking-time": 974.96,
+      "first-contentful-paint": 1080.328,
+      "speed-index": 5048.761395910983
+    }
+  },
+  {
+    "requestedUrl": "/login",
+    "fetchTime": "2026-11-06T11:37:56.753Z",
+    "lighthouseVersion": "13.6.0",
+    "categories": {
+      "performance": 1,
+      "accessibility": 0.98,
+      "best-practices": 0.96,
+      "seo": 1
+    },
+    "metrics": {
+      "largest-contentful-paint": 601.899,
+      "cumulative-layout-shift": 0,
+      "total-blocking-time": 35.999999999999545,
+      "first-contentful-paint": 601.899,
+      "speed-index": 1191.2203359551195
+    }
+  },
+  {
+    "requestedUrl": "/plan",
+    "fetchTime": "2026-11-06T11:36:14.303Z",
+    "lighthouseVersion": "13.6.0",
+    "categories": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 0.96,
+      "seo": 1
+    },
+    "metrics": {
+      "largest-contentful-paint": 1075.116,
+      "cumulative-layout-shift": 0.0003645138783246362,
+      "total-blocking-time": 17.5,
+      "first-contentful-paint": 1075.116,
+      "speed-index": 2494.747981952929
+    }
+  }
+]
