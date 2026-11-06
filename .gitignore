@@ -54,17 +54,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.cc-review/
 
-# Claude Code review notes (not versioned)
-.cc-review/
-
-# Claude Code brief files
-.cc-briefs/
-.cc-brief-*.txt
-
-# Claude Code review summary (not versioned)
-CODE_REVIEW_SUMMARY.md
+# opencode review files
+.oc-review/
 
 # AI agent instructions (local-only)
 AGENTS.md
