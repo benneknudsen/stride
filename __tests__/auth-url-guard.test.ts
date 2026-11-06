@@ -23,15 +23,19 @@ type Any = any;
 
 const mocks = vi.hoisted(() => ({
   nodeAuth: vi.fn(),
+  handlersGet: vi.fn(),
+  handlersPost: vi.fn(),
+  signIn: vi.fn(),
+  signOut: vi.fn(),
   captureError: vi.fn(),
 }));
 
 vi.mock("next-auth", () => ({
   default: (_config: Any) => ({
-    handlers: {},
+    handlers: { GET: mocks.handlersGet, POST: mocks.handlersPost },
     auth: mocks.nodeAuth,
-    signIn: vi.fn(),
-    signOut: vi.fn(),
+    signIn: mocks.signIn,
+    signOut: mocks.signOut,
   }),
 }));
 vi.mock("@auth/drizzle-adapter", () => ({ DrizzleAdapter: () => ({}) }));
@@ -58,6 +62,10 @@ const SESSION_SENTINEL = { user: { id: "user-1" } };
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.nodeAuth.mockResolvedValue(SESSION_SENTINEL);
+  mocks.handlersGet.mockResolvedValue({ status: 200 });
+  mocks.handlersPost.mockResolvedValue({ status: 200 });
+  mocks.signIn.mockResolvedValue(undefined);
+  mocks.signOut.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -112,6 +120,53 @@ describe("AUTH_URL production guard", () => {
     const { auth } = await loadAuth();
 
     await expect(auth()).resolves.toBe(SESSION_SENTINEL);
+    expect(mocks.captureError).not.toHaveBeenCalled();
+  });
+});
+
+describe("AUTH_URL guard — NextAuth route bindings", () => {
+  it("guards handlers.GET/POST, signIn and signOut without AUTH_URL", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AUTH_URL", "");
+    const { handlers, signIn, signOut } = await loadAuth();
+
+    expect(() => handlers.GET({} as never)).toThrow(/AUTH_URL is not set/);
+    expect(() => handlers.POST({} as never)).toThrow(/AUTH_URL is not set/);
+    expect(() => signIn()).toThrow(/AUTH_URL is not set/);
+    expect(() => signOut()).toThrow(/AUTH_URL is not set/);
+    expect(mocks.handlersGet).not.toHaveBeenCalled();
+    expect(mocks.handlersPost).not.toHaveBeenCalled();
+    expect(mocks.signIn).not.toHaveBeenCalled();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+    expect(mocks.captureError).toHaveBeenCalledTimes(4);
+  });
+
+  it("forwards handlers.GET/POST, signIn and signOut when AUTH_URL is set", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AUTH_URL", "https://stride.example");
+    const { handlers, signIn, signOut } = await loadAuth();
+
+    await expect(handlers.GET({} as never)).resolves.toEqual({ status: 200 });
+    await expect(handlers.POST({} as never)).resolves.toEqual({ status: 200 });
+    await expect(signIn("strava")).resolves.toBeUndefined();
+    await expect(signOut()).resolves.toBeUndefined();
+    expect(mocks.handlersGet).toHaveBeenCalledTimes(1);
+    expect(mocks.handlersPost).toHaveBeenCalledTimes(1);
+    expect(mocks.signIn).toHaveBeenCalledWith("strava");
+    expect(mocks.signOut).toHaveBeenCalledTimes(1);
+    expect(mocks.captureError).not.toHaveBeenCalled();
+  });
+
+  it("exempts handlers/signIn/signOut during the build phase", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("AUTH_URL", "");
+    vi.stubEnv("NEXT_PHASE", "phase-production-build");
+    const { handlers, signIn, signOut } = await loadAuth();
+
+    await expect(handlers.GET({} as never)).resolves.toEqual({ status: 200 });
+    await expect(handlers.POST({} as never)).resolves.toEqual({ status: 200 });
+    await expect(signIn("strava")).resolves.toBeUndefined();
+    await expect(signOut()).resolves.toBeUndefined();
     expect(mocks.captureError).not.toHaveBeenCalled();
   });
 });

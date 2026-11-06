@@ -67,10 +67,10 @@ function buildDrizzleAdapter() {
 }
 
 const {
-  handlers,
+  handlers: nodeHandlers,
   auth: nodeAuth,
-  signIn,
-  signOut,
+  signIn: nodeSignIn,
+  signOut: nodeSignOut,
 } = NextAuth({
   ...authConfig,
   adapter: buildDrizzleAdapter(),
@@ -230,15 +230,23 @@ function assertProductionAuthUrl(): void {
   throw err;
 }
 
-// Forward through a loosened signature: NextAuth's `auth` is an intersection of
-// five overloads, and only the exported binding below needs to keep that exact
-// surface (call sites are all bare `await auth()` in the Node runtime — the
-// edge proxy builds its own instance from auth.config.ts).
-const forwardAuth = nodeAuth as unknown as (...args: unknown[]) => unknown;
+// Every NextAuth binding is wrapped here so no export path can reach the raw
+// handler without the AUTH_URL guard. Route handlers are wrapped per method
+// (`GET`/`POST`) because Next.js destructures them directly in route.ts. The
+// cast restores the original signature: `typeof nodeAuth` is an intersection of
+// overloads, and each exported binding must keep that exact surface.
+function withAuthUrlGuard<T>(fn: T): T {
+  const forward = fn as unknown as (...args: unknown[]) => unknown;
+  return ((...args: unknown[]) => {
+    assertProductionAuthUrl();
+    return forward(...args);
+  }) as T;
+}
 
-export const auth = ((...args: unknown[]) => {
-  assertProductionAuthUrl();
-  return forwardAuth(...args);
-}) as typeof nodeAuth;
-
-export { handlers, signIn, signOut };
+export const auth = withAuthUrlGuard(nodeAuth);
+export const handlers = {
+  GET: withAuthUrlGuard(nodeHandlers.GET),
+  POST: withAuthUrlGuard(nodeHandlers.POST),
+} satisfies typeof nodeHandlers;
+export const signIn = withAuthUrlGuard(nodeSignIn);
+export const signOut = withAuthUrlGuard(nodeSignOut);
