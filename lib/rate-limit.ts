@@ -111,6 +111,55 @@ export async function rateLimit(
   }
 }
 
+/**
+ * Reports whether `key` currently has budget left without recording a hit.
+ * A caller that must reject before an expensive side effect, but may only spend
+ * the slot once that effect succeeds, checks here first and calls `rateLimit`
+ * afterwards (issue #366).
+ */
+export async function peekRateLimit(
+  key: string,
+  options: RateLimitOptions = {}
+): Promise<RateLimitResult> {
+  const { max = 5, windowMs = 10 * 60 * 1000, now = Date.now() } = options;
+
+  const client = getRedis();
+  if (!client) return memoryPeekRateLimit(key, max, windowMs, now);
+
+  try {
+    return await redisPeekRateLimit(client, key, max, windowMs, now);
+  } catch (err) {
+    captureError("rate-limit.redis", err);
+    return memoryPeekRateLimit(key, max, windowMs, now);
+  }
+}
+
+async function redisPeekRateLimit(
+  client: Redis,
+  key: string,
+  max: number,
+  windowMs: number,
+  now: number
+): Promise<RateLimitResult> {
+  const redisKey = `ratelimit:${key}`;
+
+  const tx = client.multi();
+  tx.get(redisKey);
+  tx.pttl(redisKey);
+  const [raw, ttl] = await tx.exec<[string | number | null, number]>();
+
+  // No key (or no TTL) — the window is fresh and nothing has been spent.
+  if (raw === null || raw === undefined || ttl < 0) {
+    return { allowed: true, remaining: max, resetAt: now + windowMs };
+  }
+
+  const count = Number(raw) || 0;
+  const resetAt = now + ttl;
+  if (count >= max) return { allowed: false, remaining: 0, resetAt };
+
+  return { allowed: true, remaining: max - count, resetAt };
+}
+
 async function redisRateLimit(
   client: Redis,
   key: string,
@@ -138,6 +187,20 @@ async function redisRateLimit(
   if (count > max) return { allowed: false, remaining: 0, resetAt };
 
   return { allowed: true, remaining: max - count, resetAt };
+}
+
+function memoryPeekRateLimit(
+  key: string,
+  max: number,
+  windowMs: number,
+  now: number
+): RateLimitResult {
+  const bucket = buckets.get(key);
+  if (!bucket || now >= bucket.resetAt) {
+    return { allowed: true, remaining: max, resetAt: now + windowMs };
+  }
+  if (bucket.count >= max) return { allowed: false, remaining: 0, resetAt: bucket.resetAt };
+  return { allowed: true, remaining: max - bucket.count, resetAt: bucket.resetAt };
 }
 
 function memoryRateLimit(key: string, max: number, windowMs: number, now: number): RateLimitResult {

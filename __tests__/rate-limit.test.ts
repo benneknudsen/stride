@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
+import { peekRateLimit, rateLimit, resetRateLimit } from "@/lib/rate-limit";
 
 const { captureErrorMock, redisMock } = vi.hoisted(() => ({
   captureErrorMock: vi.fn(),
@@ -19,6 +19,16 @@ vi.mock("@upstash/redis", () => ({
 }));
 
 vi.mock("@/lib/observability", () => ({ captureError: captureErrorMock }));
+
+// Issue #366: the setup file clears these before any suite runs, so the Map
+// fallback is deterministic even when the developer's shell exports Upstash
+// credentials.
+describe("test environment isolation (#366)", () => {
+  it("starts without inherited Upstash credentials", () => {
+    expect(process.env.UPSTASH_REDIS_REST_URL).toBeUndefined();
+    expect(process.env.UPSTASH_REDIS_REST_TOKEN).toBeUndefined();
+  });
+});
 
 describe("rateLimit (in-memory fallback)", () => {
   beforeEach(() => {
@@ -70,6 +80,24 @@ describe("rateLimit (in-memory fallback)", () => {
     expect((await rateLimit("z", { now, max: 1 })).allowed).toBe(true);
     expect((await rateLimit("z", { now, max: 1 })).allowed).toBe(false);
   });
+
+  it("peek reports a fresh window without spending a slot", async () => {
+    const now = 0;
+    expect(await peekRateLimit("peek", { now, max: 1 })).toEqual({
+      allowed: true,
+      remaining: 1,
+      resetAt: 10 * 60 * 1000,
+    });
+    // The real hit still sees the full budget.
+    expect((await rateLimit("peek", { now, max: 1 })).allowed).toBe(true);
+  });
+
+  it("peek sees a spent window", async () => {
+    const now = 0;
+    await rateLimit("peek-spent", { now, max: 1 });
+
+    expect((await peekRateLimit("peek-spent", { now, max: 1 })).allowed).toBe(false);
+  });
 });
 
 describe("rateLimit (Upstash Redis)", () => {
@@ -83,6 +111,16 @@ describe("rateLimit (Upstash Redis)", () => {
       pexpire: vi.fn(),
       pttl: vi.fn(),
       exec: vi.fn().mockResolvedValue([count, armed, ttl]),
+    };
+    redisMock.multi.mockReturnValue(tx);
+    return tx;
+  }
+
+  function stubPeek(raw: string | number | null, ttl: number) {
+    const tx = {
+      get: vi.fn(),
+      pttl: vi.fn(),
+      exec: vi.fn().mockResolvedValue([raw, ttl]),
     };
     redisMock.multi.mockReturnValue(tx);
     return tx;
@@ -124,6 +162,22 @@ describe("rateLimit (Upstash Redis)", () => {
     const result = await rateLimit("chat:u1", { now: 1_000, windowMs: 60_000 });
 
     expect(result).toEqual({ allowed: false, remaining: 0, resetAt: 21_000 });
+  });
+
+  it("peek treats a missing key as a fresh window", async () => {
+    stubPeek(null, -2);
+    const result = await peekRateLimit("chat:new", { now: 1_000, windowMs: 60_000 });
+
+    expect(result).toEqual({ allowed: true, remaining: 5, resetAt: 61_000 });
+  });
+
+  it("peek sees a spent Redis window without incrementing it", async () => {
+    const tx = stubPeek("1", 20_000);
+    const result = await peekRateLimit("chat:spent", { now: 1_000, max: 1, windowMs: 60_000 });
+
+    expect(result).toEqual({ allowed: false, remaining: 0, resetAt: 21_000 });
+    expect(tx.get).toHaveBeenCalledWith("ratelimit:chat:spent");
+    expect(tx).not.toHaveProperty("incr");
   });
 
   it("falls back to the in-memory limiter when Redis fails", async () => {

@@ -11,6 +11,7 @@ import { PlanStrip } from "@/components/cobalt/hjem/PlanStrip";
 import { RecentRunsCard } from "@/components/cobalt/hjem/RecentRunsCard";
 import { RecoveryCard } from "@/components/cobalt/hjem/RecoveryCard";
 import { RouteCard } from "@/components/cobalt/hjem/RouteCard";
+import { StravaCallbackNotice } from "@/components/cobalt/hjem/StravaCallbackNotice";
 import { VolumeCard } from "@/components/cobalt/hjem/VolumeCard";
 import { LoadingOverlay } from "@/components/cobalt/LoadingOverlay";
 import { useStartupReveal } from "@/hooks/useStartupReveal";
@@ -44,11 +45,15 @@ export function HjemPageClient({
   userName,
   stravaConnected,
   signedIn,
+  stravaError,
+  stravaRetry,
 }: {
   view: HomeView;
   userName?: string;
   stravaConnected: boolean;
   signedIn: boolean;
+  stravaError?: string;
+  stravaRetry?: string;
 }) {
   const { loading, started } = useStartupReveal();
   // The greeting follows the visitor's clock, but `new Date()` during SSR reads
@@ -66,6 +71,7 @@ export function HjemPageClient({
 
   return (
     <main>
+      <StravaCallbackNotice stravaError={stravaError} stravaRetry={stravaRetry} />
       <Hero
         weekNumber={view.weekNumber}
         weeklyKm={view.weeklyKm}

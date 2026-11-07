@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { handleStravaCallback } from "@/actions/strava";
+import { StravaSyncRateLimitedError } from "@/lib/strava/rate-limit";
 import { timingSafeStringEqual } from "@/lib/timing-safe";
 
 // Strava redirects here with ?code and ?state after the user authorizes.
@@ -49,8 +50,15 @@ export async function GET(req: NextRequest) {
   try {
     await handleStravaCallback(code, codeVerifier);
     base.searchParams.set("strava_connected", "true");
-  } catch {
-    base.searchParams.set("strava_error", "true");
+  } catch (err) {
+    if (err instanceof StravaSyncRateLimitedError) {
+      // The budget reports how long the user has to wait; pass it through so
+      // the home notice can show an actionable retry time (#366).
+      base.searchParams.set("strava_error", "rate_limited");
+      base.searchParams.set("strava_retry", String(err.retryAfterSeconds));
+    } else {
+      base.searchParams.set("strava_error", "true");
+    }
   }
 
   // Always clear the one-time-use cookie

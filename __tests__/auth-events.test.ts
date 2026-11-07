@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => {
     encrypt: vi.fn(),
     upsertStravaTokens: vi.fn(),
     syncStravaActivities: vi.fn(),
+    consumeStravaSyncBudget: vi.fn(),
     captureError: vi.fn(),
     // The adapter delegate lib/auth.ts strips tokens before calling (#262).
     adapterLinkAccount: vi.fn(),
@@ -72,6 +73,10 @@ vi.mock("@/drizzle/schema", () => ({
 vi.mock("@/lib/crypto", () => ({ encrypt: mocks.encrypt }));
 vi.mock("@/lib/db/queries", () => ({ upsertStravaTokens: mocks.upsertStravaTokens }));
 vi.mock("@/lib/strava/sync", () => ({ syncStravaActivities: mocks.syncStravaActivities }));
+vi.mock("@/lib/strava/rate-limit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/strava/rate-limit")>();
+  return { ...actual, consumeStravaSyncBudget: mocks.consumeStravaSyncBudget };
+});
 vi.mock("@/lib/observability", () => ({ captureError: mocks.captureError }));
 
 // drizzle-orm's eq()/and() are called inside the callback's .where(); thin
@@ -108,6 +113,11 @@ beforeEach(() => {
   mocks.encrypt.mockReturnValue(blobFixture);
   mocks.upsertStravaTokens.mockResolvedValue(undefined);
   mocks.syncStravaActivities.mockResolvedValue({ status: "complete", inserted: 0 });
+  mocks.consumeStravaSyncBudget.mockResolvedValue({
+    allowed: true,
+    remaining: 0,
+    resetAt: Date.now() + 60_000,
+  });
 
   // db.update(table).set(values).where(cond) resolves once where() is awaited.
   mocks.dbWhere.mockResolvedValue(undefined);
@@ -441,6 +451,41 @@ describe("events.signIn — initial sync", () => {
 
     await expect(signIn({ user, account: stravaAccount })).resolves.toBeUndefined();
     expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue #366: sign-in is a full-sync path and shares the per-user budget.
+  it("spends the shared sync budget before syncing", async () => {
+    const order: string[] = [];
+    mocks.consumeStravaSyncBudget.mockImplementationOnce(async () => {
+      order.push("consume");
+      return { allowed: true, remaining: 0, resetAt: Date.now() + 60_000 };
+    });
+    mocks.syncStravaActivities.mockImplementationOnce(async () => {
+      order.push("sync");
+      return { status: "complete", inserted: 0 };
+    });
+
+    await signIn({ user, account: stravaAccount });
+
+    expect(mocks.consumeStravaSyncBudget).toHaveBeenCalledWith("user-1");
+    expect(order).toEqual(["consume", "sync"]);
+  });
+
+  it("skips the initial sync when the budget is spent and still signs in", async () => {
+    mocks.consumeStravaSyncBudget.mockResolvedValueOnce({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 42_000,
+    });
+
+    await expect(signIn({ user, account: stravaAccount })).resolves.toBeUndefined();
+
+    expect(mocks.syncStravaActivities).not.toHaveBeenCalled();
+    expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+    expect(mocks.captureError).toHaveBeenCalledWith(
+      "auth.events.signIn.initialSync.rateLimited",
+      expect.any(Error)
+    );
   });
 });
 

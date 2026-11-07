@@ -1,14 +1,15 @@
-import { rateLimit } from "@/lib/rate-limit";
+import { peekRateLimit, rateLimit } from "@/lib/rate-limit";
 
 type RateLimitResult = Awaited<ReturnType<typeof rateLimit>>;
 
 /**
  * One full Strava sync per user per minute (issue #359).
  *
- * Both the manual sync route and the post-connect callback spend from this
- * budget, so a connect cannot stack a second expensive sync on top of one that
- * just ran. Keeping the key and window here stops the two callers from drifting
- * apart.
+ * Three paths spend from this budget so they cannot stack expensive syncs on
+ * top of each other: the manual sync route (`POST /api/strava/sync`), the
+ * post-connect callback (`handleStravaCallback`), and the Strava sign-in event
+ * (`events.signIn` in `lib/auth.ts`). Keeping the key and window here stops the
+ * callers from drifting apart.
  */
 export const STRAVA_SYNC_RATE_LIMIT = { max: 1, windowMs: 60_000 } as const;
 
@@ -19,6 +20,18 @@ export function stravaSyncRateLimitKey(userId: string): string {
 /** Spends one slot of the per-user sync budget and reports the result. */
 export function consumeStravaSyncBudget(userId: string): Promise<RateLimitResult> {
   return rateLimit(stravaSyncRateLimitKey(userId), STRAVA_SYNC_RATE_LIMIT);
+}
+
+/**
+ * Checks whether the per-user sync budget has a slot left without spending it.
+ *
+ * The callback must reject a spent budget before calling Strava's token
+ * endpoint, but a failed token exchange must not burn the user's only slot
+ * (issue #366). So it peeks here first and spends with
+ * `consumeStravaSyncBudget` only after the exchange succeeds.
+ */
+export function checkStravaSyncBudget(userId: string): Promise<RateLimitResult> {
+  return peekRateLimit(stravaSyncRateLimitKey(userId), STRAVA_SYNC_RATE_LIMIT);
 }
 
 /**

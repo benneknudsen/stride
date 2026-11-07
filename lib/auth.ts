@@ -9,6 +9,7 @@ import { encrypt } from "@/lib/crypto";
 import { db, getDb } from "@/lib/db";
 import { upsertStravaTokens } from "@/lib/db/queries";
 import { captureError } from "@/lib/observability";
+import { consumeStravaSyncBudget } from "@/lib/strava/rate-limit";
 import { syncStravaActivities } from "@/lib/strava/sync";
 
 /**
@@ -165,7 +166,22 @@ const {
         // A sync failure (rate limit, transient error) must not fail the sign-in
         // — the tokens are already stored, and the webhook/manual re-sync backfill
         // anything missed here.
+        //
+        // Sign-in is the third full-sync path and shares the same per-user
+        // budget as the manual sync route and the post-connect callback
+        // (issue #366). When the budget is already spent the initial sync is
+        // skipped rather than failing the sign-in; the webhook/manual re-sync
+        // will backfill.
         try {
+          const limit = await consumeStravaSyncBudget(userId);
+          if (!limit.allowed) {
+            captureError(
+              "auth.events.signIn.initialSync.rateLimited",
+              new Error("Initial Strava sync skipped: per-user sync budget already spent")
+            );
+            return;
+          }
+
           const result = await syncStravaActivities(userId);
           // Issue #338: a sync that only covered part of the history must not
           // pass for a complete one. Record it, but never fail the sign-in.
