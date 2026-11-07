@@ -9,7 +9,11 @@ import { db } from "@/lib/db";
 import { upsertStravaTokens } from "@/lib/db/queries";
 import { captureError } from "@/lib/observability";
 import { exchangeCodeForTokens, generatePkce, getAuthorizationUrl } from "@/lib/strava/oauth";
-import { consumeStravaSyncBudget, StravaSyncRateLimitedError } from "@/lib/strava/rate-limit";
+import {
+  checkStravaSyncBudget,
+  consumeStravaSyncBudget,
+  StravaSyncRateLimitedError,
+} from "@/lib/strava/rate-limit";
 import { syncStravaActivities } from "@/lib/strava/sync";
 
 const STRAVA_COOKIE = "strava_oauth";
@@ -50,13 +54,20 @@ export async function handleStravaCallback(code: string, codeVerifier: string): 
   const userId = session?.user?.id;
   if (!userId) throw new Error("Not authenticated");
 
-  // Spend the same per-user sync budget as POST /api/strava/sync before the
-  // token exchange, so a rejected callback costs no upstream call. Placed after
-  // the auth check: an anonymous caller must not burn a user's budget (#359).
-  const limit = await consumeStravaSyncBudget(userId);
-  if (!limit.allowed) throw new StravaSyncRateLimitedError(limit.resetAt);
+  // Reject a spent budget before talking to Strava. Peek rather than spend:
+  // a failed token exchange must not burn the user's only slot, or a retry
+  // inside 60 s would see `rate_limited` instead of the real exchange error
+  // (issue #366). The slot is spent only after the exchange succeeds.
+  const available = await checkStravaSyncBudget(userId);
+  if (!available.allowed) throw new StravaSyncRateLimitedError(available.resetAt);
 
   const tokens = await exchangeCodeForTokens(code, codeVerifier);
+
+  // The exchange succeeded, so this callback will really sync — now it may
+  // spend the slot (#366). If another path claimed it in between, reject before
+  // any token/DB write.
+  const limit = await consumeStravaSyncBudget(userId);
+  if (!limit.allowed) throw new StravaSyncRateLimitedError(limit.resetAt);
 
   // Encrypt both tokens together with a single IV so decryption is consistent.
   // Separate encrypt() calls would produce different IVs, breaking refresh token decryption.

@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
+    // Clear inherited Upstash credentials so the in-memory limiter is the
+    // deterministic default, regardless of the developer's shell env (#366).
+    setupFiles: ["./__tests__/setup-env.ts"],
     // Vitest's default `include` also matches *.spec.ts, which would sweep up the
     // Playwright suite in __tests__/e2e — those import @playwright/test and want a
     // browser, so `npm test` would die on them. Playwright owns that directory.

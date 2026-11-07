@@ -22,6 +22,7 @@ const { handleStravaCallback } = vi.hoisted(() => ({
 vi.mock("@/actions/strava", () => ({ handleStravaCallback }));
 
 import { GET } from "@/app/api/strava/callback/route";
+import { StravaSyncRateLimitedError } from "@/lib/strava/rate-limit";
 
 const STATE = "csrf-state-abc123";
 const VERIFIER = "pkce-verifier-xyz789";
@@ -123,5 +124,40 @@ describe("GET /api/strava/callback — state verification", () => {
     expect(handleStravaCallback).toHaveBeenCalledTimes(1);
     expect(res.headers.get("location")).toContain("strava_error=true");
     expect(clearsCookie(res)).toBe(true);
+  });
+});
+
+describe("GET /api/strava/callback — rate limit (#366)", () => {
+  it("passes the retry-after seconds through to the home notice", async () => {
+    handleStravaCallback.mockRejectedValue(new StravaSyncRateLimitedError(Date.now() + 42_000));
+
+    const res = await GET(callbackRequest({ cookiePayload: { v: VERIFIER, s: STATE } }));
+    const location = res.headers.get("location") ?? "";
+    const params = new URL(location).searchParams;
+
+    expect(params.get("strava_error")).toBe("rate_limited");
+    expect(params.get("strava_retry")).toBe("42");
+    expect(clearsCookie(res)).toBe(true);
+  });
+
+  it("keeps a generic failure generic (no retry parameter)", async () => {
+    handleStravaCallback.mockRejectedValue(new Error("Strava token exchange failed"));
+
+    const res = await GET(callbackRequest({ cookiePayload: { v: VERIFIER, s: STATE } }));
+    const location = res.headers.get("location") ?? "";
+    const params = new URL(location).searchParams;
+
+    expect(params.get("strava_error")).toBe("true");
+    expect(params.has("strava_retry")).toBe(false);
+  });
+
+  it("treats a non-Error rejection as a generic failure", async () => {
+    handleStravaCallback.mockRejectedValue("boom");
+
+    const res = await GET(callbackRequest({ cookiePayload: { v: VERIFIER, s: STATE } }));
+    const params = new URL(res.headers.get("location") ?? "").searchParams;
+
+    expect(params.get("strava_error")).toBe("true");
+    expect(params.has("strava_retry")).toBe(false);
   });
 });

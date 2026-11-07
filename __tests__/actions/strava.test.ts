@@ -66,6 +66,17 @@ vi.mock("@/lib/strava/sync", () => ({
   syncStravaActivities: mocks.syncStravaActivities,
 }));
 
+// Wrap the real budget functions in spies so the tests can assert exactly when
+// the callback checks and when it spends the slot (#366).
+vi.mock("@/lib/strava/rate-limit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/strava/rate-limit")>();
+  return {
+    ...actual,
+    checkStravaSyncBudget: vi.fn(actual.checkStravaSyncBudget),
+    consumeStravaSyncBudget: vi.fn(actual.consumeStravaSyncBudget),
+  };
+});
+
 vi.mock("@/lib/db", () => ({
   db: { update: mocks.dbUpdate },
 }));
@@ -89,6 +100,11 @@ vi.mock("drizzle-orm", () => ({
 import { connectStrava, handleStravaCallback } from "@/actions/strava";
 import { POST as syncRoutePOST } from "@/app/api/strava/sync/route";
 import { resetRateLimit } from "@/lib/rate-limit";
+import {
+  checkStravaSyncBudget,
+  consumeStravaSyncBudget,
+  StravaSyncRateLimitedError,
+} from "@/lib/strava/rate-limit";
 
 const STRAVA_COOKIE = "strava_oauth";
 
@@ -616,5 +632,54 @@ describe("handleStravaCallback — rate limit", () => {
 
     expect(mocks.exchangeCodeForTokens).toHaveBeenCalledTimes(2);
     expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ===========================================================================
+// handleStravaCallback — budget spent only after a successful exchange (#366)
+// ===========================================================================
+
+describe("handleStravaCallback — budget timing (#366)", () => {
+  it("does not spend a slot when the token exchange fails", async () => {
+    mocks.exchangeCodeForTokens.mockRejectedValueOnce(new Error("bad code"));
+
+    await expect(handleStravaCallback("bad-code", "verifier")).rejects.toThrow("bad code");
+
+    expect(consumeStravaSyncBudget).not.toHaveBeenCalled();
+    expect(mocks.upsertStravaTokens).not.toHaveBeenCalled();
+  });
+
+  it("spends exactly one slot after a successful exchange, before persisting tokens", async () => {
+    const order: string[] = [];
+    vi.mocked(consumeStravaSyncBudget).mockImplementationOnce(async () => {
+      order.push("consume");
+      return { allowed: true, remaining: 0, resetAt: Date.now() + 60_000 };
+    });
+    mocks.upsertStravaTokens.mockImplementationOnce(async () => {
+      order.push("upsert");
+    });
+
+    await handleStravaCallback("auth-code", "verifier-123");
+
+    expect(consumeStravaSyncBudget).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["consume", "upsert"]);
+  });
+
+  it("rejects a spent budget before the exchange and reports retry-after", async () => {
+    vi.mocked(checkStravaSyncBudget).mockResolvedValueOnce({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 42_000,
+    });
+
+    const err = await handleStravaCallback("auth-code", "verifier-123").then(
+      () => null,
+      (e: Any) => e
+    );
+
+    expect(err).toBeInstanceOf(StravaSyncRateLimitedError);
+    expect(err.retryAfterSeconds).toBeGreaterThanOrEqual(1);
+    expect(mocks.exchangeCodeForTokens).not.toHaveBeenCalled();
+    expect(consumeStravaSyncBudget).not.toHaveBeenCalled();
   });
 });

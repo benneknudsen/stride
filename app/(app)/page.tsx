@@ -25,9 +25,9 @@ export const dynamic = "force-dynamic";
 export default async function HjemPage({
   searchParams,
 }: {
-  searchParams: Promise<{ demo?: string }>;
+  searchParams: Promise<{ demo?: string; strava_error?: string; strava_retry?: string }>;
 }) {
-  const [session, { demo }] = await Promise.all([auth(), searchParams]);
+  const [session, { demo, strava_error, strava_retry }] = await Promise.all([auth(), searchParams]);
   const user = session?.user;
   const userId = user?.id;
 
@@ -71,6 +71,8 @@ export default async function HjemPage({
       userName={user?.name?.trim() || user?.email?.split("@")[0] || undefined}
       stravaConnected={stravaTokens !== null}
       signedIn={userId !== undefined}
+      stravaError={strava_error}
+      stravaRetry={strava_retry}
     />
   );
 }
