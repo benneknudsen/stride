@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { captureError } from "@/lib/observability";
-import { rateLimit } from "@/lib/rate-limit";
+import { consumeStravaSyncBudget } from "@/lib/strava/rate-limit";
 import { syncStravaActivities } from "@/lib/strava/sync";
 
 /**
@@ -30,8 +30,9 @@ export async function POST(_req: NextRequest) {
   const userId = session.user.id;
 
   // B7: a full historical sync is expensive — enforce at least one minute
-  // between syncs per user: rateLimit("strava-sync", { max: 1, windowMs: 60_000 }).
-  const limit = await rateLimit(`strava-sync:${userId}`, { max: 1, windowMs: 60_000 });
+  // between syncs per user. The post-connect callback spends the same budget
+  // (#359), so a connect cannot stack a second sync on a recent one.
+  const limit = await consumeStravaSyncBudget(userId);
   if (!limit.allowed) {
     const retryAfterSeconds = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000));
     return NextResponse.json(
