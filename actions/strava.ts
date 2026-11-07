@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { upsertStravaTokens } from "@/lib/db/queries";
 import { captureError } from "@/lib/observability";
 import { exchangeCodeForTokens, generatePkce, getAuthorizationUrl } from "@/lib/strava/oauth";
+import { consumeStravaSyncBudget, StravaSyncRateLimitedError } from "@/lib/strava/rate-limit";
 import { syncStravaActivities } from "@/lib/strava/sync";
 
 const STRAVA_COOKIE = "strava_oauth";
@@ -48,6 +49,12 @@ export async function handleStravaCallback(code: string, codeVerifier: string): 
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) throw new Error("Not authenticated");
+
+  // Spend the same per-user sync budget as POST /api/strava/sync before the
+  // token exchange, so a rejected callback costs no upstream call. Placed after
+  // the auth check: an anonymous caller must not burn a user's budget (#359).
+  const limit = await consumeStravaSyncBudget(userId);
+  if (!limit.allowed) throw new StravaSyncRateLimitedError(limit.resetAt);
 
   const tokens = await exchangeCodeForTokens(code, codeVerifier);
 

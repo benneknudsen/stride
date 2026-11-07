@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -86,6 +87,8 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import { connectStrava, handleStravaCallback } from "@/actions/strava";
+import { POST as syncRoutePOST } from "@/app/api/strava/sync/route";
+import { resetRateLimit } from "@/lib/rate-limit";
 
 const STRAVA_COOKIE = "strava_oauth";
 
@@ -103,6 +106,10 @@ const tokensFixture = {
 const blobFixture = { iv: "deadbeef", authTag: "cafe", encrypted: "ENCRYPTED_BLOB" };
 
 beforeEach(() => {
+  // The action now shares the real per-user sync rate limit with the sync
+  // route, so each test starts from a fresh in-memory window (#359).
+  resetRateLimit();
+
   mocks.generatePkce.mockReturnValue({
     codeVerifier: "verifier-123",
     codeChallenge: "challenge-456",
@@ -541,5 +548,73 @@ describe("handleStravaCallback — error propagation", () => {
     await expect(handleStravaCallback("code", "verifier")).rejects.toThrow("connection reset");
     // Tokens were already persisted before the link step failed.
     expect(mocks.upsertStravaTokens).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ===========================================================================
+// handleStravaCallback — rate limit (issue #359)
+// ===========================================================================
+
+describe("handleStravaCallback — rate limit", () => {
+  function syncRequest(): NextRequest {
+    return new NextRequest("http://localhost/api/strava/sync", { method: "POST" });
+  }
+
+  it("rejects a second callback for the same user before any upstream call", async () => {
+    await handleStravaCallback("auth-code-1", "verifier-1");
+
+    expect(mocks.exchangeCodeForTokens).toHaveBeenCalledTimes(1);
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+
+    await expect(handleStravaCallback("auth-code-2", "verifier-2")).rejects.toThrow("rate_limited");
+
+    // The rejected call never reached the token exchange or the sync.
+    expect(mocks.exchangeCodeForTokens).toHaveBeenCalledTimes(1);
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports retry-after seconds on rejection", async () => {
+    await handleStravaCallback("auth-code-1", "verifier-1");
+
+    const err: Any = await handleStravaCallback("auth-code-2", "verifier-2").then(
+      () => null,
+      (e: Any) => e
+    );
+
+    expect(err.message).toBe("rate_limited");
+    expect(err.retryAfterSeconds).toBeGreaterThan(0);
+    expect(err.retryAfterSeconds).toBeLessThanOrEqual(60);
+  });
+
+  it("shares the sync budget with POST /api/strava/sync (route first)", async () => {
+    const res = await syncRoutePOST(syncRequest());
+    expect(res.status).toBe(200);
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+
+    await expect(handleStravaCallback("auth-code", "verifier")).rejects.toThrow("rate_limited");
+
+    // Only the route reached the sync; the action was stopped first.
+    expect(mocks.exchangeCodeForTokens).not.toHaveBeenCalled();
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares the sync budget with POST /api/strava/sync (action first)", async () => {
+    await handleStravaCallback("auth-code", "verifier");
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+
+    const res = await syncRoutePOST(syncRequest());
+
+    expect(res.status).toBe(429);
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a different user unaffected by the first user's limit", async () => {
+    await handleStravaCallback("auth-code-1", "verifier-1");
+
+    mocks.auth.mockResolvedValue({ user: { id: "user-2" } });
+    await expect(handleStravaCallback("auth-code-2", "verifier-2")).resolves.toBeUndefined();
+
+    expect(mocks.exchangeCodeForTokens).toHaveBeenCalledTimes(2);
+    expect(mocks.syncStravaActivities).toHaveBeenCalledTimes(2);
   });
 });
